@@ -1,0 +1,7 @@
+include CHANGELOG.md
+include README.md
+include LICENSE
+include firecode/*
+include firecode/tests/*
+include firecode/calculators/*
+include docs/*

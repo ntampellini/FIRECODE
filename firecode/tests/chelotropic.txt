@@ -1,0 +1,3 @@
+DIST(A=2.5,B=2.5) SADDLE
+C2H4.xyz 0A 3B
+HCOOOH.xyz 4AB

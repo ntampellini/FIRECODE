@@ -1,0 +1,2 @@
+KCAL=0
+scan> C2F2H4.xyz 3 0 1 5

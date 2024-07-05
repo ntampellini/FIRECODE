@@ -1,0 +1,9 @@
+DIST(A=2.5,x=2,y=2.5,C=1) SHRINK NCI ROTRANGE=10 STEPS=1
+CH3Cl.xyz 0A 4y
+HCOOH.xyz 1A 4x 0C 2C
+HCOOH.xyz 1x 4y
+
+# Trimolecular SN2
+# A is O-Cl reacting pair
+# x is the intra-acid hydrogen bond
+# y is the H-Cl hydrogen bond
