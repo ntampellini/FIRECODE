@@ -49,7 +49,6 @@ from firecode.utils import (HiddenPrints, align_structures, clean_directory,
                           get_double_bonds_indices, molecule_check,
                           scramble_check, time_to_string, write_xyz)
 
-
 class Spring:
     '''
     ASE Custom Constraint Class
@@ -57,7 +56,7 @@ class Spring:
     Spring constant is very high to achieve tight convergence,
     but maximum force is dampened so as not to ruin structures.
     '''
-    def __init__(self, i1, i2, d_eq, k=100):
+    def __init__(self, i1, i2, d_eq, k=300):
         self.i1, self.i2 = i1, i2
         self.d_eq = d_eq
         self.k = k
@@ -154,7 +153,19 @@ def get_ase_calc(embedder):
             raise Exception(f'Solvent \'{solvent}\' not supported by XTB. Supported solvents are:\n{xtb_supported}')
 
         return XTB(method=method, solvent=solvent)
-
+    
+    if calculator == 'AIMNET2':
+        try:
+            from aimnet2_firecode.interface import get_aimnet2_calc
+        except ImportError:
+            raise Exception(('Cannot import AIMNET2 python bindings. Install them with:\n'
+                             '>>> pip install aimnet2_firecode\n'))
+        
+        if hasattr(embedder.dispatcher, "aimnet2_calc"):
+            return embedder.dispatcher.aimnet2_calc
+        
+        else:
+            return get_aimnet2_calc(method=method, logfunction=embedder.log)
     
     command = COMMANDS[calculator]
 
@@ -211,104 +222,6 @@ def get_ase_calc(embedder):
             # source code: merge request on GitHub pending to be written
 
             return calc
-
-# def ase_adjust_spacings(embedder, structure, atomnos, constrained_indices, title=0, traj=None):
-#     '''
-#     embedder: firecode embedder object
-#     structure: TS candidate coordinates to be adjusted
-#     atomnos: 1-d array with element numbering for the TS
-#     constrained_indices: (n,2)-shaped array of indices to be distance constrained
-#     mols_graphs: list of NetworkX graphs, ordered as the single molecules in the TS
-#     title: number to be used for referring to this structure in the embedder log
-#     traj: if set to a string, traj+'.traj' is used as a filename for the refinement trajectory.
-#     '''
-#     atoms = Atoms(atomnos, positions=structure)
-
-#     atoms.calc = get_ase_calc(embedder)
-    
-#     springs = [Spring(indices[0], indices[1], dist) for indices, dist in embedder.target_distances.items()]
-#     # adding springs to adjust the pairings for which we have target distances
-
-#     # if there are no springs, it is faster (and equivalent) to just do a classical full opitimization
-#     if not springs:
-#         from firecode.optimization_methods import optimize
-#         return optimize(
-#                         structure,
-#                         atomnos,
-#                         embedder.options.calculator,
-#                         method=embedder.options.theory_level,
-#                         mols_graphs=embedder.graphs if embedder.embed != 'monomolecular' else None,
-#                         procs=embedder.procs,
-#                         solvent=embedder.options.solvent,
-#                         max_newbonds=embedder.options.max_newbonds,
-#                         check=(embedder.embed != 'refine'),
-
-#                         logfunction=lambda s: embedder.log(s, p=False),
-#                         title=f'Candidate_{title}'
-#                     )
-
-#     nci_indices = [indices for letter, indices in embedder.pairings_table.items() if letter.islower()]
-#     halfsprings = [HalfSpring(i1, i2, 2.5) for i1, i2 in nci_indices]
-#     # HalfSprings get atoms involved in NCIs together if they are more than 2.5A apart,
-#     # but lets them achieve their natural equilibrium distance when closer
-
-#     psc = PreventScramblingConstraint(graphize(structure, atomnos),
-#                                         atoms,
-#                                         double_bond_protection=embedder.options.double_bond_protection,
-#                                         fix_angles=embedder.options.fix_angles_in_deformation)
-
-#     atoms.set_constraint(springs + halfsprings + [psc])
-
-#     t_start_opt = time.perf_counter()
-#     try:
-#         with LBFGS(atoms, maxstep=0.2, logfile=None, trajectory=traj) as opt:
-
-#             opt.run(fmax=0.05, steps=500)
-#             # initial coarse refinement with
-#             # Springs, Half Springs and PSC
-
-#             for spring in springs:
-#                 spring.tighten()
-#             atoms.set_constraint(springs)
-#             # Tightening Springs to improve
-#             # spacings accuracy, removing PSC
-#             # spacings accuracy, removing PSC
-
-#             opt.run(fmax=0.05, steps=200)
-#             # final accurate refinement
-
-#             iterations = opt.nsteps
-
-
-#         new_structure = atoms.get_positions()
-
-#         success = scramble_check(new_structure, atomnos, constrained_indices, embedder.graphs)
-#         if iterations == 200:
-#             exit_str = 'MAX ITER'            
-#         elif success:
-#             exit_str = 'REFINED'
-#         else:
-#             exit_str = 'SCRAMBLED'
-        
-#         if iterations == 200:
-#             exit_str = 'MAX ITER'            
-#         elif success:
-#             exit_str = 'REFINED'
-#         else:
-#             exit_str = 'SCRAMBLED'
-        
-#     except PropertyNotImplementedError:
-#         exit_str = 'CRASHED'
-
-#     embedder.log(f'    - {title} {exit_str} ({iterations} iterations, {time_to_string(time.perf_counter()-t_start_opt)})', p=False)
-#     embedder.log(f'    - {title} {exit_str} ({iterations} iterations, {time_to_string(time.perf_counter()-t_start_opt)})', p=False)
-
-#     if exit_str == 'CRASHED':
-#         return None, None, False
-
-#     energy = atoms.get_total_energy() * 23.06054194532933 #eV to kcal/mol
-
-#     return new_structure, energy, success
 
 def ase_saddle(embedder, coords, atomnos, constrained_indices=None, mols_graphs=None, title='temp', logfile=None, traj=None, freq=False, maxiterations=200):
     '''

@@ -464,7 +464,7 @@ def mtd_search_operator(filename, embedder):
                                     constrained_indices=constrained_indices,
                                     constrained_distances=constrained_distances,
                                     title=f'{filename.split(".")[0]}_conf{c+1}',
-                                ) if embedder.options.optimization else coords
+                                ) if embedder.options.optimization else (coords, None, True)
         
         exit_status = "" if success else "CRASHED"
         
@@ -651,21 +651,40 @@ def distance_scan(embedder):
         # so that atoms are never spaced too far apart
 
     from firecode.calculators._xtb import xtb_opt
+    if embedder.options.calculator == 'AIMNET2':
+        from aimnet2_firecode.interface import aimnet2_opt
+
     for i in range(max_iterations):
 
         t_start = time.perf_counter()
 
-        coords, energy, _ = xtb_opt(
-                                    coords,
-                                    mol.atomnos,
-                                    constrained_indices=np.array([mol.reactive_indices]),
-                                    constrained_distances=(d,),
-                                    method=embedder.options.theory_level,
-                                    solvent=embedder.options.solvent,
-                                    charge=embedder.options.charge,
-                                    title='temp',
-                                    procs=embedder.procs,
-                                    )
+        if embedder.options.calculator == 'XTB':
+            coords, energy, _ = xtb_opt(
+                                        coords,
+                                        mol.atomnos,
+                                        constrained_indices=np.array([mol.reactive_indices]),
+                                        constrained_distances=(d,),
+                                        method=embedder.options.theory_level,
+                                        solvent=embedder.options.solvent,
+                                        charge=embedder.options.charge,
+                                        title='temp',
+                                        procs=embedder.procs,
+                                        )
+            
+        elif embedder.options.calculator == 'AIMNET2':
+            coords, energy, _ = aimnet2_opt(
+                                        coords,
+                                        mol.atomnos,
+                                        ase_calc=embedder.dispatcher.aimnet2_calc,
+                                        constrained_indices=np.array([mol.reactive_indices]),
+                                        constrained_distances=(d,),
+                                        solvent=embedder.options.solvent,
+                                        charge=embedder.options.charge,
+                                        title='temp',
+                                        )
+            
+        else:
+            raise NotImplementedError()
 
         if i == 0:
             e_0 = energy
@@ -676,7 +695,7 @@ def distance_scan(embedder):
         # print(f"------> target was {round(d, 3)} A, reached {round(norm_of(coords[mol.reactive_indices[0]]-coords[mol.reactive_indices[1]]), 3)} A")
         # saving the structure, distance and relative energy
 
-        embedder.log(f'Step {i+1}/{max_iterations} - d={round(d, 2)} A - {round(energy-e_0, 2):4} kcal/mol - {time_to_string(time.perf_counter()-t_start)}')
+        embedder.log(f'Step {i+1:3}/{max_iterations:3} - d={round(d, 2)} A - {round(energy-e_0, 2):4} kcal/mol - {time_to_string(time.perf_counter()-t_start)}')
 
         with open("temp_scan.xyz", "w") as f:
             for i, (s, d, e) in enumerate(zip(structures, dists, energies)):
@@ -721,7 +740,7 @@ def distance_scan(embedder):
     if step > 0:
         plt.gca().invert_xaxis()
         
-    plt.ylabel('Rel. E. (kcal/mol)')
+    plt.ylabel(f'Rel. E. (kcal/mol) - {embedder.options.theory_level}/{embedder.options.calculator}/{embedder.options.solvent}')
     plt.savefig(f'{title.replace(" ", "_")}_plt.svg')
     # with open(f'{title.replace(" ", "_")}_plt.pickle', 'wb') as _f:
     #     pickle.dump(fig, _f)

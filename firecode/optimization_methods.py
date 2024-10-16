@@ -60,7 +60,7 @@ class Opt_func_dispatcher:
                             '>>> pip install aimnet2-firecode'))
             
         self.opt_funcs_dict['AIMNET2'] = aimnet2_opt
-        self.aimnet2_model = get_aimnet2_calc(theory_level, logfunction=logfunction)
+        self.aimnet2_calc = get_aimnet2_calc(theory_level, logfunction=logfunction)
 
 def optimize(
             coords,
@@ -136,7 +136,7 @@ def optimize(
                                             title=title,
                                             charge=charge,
 
-                                            ase_calc = dispatcher.aimnet2_model if calculator == 'AIMNET2' else None,
+                                            ase_calc = dispatcher.aimnet2_calc if calculator == 'AIMNET2' else None,
                                             **kwargs)
     
     elapsed = time.perf_counter() - t_start

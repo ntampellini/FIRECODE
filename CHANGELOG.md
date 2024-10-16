@@ -4,6 +4,9 @@
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
 
+## FIRECODE 1.0.1 🔥 (September 29 2024)
+- Minor bugfixes and printout clean-ups.
+
 ## FIRECODE 1.0.0 🔥 (July 5 2024)
 - Renamed project to better reflect the expanded functionality of the toolbox! 🔥
 - New Pruner class: simpler, more homogenized implementation of iterative subset pruning, sharing the same basic architecture across different similarity evaluation functions, with cached calls to the eval similarity function.

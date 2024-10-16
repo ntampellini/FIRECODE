@@ -22,16 +22,15 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 '''
 
 import os
-import shutil
 import sys
 from subprocess import DEVNULL, STDOUT, CalledProcessError, check_call
 
 import numpy as np
 
 from firecode.algebra import norm, norm_of
+from firecode.calculators.__init__ import NewFolderContext
 from firecode.graph_manipulations import get_sum_graph
 from firecode.utils import clean_directory, read_xyz, write_xyz
-from firecode.calculators.__init__ import NewFolderContext
 
 
 def xtb_opt(
@@ -364,92 +363,86 @@ def energy_grepper(filename, signal_string, position):
                 raise Exception()
 
 def xtb_get_free_energy(coords, atomnos, method='GFN2-xTB', solvent=None,
-                        charge=0, title='temp', sph=False, **kwargs):
+                        charge=0, title='temp', sph=False, grep='G', **kwargs):
     '''
     Calculates free energy with XTB,
     without optimizing the provided structure.
+    grep: returns either "G" or "Gcorr" in kcal/mol
+    sph: whether to run as single point hessian or not
+    
     '''
+    with NewFolderContext(title):
 
-    with open(f'{title}.xyz', 'w') as f:
-        write_xyz(coords, atomnos, f, title=title)
+        with open(f'{title}.xyz', 'w') as f:
+            write_xyz(coords, atomnos, f, title=title)
 
-    outname = 'xtbopt.xyz'
-    trajname = f'{title}_opt_log.xyz'
-    s = f'$opt\n   logfile={trajname}\n   output={outname}\n   maxcycle=1\n'
+        outname = 'xtbopt.xyz'
+        trajname = f'{title}_opt_log.xyz'
+        s = f'$opt\n   logfile={trajname}\n   output={outname}\n   maxcycle=1\n'
 
-          
-    if method.upper() in ('GFN-XTB', 'GFNXTB'):
-        s += '\n$gfn\n   method=1\n'
+            
+        if method.upper() in ('GFN-XTB', 'GFNXTB'):
+            s += '\n$gfn\n   method=1\n'
 
-    elif method.upper() in ('GFN2-XTB', 'GFN2XTB'):
-        s += '\n$gfn\n   method=2\n'
-    
-    s += '\n$end'
-
-    s = ''.join(s)
-    with open(f'{title}.inp', 'w') as f:
-        f.write(s)
-    
-    if sph:
-        flags = '--bhess'
-    else:
-        flags = '--ohess'
-    
-    if method in ('GFN-FF', 'GFNFF'):
-        flags += ' --gfnff'
-        # declaring the use of FF instead of semiempirical
-
-    if charge != 0:
-        flags += f' --chrg {charge}'
-
-    if solvent is not None:
-
-        if solvent == 'methanol':
-            flags += ' --gbsa methanol'
-
-        else:
-            flags += f' --alpb {solvent}'
-
-    try:
-        with open('temp_hess.log', 'w') as outfile:
-            check_call(f'xtb --input {title}.inp {title}.xyz {flags}'.split(), stdout=outfile, stderr=STDOUT)
+        elif method.upper() in ('GFN2-XTB', 'GFN2XTB'):
+            s += '\n$gfn\n   method=2\n'
         
-    except KeyboardInterrupt:
-        print('KeyboardInterrupt requested by user. Quitting.')
-        sys.exit()
+        s += '\n$end'
 
-    try:
-        free_energy = read_xtb_free_energy('temp_hess.log')
+        s = ''.join(s)
+        with open(f'{title}.inp', 'w') as f:
+            f.write(s)
+        
+        if sph:
+            flags = '--bhess'
+        else:
+            flags = '--ohess'
+        
+        if method in ('GFN-FF', 'GFNFF'):
+            flags += ' --gfnff'
+            # declaring the use of FF instead of semiempirical
 
-        clean_directory()
-        for filename in ('gfnff_topo', 'charges', 'wbo', 'xtbrestart', 'xtbtopo.mol', '.xtboptok',
-                         'hessian', 'g98.out', 'vibspectrum', 'wbo', 'xtbhess.xyz', 'charges', 'temp_hess.log'):
-            try:
-                os.remove(filename)
-            except FileNotFoundError:
-                pass
+        if charge != 0:
+            flags += f' --chrg {charge}'
 
-        return free_energy
+        if solvent is not None:
 
-    except FileNotFoundError:
-        # return 1E10
-        # print(f'temp_hess.log not present here - we are in', os.getcwd())
-        print(os.listdir())
-        sys.exit()
+            if solvent == 'methanol':
+                flags += ' --gbsa methanol'
 
-def read_xtb_free_energy(filename):
-    '''
-    returns free energy in kcal/mol from an XTB
-    .xyz result file (xtbopt.xyz)
-    '''
-    with open(filename, 'r') as f:
-        line = f.readline()
-        while True:
-            line = f.readline()
-            if 'TOTAL FREE ENERGY' in line:
-                return float(line.split()[4]) * 627.5096080305927 # Eh to kcal/mol
-            if not line:
-                raise Exception()
+            else:
+                flags += f' --alpb {solvent}'
+
+        try:
+            with open('temp_hess.log', 'w') as outfile:
+                check_call(f'xtb --input {title}.inp {title}.xyz {flags}'.split(), stdout=outfile, stderr=STDOUT)
+            
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt requested by user. Quitting.')
+            sys.exit()
+
+        try:
+            to_grep, index = {
+                'G' : ('TOTAL FREE ENERGY', 4),
+                'Gcorr' : ('G(RRHO) contrib.', 3),
+            }[grep]
+            result = energy_grepper('temp_hess.log', to_grep, index)
+
+            clean_directory()
+            for filename in ('gfnff_topo', 'charges', 'wbo', 'xtbrestart', 'xtbtopo.mol', '.xtboptok',
+                            'hessian', 'g98.out', 'vibspectrum', 'wbo', 'xtbhess.xyz', 'charges', 'temp_hess.log'):
+                try:
+                    os.remove(filename)
+                except FileNotFoundError:
+                    pass
+
+            return result
+
+        except FileNotFoundError:
+            # return 1E10
+            # print(f'temp_hess.log not present here - we are in', os.getcwd())
+            print(os.listdir())
+            sys.exit()
 
 def xtb_metadyn_augmentation(coords, atomnos, constrained_indices=None, new_structures:int=5, title=0, debug=False):
     '''
@@ -570,153 +563,144 @@ def crest_mtd_search(
 
     '''
 
-    # Remove title directory, if already present
-    if title in os.listdir():
-        shutil.rmtree(os.path.join(os.getcwd(), title))
+    with NewFolderContext(title):
+
+        if constrained_indices is not None:
+            if len(constrained_indices) == 0:
+                constrained_indices = None
+
+        if constrained_distances is not None:
+            if len(constrained_distances) == 0:
+                constrained_distances = None
+
+        with open(f'{title}.xyz', 'w') as f:
+            write_xyz(coords, atomnos, f, title=title)
+
+        s = '$opt\n   '
+            
+        if constrained_indices is not None:  
+            s += '\n$constrain\n'
+            # s += '   atoms: '
+            # for i in np.unique(np.array(constrained_indices).flatten()):
+            #     s += f"{i+1},"
+
+            for (c1, c2), cd in zip(constrained_indices, constrained_distances):
+                cd = "auto" if cd is None else cd
+                s += f"    distance: {c1+1}, {c2+1}, {cd}\n"
+
+        if constrained_dihedrals is not None:
+            assert len(constrained_dihedrals) == len(constrained_dih_angles)
+            s += '\n$constrain\n' if constrained_indices is None else ''
+            for (a, b, c, d), angle in zip(constrained_dihedrals, constrained_dih_angles):
+                s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"  
+    
+        s += "\n$metadyn\n  atoms: "
+
+        constrained_atoms_cumulative = set()
+        if constrained_indices is not None:
+            for c1, c2 in constrained_indices:
+                constrained_atoms_cumulative.add(c1)
+                constrained_atoms_cumulative.add(c2)
+
+        if constrained_dihedrals is not None:
+            for c1, c2, c3, c4 in constrained_dihedrals:
+                constrained_atoms_cumulative.add(c1)
+                constrained_atoms_cumulative.add(c2)
+                constrained_atoms_cumulative.add(c3)
+                constrained_atoms_cumulative.add(c4)
+
+        # write atoms that need to be moved during metadynamics (all but constrained)
+        active_ids = np.array([i+1 for i, _ in enumerate(atomnos) if i not in constrained_atoms_cumulative])
+
+        while len(active_ids) > 2:
+            i = next((i for i, _ in enumerate(active_ids[:-2]) if active_ids[i+1]-active_ids[i]>1), len(active_ids)-1)
+            if active_ids[0] == active_ids[i]:
+                s += f"{active_ids[0]},"
+            else:
+                s += f"{active_ids[0]}-{active_ids[i]},"
+            active_ids = active_ids[i+1:]
+
+        # remove final comma
+        s = s[:-1]
+        s += '\n$end'
+
+        s = ''.join(s)
+        with open(f'{title}.inp', 'w') as f:
+            f.write(s)
         
-    # make title directory and cd into it
-    os.mkdir(title)
-    os.chdir(os.path.join(os.getcwd(), title))
+        # avoid restarting the run
+        flags = '--norestart'
+        
+        # add method flag
+        if method.upper() in ('GFN-FF', 'GFNFF'):
+            flags += ' --gfnff'
+            # declaring the use of FF instead of semiempirical
 
-    if constrained_indices is not None:
-        if len(constrained_indices) == 0:
-            constrained_indices = None
+        elif method.upper() in ('GFN2-XTB', 'GFN2'):
+            flags += ' --gfn2'
 
-    if constrained_distances is not None:
-        if len(constrained_distances) == 0:
-            constrained_distances = None
+        elif method.upper() in ('GFN2-XTB//GFN-FF', 'GFN2//GFNFF'):
+            flags += ' --gfn2//gfnff'
 
-    with open(f'{title}.xyz', 'w') as f:
-        write_xyz(coords, atomnos, f, title=title)
+        # adding other options
+        if charge != 0:
+            flags += f' --chrg {charge}'
 
-    s = '$opt\n   '
-         
-    if constrained_indices is not None:  
-        s += '\n$constrain\n'
-        # s += '   atoms: '
-        # for i in np.unique(np.array(constrained_indices).flatten()):
-        #     s += f"{i+1},"
+        if procs is not None:
+            flags += f' -P {procs}'
 
-        for (c1, c2), cd in zip(constrained_indices, constrained_distances):
-            cd = "auto" if cd is None else cd
-            s += f"    distance: {c1+1}, {c2+1}, {cd}\n"
+        if threads is not None:
+            flags += f' -T {threads}'
 
-    if constrained_dihedrals is not None:
-        assert len(constrained_dihedrals) == len(constrained_dih_angles)
-        s += '\n$constrain\n' if constrained_indices is None else ''
-        for (a, b, c, d), angle in zip(constrained_dihedrals, constrained_dih_angles):
-            s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"  
- 
-    s += "\n$metadyn\n  atoms: "
+        if solvent is not None:
 
-    constrained_atoms_cumulative = set()
-    if constrained_indices is not None:
-        for c1, c2 in constrained_indices:
-            constrained_atoms_cumulative.add(c1)
-            constrained_atoms_cumulative.add(c2)
+            if solvent == 'methanol':
+                flags += ' --gbsa methanol'
 
-    if constrained_dihedrals is not None:
-        for c1, c2, c3, c4 in constrained_dihedrals:
-            constrained_atoms_cumulative.add(c1)
-            constrained_atoms_cumulative.add(c2)
-            constrained_atoms_cumulative.add(c3)
-            constrained_atoms_cumulative.add(c4)
+            else:
+                flags += f' --alpb {solvent}'
 
-    # write atoms that need to be moved during metadynamics (all but constrained)
-    active_ids = np.array([i+1 for i, _ in enumerate(atomnos) if i not in constrained_atoms_cumulative])
+        if kcal is None:
+            kcal = 10
+        flags += f' --ewin {kcal}'
 
-    while len(active_ids) > 2:
-        i = next((i for i, _ in enumerate(active_ids[:-2]) if active_ids[i+1]-active_ids[i]>1), len(active_ids)-1)
-        if active_ids[0] == active_ids[i]:
-            s += f"{active_ids[0]},"
-        else:
-            s += f"{active_ids[0]}-{active_ids[i]},"
-        active_ids = active_ids[i+1:]
+        if ncimode:
+            flags += ' --nci'
 
-    # remove final comma
-    s = s[:-1]
-    s += '\n$end'
+        flags += ' --noreftopo'
 
-    s = ''.join(s)
-    with open(f'{title}.inp', 'w') as f:
-        f.write(s)
-    
-    # avoid restarting the run
-    flags = '--norestart'
-      
-    # add method flag
-    if method.upper() in ('GFN-FF', 'GFNFF'):
-        flags += ' --gfnff'
-        # declaring the use of FF instead of semiempirical
-
-    elif method.upper() in ('GFN2-XTB', 'GFN2'):
-        flags += ' --gfn2'
-
-    elif method.upper() in ('GFN2-XTB//GFN-FF', 'GFN2//GFNFF'):
-        flags += ' --gfn2//gfnff'
-
-    # adding other options
-    if charge != 0:
-        flags += f' --chrg {charge}'
-
-    if procs is not None:
-        flags += f' -P {procs}'
-
-    if threads is not None:
-        flags += f' -T {threads}'
-
-    if solvent is not None:
-
-        if solvent == 'methanol':
-            flags += ' --gbsa methanol'
-
-        else:
-            flags += f' --alpb {solvent}'
-
-    if kcal is None:
-        kcal = 10
-    flags += f' --ewin {kcal}'
-
-    if ncimode:
-        flags += ' --nci'
-
-    flags += ' --noreftopo'
-
-    try:
-        with open(f"{title}.out", "w") as f:
-            check_call(f'crest {title}.xyz --cinp {title}.inp {flags}'.split(), stdout=f, stderr=STDOUT)
-  
-    except KeyboardInterrupt:
-        print('KeyboardInterrupt requested by user. Quitting.')
-        sys.exit()
-
-    # if CREST crashes, cd into the parent folder before propagating the error
-    except CalledProcessError:
-        os.chdir(os.path.dirname(os.getcwd()))
-        raise CalledProcessError
-
-    new_coords = read_xyz('crest_conformers.xyz').atomcoords
-
-    # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))     
-
-    for filename in ('gfnff_topo',
-                        'charges',
-                        'wbo',
-                        'xtbrestart',
-                        'xtbtopo.mol', 
-                        '.xtboptok',
-                        'gfnff_adjacency',
-                        'gfnff_charges',
-                    ):
         try:
-            os.remove(filename)
-        except FileNotFoundError:
-            pass
-
-    os.chdir(os.path.dirname(os.getcwd()))
-    # shutil.rmtree(os.path.join(os.getcwd(), title))
+            with open(f"{title}.out", "w") as f:
+                check_call(f'crest {title}.xyz --cinp {title}.inp {flags}'.split(), stdout=f, stderr=STDOUT)
     
-    return new_coords
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt requested by user. Quitting.')
+            sys.exit()
+
+        # if CREST crashes, cd into the parent folder before propagating the error
+        except CalledProcessError:
+            os.chdir(os.path.dirname(os.getcwd()))
+            raise CalledProcessError
+
+        new_coords = read_xyz('crest_conformers.xyz').atomcoords
+
+        # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))     
+
+        for filename in ('gfnff_topo',
+                            'charges',
+                            'wbo',
+                            'xtbrestart',
+                            'xtbtopo.mol', 
+                            '.xtboptok',
+                            'gfnff_adjacency',
+                            'gfnff_charges',
+                        ):
+            try:
+                os.remove(filename)
+            except FileNotFoundError:
+                pass
+        
+        return new_coords
 
 def xtb_gsolv(coords, atomnos, model='alpb', charge=0, solvent='ch2cl2', title='temp', assert_convergence=True):
     '''
@@ -725,62 +709,53 @@ def xtb_gsolv(coords, atomnos, model='alpb', charge=0, solvent='ch2cl2', title='
 
     '''
     
-    # create working folder and cd into it
-    if title in os.listdir():
-        shutil.rmtree(os.path.join(os.getcwd(), title))
-        
-    os.mkdir(title)
-    os.chdir(os.path.join(os.getcwd(), title))
+    with NewFolderContext(title):
 
-    with open(f'{title}.xyz', 'w') as f:
-        write_xyz(coords, atomnos, f, title=title)
+        with open(f'{title}.xyz', 'w') as f:
+            write_xyz(coords, atomnos, f, title=title)
 
-    # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
-    outname = 'xtbopt.xyz'    
-    flags = '--norestart'
-        
-    # declaring the use of FF instead of semiempirical
-    flags += ' --gfnff'
+        # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
+        outname = 'xtbopt.xyz'    
+        flags = '--norestart'
+            
+        # declaring the use of FF instead of semiempirical
+        flags += ' --gfnff'
 
-    if charge != 0:
-        flags += f' --chrg {charge}'
+        if charge != 0:
+            flags += f' --chrg {charge}'
 
-    flags += f' --{model} {solvent}'
+        flags += f' --{model} {solvent}'
 
-    try:
-        with open(f"{title}.out", "w") as f:
-            check_call(f'xtb {title}.xyz {flags}'.split(), stdout=f, stderr=STDOUT)
-
-    # sometimes the SCC does not converge: only raise the error if specified
-    except CalledProcessError:
-        if assert_convergence:
-            raise CalledProcessError
-    
-    except KeyboardInterrupt:
-        print('KeyboardInterrupt requested by user. Quitting.')
-        sys.exit()
-
-             
-    else:    
-        gsolv = energy_grepper(f"{title}.out", '-> Gsolv', 3)
-        clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out", outname))
-
-    for filename in ('gfnff_topo',
-                        'charges',
-                        'wbo',
-                        'xtbrestart',
-                        'xtbtopo.mol', 
-                        '.xtboptok',
-                        'gfnff_adjacency',
-                        'gfnff_charges',
-                    ):
         try:
-            os.remove(filename)
-        except FileNotFoundError:
-            pass
+            with open(f"{title}.out", "w") as f:
+                check_call(f'xtb {title}.xyz {flags}'.split(), stdout=f, stderr=STDOUT)
 
-    # get out of working folder and delete it
-    os.chdir(os.path.dirname(os.getcwd()))
-    shutil.rmtree(os.path.join(os.getcwd(), title))
-    
-    return gsolv
+        # sometimes the SCC does not converge: only raise the error if specified
+        except CalledProcessError:
+            if assert_convergence:
+                raise CalledProcessError
+        
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt requested by user. Quitting.')
+            sys.exit()
+
+                
+        else:    
+            gsolv = energy_grepper(f"{title}.out", '-> Gsolv', 3)
+            clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out", outname))
+
+        for filename in ('gfnff_topo',
+                            'charges',
+                            'wbo',
+                            'xtbrestart',
+                            'xtbtopo.mol', 
+                            '.xtboptok',
+                            'gfnff_adjacency',
+                            'gfnff_charges',
+                        ):
+            try:
+                os.remove(filename)
+            except FileNotFoundError:
+                pass
+        
+        return gsolv

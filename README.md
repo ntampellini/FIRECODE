@@ -4,16 +4,17 @@
 <div align="center">
 
 [![License: GNU LGPL v3](https://img.shields.io/github/license/ntampellini/firecode)](https://opensource.org/licenses/LGPL-3.0)
-[![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/ntampellini/firecode)](https://www.codefactor.io/repository/github/ntampellini/firecode)
 ![Python Version](https://img.shields.io/badge/Python-3.8.10-blue)
 ![Size](https://img.shields.io/github/languages/code-size/ntampellini/firecode)
-
 ![Lines](https://sloc.xyz/github/ntampellini/firecode/)
+[![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/ntampellini/firecode)](https://www.codefactor.io/repository/github/ntampellini/firecode)
+
 [![PyPI](https://img.shields.io/pypi/v/firecode)](https://pypi.org/project/firecode/)
 [![Wheel](https://img.shields.io/pypi/wheel/firecode)](https://pypi.org/project/firecode/)
 [![Documentation Status](https://readthedocs.org/projects/firecode/badge/?version=latest)](https://firecode.readthedocs.io/en/latest/?badge=latest)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/firecode)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v1.json)](https://github.com/charliermarsh/ruff)
+
 ![Twitter](https://img.shields.io/twitter/url?url=https%3A%2F%2Ftwitter.com%2Fntampellini_&label=%40ntampellini_&link=https%3A%2F%2Ftwitter.com%2Fntampellini_)
 
 </div>

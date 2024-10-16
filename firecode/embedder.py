@@ -148,12 +148,12 @@ class Embedder:
             self.check_objects_compenetration()
             # make sure the input structures look alright
 
-            self.check_saturation()
-            # make sure that structures look nice and correct
-
             self._set_options(filename)
             # read the keywords line and set the relative options
             # then read the operators and store them 
+
+            self.check_saturation()
+            # make sure that structures look nice and correct
 
             self._calculator_setup()
             # initialize default or specified calculator
@@ -380,7 +380,7 @@ class Embedder:
         '''
         self.log()
         for mol in self.objects:
-            charge = int(mol.charge) if hasattr(mol, "charge") else 0
+            charge = int(mol.charge) if hasattr(mol, "charge") else self.options.charge
             
             if _saturation_check(mol.atomnos, charge):
                 self.log(f"--> {mol.filename}: saturation check passed (even saturation index)")
@@ -1166,6 +1166,9 @@ class Embedder:
                     if len(self.structures) > show:
                         self.log(f'> ... ({len(self.structures)-show} more)')
 
+                with open('firecode_best.xyz', 'w') as f:
+                    write_xyz(self.structures[0], self.atomnos, f)
+
         self.write_quote()
         self.close_log_streams()
         sys.exit()
@@ -1495,8 +1498,8 @@ class RunEmbedding(Embedder):
 
         ################################################# CHECKPOINT BEFORE FF OPTIMIZATION
 
+        self.outname = f'firecode_checkpoint_{self.stamp}.xyz'
         if not only_fixed_constraints:
-            self.outname = f'firecode_checkpoint_{self.stamp}.xyz'
             with open(self.outname, 'w') as f:        
                 for i, structure in enumerate(align_structures(self.structures)):
                     write_xyz(structure, self.atomnos, f, title=f'TS candidate {i+1} - Checkpoint before FF optimization')
@@ -1741,6 +1744,7 @@ class RunEmbedding(Embedder):
         '''
 
         # pytorch parallellization is carried out differently
+        # (not parallelized for now)
         if self.options.calculator == 'AIMNET2':
             from aimnet2_firecode.interface import \
                 aimnet2_optimization_refining
@@ -1914,7 +1918,7 @@ class RunEmbedding(Embedder):
 
             if False in mask:
                 self.log(f'Discarded {len([b for b in mask if not b])} candidates for energy ({np.count_nonzero(mask)} left, ' +
-                            f'{round(100*np.count_nonzero(mask)/len(mask), 1)}% kept, threshold {energy_thr} kcal/mol)')
+                            f'{round(100*np.count_nonzero(mask)/len(mask), 1)}% kept, threshold {round(energy_thr, 1)} kcal/mol)')
     
         ################################################# PRUNING: FITNESS (POST SEMIEMPIRICAL OPT)
 
@@ -1965,7 +1969,7 @@ class RunEmbedding(Embedder):
 
             if keep/active > keep_min:
                 if verbose:
-                    self.log(f"--> Dynamically adjusted energy threshold to {round(thr, 1)} kcal/mol to retain at least {round(thr)}% of structures.")
+                    self.log(f"--> Dynamically adjusted energy threshold to {round(thr, 1)} kcal/mol to retain at least {round(thr*100, 1)}% of structures.")
                 return thr
 
     def metadynamics_augmentation(self):
@@ -2411,9 +2415,9 @@ class RunEmbedding(Embedder):
                             # self.log(f"--> Performing {self.options.calculator} FF pre-optimization (loose convergence, molecular and pairing constraints)\n")
                             self.force_field_refining(conv_thr="loose", prevent_scrambling=True)
 
-
-                        # self.log(f"--> Performing {self.options.calculator} FF optimization (loose convergence, pairing constraints, step 1/2)\n")
-                        self.force_field_refining(conv_thr="loose")
+                        if len(self.structures) > 500:
+                            # self.log(f"--> Performing {self.options.calculator} FF optimization (loose convergence, pairing constraints, step 1/2)\n")
+                            self.force_field_refining(conv_thr="loose")
 
                         # self.log(f"--> Performing {self.options.calculator} FF optimization (tight convergence, fixed constraints only, step 2/2)\n")
                         self.force_field_refining(conv_thr="tight", only_fixed_constraints=True)

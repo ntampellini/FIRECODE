@@ -20,7 +20,7 @@ along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 '''
-from firecode.__main__ import __version__
+__version__ = '1.0.0'
 from setuptools import setup, find_packages
 
 long_description = ('## FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles.\nEnsemble optimizer. Systematic generation of multimolecular arrangements for ' +
