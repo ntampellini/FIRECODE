@@ -43,8 +43,8 @@ def automep(embedder, n_images=9):
     ts_guess, _, _ = xtb_opt(
                             coords,
                             mol.atomnos,
-                            constrained_dihedrals=dihedrals+exocyclic,
-                            constrained_dih_angles=target_angles,
+                            constrained_dihedrals_indices=dihedrals+exocyclic,
+                            constrained_dihedrals_values=target_angles,
                             method=embedder.options.theory_level,
                             solvent=embedder.options.solvent,
                             procs=embedder.procs

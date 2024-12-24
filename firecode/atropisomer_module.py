@@ -373,7 +373,6 @@ def ase_dih_scan(embedder,
 
                 iterations = opt.nsteps
 
-
             energies.append(atoms.get_total_energy() * 23.06054194532933) # eV to kcal/mol
 
         if logfile is not None:

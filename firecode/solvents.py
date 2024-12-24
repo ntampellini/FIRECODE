@@ -89,7 +89,7 @@ epsilon_dict = {
 solvent_synonyms = {
     'ch3cooh':'aceticacid',
     'ch3cn':'acetonitrile',
-    'ch3cl':'chloroform',
+    'chcl3':'chloroform',
     'dcm':'ch2cl2',
     'dichloromethane':'ch2cl2',
     'carbondisuphide':'cs2',

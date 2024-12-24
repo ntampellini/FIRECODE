@@ -115,6 +115,7 @@ class Hypermolecule:
         self.rootname = filename.split('.')[0]
         self.filename = filename
         self.debug_logfunction = debug_logfunction
+        self.constraints = []
 
         if isinstance(reactive_indices, np.ndarray):
             self.reactive_indices = reactive_indices

@@ -446,6 +446,13 @@ def mtd_search_operator(filename, embedder):
     constrained_indices = _get_internal_constraints(filename, embedder)
     constrained_distances = [embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices]
 
+    (  
+        constrained_angles_indices,
+        constrained_angles_values,
+        constrained_dihedrals_indices,
+        constrained_dihedrals_values,
+    ) = embedder._get_angle_dih_constraints()
+
     logfunction(f'--> {filename}: Geometry optimization pre-mtd_search ({embedder.options.theory_level} via {embedder.options.calculator})')
     return_char = "\n"
     logfunction(f'    {len(constrained_indices)} constraints applied{": "+str(constrained_indices).replace(return_char, " ") if len(constrained_indices) > 0 else ""}')
@@ -461,8 +468,16 @@ def mtd_search_operator(filename, embedder):
                                     solvent=embedder.options.solvent,
                                     charge=embedder.options.charge,
                                     procs=embedder.procs,
+
                                     constrained_indices=constrained_indices,
                                     constrained_distances=constrained_distances,
+
+                                    constrained_angles_indices=constrained_angles_indices,
+                                    constrained_angles_values=constrained_angles_values,
+
+                                    constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                    constrained_dihedrals_values=constrained_dihedrals_values,
+
                                     title=f'{filename.split(".")[0]}_conf{c+1}',
                                 ) if embedder.options.optimization else (coords, None, True)
         
@@ -512,8 +527,16 @@ def mtd_search_operator(filename, embedder):
             conf_batch = crest_mtd_search(
                                             coords,
                                             mol.atomnos,
+
                                             constrained_indices=constrained_indices,
                                             constrained_distances=constrained_distances,
+
+                                            constrained_angles_indices=constrained_angles_indices,
+                                            constrained_angles_values=constrained_angles_values,
+
+                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                            constrained_dihedrals_values=constrained_dihedrals_values,
+
                                             solvent=embedder.options.solvent,
                                             charge=mol.charge,
                                             kcal=embedder.options.kcal_thresh,
@@ -529,8 +552,16 @@ def mtd_search_operator(filename, embedder):
             conf_batch = crest_mtd_search(
                                             coords,
                                             mol.atomnos,
+
                                             constrained_indices=constrained_indices,
                                             constrained_distances=constrained_distances,
+
+                                            constrained_angles_indices=constrained_angles_indices,
+                                            constrained_angles_values=constrained_angles_values,
+
+                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                            constrained_dihedrals_values=constrained_dihedrals_values,
+                                            
                                             solvent=embedder.options.solvent,
                                             charge=mol.charge,
                                             method='GFN2-XTB', # try with XTB2

@@ -20,7 +20,7 @@ along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 '''
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 from setuptools import setup, find_packages
 
 long_description = ('## FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles.\nEnsemble optimizer. Systematic generation of multimolecular arrangements for ' +
@@ -59,11 +59,13 @@ setup(
         'ase==3.21.1',
         'sella==2.3.2',
         'scikit-learn==1.0.1',
-        'numba==0.54.1',
+        'numba==0.58.1',
         'prettytable==3.3.0',
         'typing-extensions==4.8.0',
-        'llvmlite',
+        'llvmlite==0.41.1',
         'importlib-metadata==7.0.1',
+        'psutil==5.9.6',
+        'setuptools==75.3.0',
     ],
 
     url='https://www.github.com/ntampellini/firecode',

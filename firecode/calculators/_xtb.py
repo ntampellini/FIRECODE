@@ -36,10 +36,16 @@ from firecode.utils import clean_directory, read_xyz, write_xyz
 def xtb_opt(
         coords,
         atomnos,
+
         constrained_indices=None,
         constrained_distances=None,
-        constrained_dihedrals=None,
-        constrained_dih_angles=None,
+
+        constrained_dihedrals_indices=None,
+        constrained_dihedrals_values=None,
+
+        constrained_angles_indices=None,
+        constrained_angles_values=None,
+
         method='GFN2-xTB',
         maxiter=500,
         solvent=None,
@@ -153,6 +159,13 @@ def xtb_opt(
                                                 constrain_string=constrain_string,
                                                 recursive_stepsize=0.3,
                                                 spring_constant=0.25,
+
+                                                constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                                constrained_dihedrals_values=constrained_dihedrals_values,
+
+                                                constrained_angles_indices=constrained_angles_indices,
+                                                constrained_angles_values=constrained_angles_values,
+
                                             )
                     
                     d = norm_of(coords[b] - coords[a])
@@ -183,14 +196,24 @@ def xtb_opt(
                 distance = distance or 'auto'
                 s += f"   distance: {a+1}, {b+1}, {distance}\n"  
 
-        if constrained_dihedrals is not None:
+        if constrained_angles_indices is not None:
 
-            assert len(constrained_dihedrals) == len(constrained_dih_angles)
+            assert len(constrained_angles_indices) == len(constrained_angles_values)
 
             if constrained_indices is None:
                 s += '\n$constrain\n'
 
-            for (a, b, c, d), angle in zip(constrained_dihedrals, constrained_dih_angles):
+            for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
+                s += f"   angle: {a+1}, {b+1}, {c+1}, {angle}\n"  
+
+        if constrained_dihedrals_indices is not None:
+
+            assert len(constrained_dihedrals_indices) == len(constrained_dihedrals_values)
+
+            if constrained_indices is None:
+                s += '\n$constrain\n'
+
+            for (a, b, c, d), angle in zip(constrained_dihedrals_indices, constrained_dihedrals_values):
                 s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"  
 
         if constrain_string is not None:
@@ -518,10 +541,16 @@ def parse_xtb_out(filename):
 def crest_mtd_search(
         coords,
         atomnos,
+
         constrained_indices=None,
         constrained_distances=None,
-        constrained_dihedrals=None,
-        constrained_dih_angles=None,
+
+        constrained_angles_indices=None,
+        constrained_angles_values=None,
+
+        constrained_dihedrals_indices=None,
+        constrained_dihedrals_values=None,
+
         method='GFN2-XTB//GFN-FF',
         solvent='CH2Cl2',
         charge=0,
@@ -588,10 +617,16 @@ def crest_mtd_search(
                 cd = "auto" if cd is None else cd
                 s += f"    distance: {c1+1}, {c2+1}, {cd}\n"
 
-        if constrained_dihedrals is not None:
-            assert len(constrained_dihedrals) == len(constrained_dih_angles)
+        if constrained_angles_indices is not None:
+            assert len(constrained_angles_indices) == len(constrained_angles_values)
             s += '\n$constrain\n' if constrained_indices is None else ''
-            for (a, b, c, d), angle in zip(constrained_dihedrals, constrained_dih_angles):
+            for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
+                s += f"   angle: {a+1}, {b+1}, {c+1}, {angle}\n"
+
+        if constrained_dihedrals_indices is not None:
+            assert len(constrained_dihedrals_indices) == len(constrained_dihedrals_values)
+            s += '\n$constrain\n' if constrained_indices is None else ''
+            for (a, b, c, d), angle in zip(constrained_dihedrals_indices, constrained_dihedrals_values):
                 s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"  
     
         s += "\n$metadyn\n  atoms: "
@@ -602,8 +637,14 @@ def crest_mtd_search(
                 constrained_atoms_cumulative.add(c1)
                 constrained_atoms_cumulative.add(c2)
 
-        if constrained_dihedrals is not None:
-            for c1, c2, c3, c4 in constrained_dihedrals:
+        if constrained_angles_indices is not None:
+            for c1, c2, c3 in constrained_angles_indices:
+                constrained_atoms_cumulative.add(c1)
+                constrained_atoms_cumulative.add(c2)
+                constrained_atoms_cumulative.add(c3)
+
+        if constrained_dihedrals_indices is not None:
+            for c1, c2, c3, c4 in constrained_dihedrals_indices:
                 constrained_atoms_cumulative.add(c1)
                 constrained_atoms_cumulative.add(c2)
                 constrained_atoms_cumulative.add(c3)

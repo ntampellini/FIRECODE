@@ -40,14 +40,15 @@ from ase.optimize import BFGS, LBFGS
 from ase.vibrations import Vibrations
 from sella import Sella
 
-from firecode.algebra import norm, norm_of
+from firecode.algebra import dihedral, norm, norm_of, point_angle
 from firecode.graph_manipulations import findPaths, graphize, neighbors
 from firecode.rmsd import get_alignment_matrix
 from firecode.settings import COMMANDS, MEM_GB
 from firecode.solvents import get_solvent_line
 from firecode.utils import (HiddenPrints, align_structures, clean_directory,
-                          get_double_bonds_indices, molecule_check,
-                          scramble_check, time_to_string, write_xyz)
+                            get_double_bonds_indices, molecule_check,
+                            scramble_check, time_to_string, write_xyz)
+
 
 class Spring:
     '''
@@ -118,6 +119,176 @@ class HalfSpring:
     def __repr__(self):
         return f'Spring - ids:{self.i1}/{self.i2} - d_max:{self.d_max}, k:{self.k}'
 
+class PlanarAngleSpring:
+    '''
+    ASE Custom Constraint Class
+    Adds an harmonic force among a triad of atoms.
+    Spring constant is dinamycally adjusted to achieve tight convergence,
+    but maximum force is dampened so as not to ruin structures.
+    eq_angle: in degrees
+    '''
+    def __init__(self, i1, i2, i3, eq_angle):
+        self.i1, self.i2, self.i3 = i1, i2, i3
+        self.eq_angle = eq_angle
+
+        self.k_min = 0.2
+        self.k_max = 2
+        self.theta_mid = 3
+
+    def adjust_positions(self, atoms, newpositions):
+        pass
+
+    def adjust_forces(self, atoms, forces):
+
+        # Get positions
+        p1 = atoms.positions[self.i1]
+        p2 = atoms.positions[self.i2]
+        p3 = atoms.positions[self.i3]
+
+        # Calculate vectors
+        v21 = p1 - p2  # Vector from atom 2 to 1
+        v23 = p3 - p2  # Vector from atom 2 to 3
+        
+        # Get bond lengths
+        r1 = norm_of(v21)
+        r3 = norm_of(v23)
+
+        # Calculate current angle
+        current_angle = point_angle(p1, p2, p3)
+        delta_angle = self.eq_angle - current_angle
+
+        # Calculate unit vectors
+        e21 = v21 / r1
+        e23 = v23 / r3
+
+        # Normal to the plane
+        normal = np.cross(e21, e23)
+        if norm_of(normal) > 1e-10:  # Check if atoms aren't collinear
+            
+            normal = norm(normal)
+            
+            # Calculate perpendicular directions in the plane
+            f1_direction = np.cross(e21, normal)
+            f3_direction = np.cross(normal, e23)
+            
+            # Dynamically adjust force constant: k_min for large delta_angles,
+            # up to k_max for smaller ones. Sigmoid-like function centered on self.theta_mid.
+            sigmoid = 1-(delta_angle-self.theta_mid)/(1+np.abs(delta_angle-self.theta_mid))
+            k_dynamic = (self.k_max-self.k_min)/2 * (sigmoid) + self.k_min
+                
+            force_magnitude = np.clip(delta_angle * k_dynamic, -2, 2)
+
+            # Calculate forces perpendicular to bonds
+            f1 = force_magnitude * f1_direction
+            f3 = force_magnitude * f3_direction
+            
+            # The central force needs to maintain both force and torque balance
+            f2 = -(f1 + f3)
+
+            forces[self.i1] += f1
+            forces[self.i2] += f2
+            forces[self.i3] += f3
+
+    def __repr__(self):
+        return f'PlanarAngleSpring - ids:{self.i1}/{self.i2}/{self.i3} - eq_angle:{self.eq_angle}'
+
+class DihedralSpring:
+    '''
+    ASE Custom Constraint Class
+    Adds a harmonic force to control a dihedral angle between four atoms.
+    Improved handling of stiff bonds and out-of-plane rotations.
+    
+    Parameters:
+    -----------
+    i1, i2, i3, i4 : int
+        Indices of the four atoms defining the dihedral angle
+    eq_angle : float
+        Target dihedral angle in degrees
+    k_min : float, optional
+        Minimum force constant (default: 0.1)
+    k_max : float, optional
+        Maximum force constant (default: 1)
+    '''
+    def __init__(self, i1, i2, i3, i4, eq_angle, k_min=0.1, k_max=1):
+        self.i1, self.i2, self.i3, self.i4 = i1, i2, i3, i4
+        self.eq_angle = eq_angle
+        
+        self.k_min = k_min
+        self.k_max = k_max
+        self.theta_mid = 30.0
+
+    def adjust_positions(self, atoms, newpositions):
+        pass
+
+    def get_delta_angle(self, current, target):
+        """
+        Calculate the smallest angle difference considering periodicity.
+        Returns the difference in degrees.
+        """
+        diff = ((target - current + 180) % 360) - 180
+        return diff
+
+    def adjust_forces(self, atoms, forces):
+        # Get positions         
+        p1 = atoms.positions[self.i1].copy()
+        p2 = atoms.positions[self.i2].copy()
+        p3 = atoms.positions[self.i3].copy()
+        p4 = atoms.positions[self.i4].copy()
+
+        # Calculate current dihedral angle
+        current_angle =dihedral((p1, p2, p3, p4))
+        
+        # Calculate periodic angle difference
+        delta_angle = self.get_delta_angle(current_angle, self.eq_angle)
+        
+        # Calculate central bond length (important for force scaling)
+        v23 = p3 - p2
+        bond_length = norm_of(v23)
+        
+        # Dynamic force constant calculation - quadratic scaling near target
+        rel_angle = np.abs(delta_angle) / self.theta_mid
+        k_dynamic = self.k_max * np.exp(-rel_angle) + self.k_min
+        
+        # Scale force by bond length (shorter bonds need more force)
+        force_scale = 1.0 / bond_length
+        
+        # Calculate force magnitude with scaled clipping
+        force_magnitude = np.clip(delta_angle * k_dynamic * force_scale, -5.0, 5.0)
+        
+        # Calculate force directions
+        v21 = p1 - p2
+        v34 = p4 - p3
+        
+        # Calculate perpendicular components for force application
+        n1 = np.cross(v21, v23)
+        n2 = np.cross(v23, v34)
+        
+        n1_norm = norm_of(n1)
+        n2_norm = norm_of(n2)
+        
+        if n1_norm < 1e-6 or n2_norm < 1e-6:
+            return
+            
+        f1_direction = n1 / n1_norm
+        f4_direction = n2 / n2_norm
+        
+        # Apply forces with improved balance
+        f1 = force_magnitude * f1_direction
+        f4 = force_magnitude * f4_direction
+        
+        # Distribute forces to maintain total force and torque
+        forces[self.i1] += f1
+        forces[self.i4] += f4
+        forces[self.i2] += -0.75 * f1
+        forces[self.i3] += -0.75 * f4
+        # Remaining -0.25 * (f1 + f4) is distributed equally
+        center_force = -0.25 * (f1 + f4)
+        forces[self.i2] += center_force
+        forces[self.i3] += center_force
+
+    def __repr__(self):
+        return f'DihedralSpring(ids: {self.i1}/{self.i2}/{self.i3}/{self.i4}, eq_angle: {self.eq_angle})'
+
 def get_ase_calc(embedder):
     '''
     Attach the correct ASE calculator
@@ -144,7 +315,7 @@ def get_ase_calc(embedder):
                              '(See https://github.com/grimme-lab/xtb-python)'))
 
         from firecode.solvents import (solvent_synonyms, xtb_solvents,
-                                     xtb_supported)
+                                       xtb_supported)
                                      
         solvent = solvent_synonyms[solvent] if solvent in solvent_synonyms else solvent
         solvent = 'none' if solvent is None else solvent
@@ -545,9 +716,27 @@ def PreventScramblingConstraint(graph, atoms, double_bond_protection=False, fix_
 
     return FixInternals(dihedrals_deg=dihedrals_deg, angles_deg=angles_deg, bonds=bonds, epsilon=1)
 
-def ase_popt(embedder, coords, atomnos, constrained_indices=None,
-             steps=500, targets=None, safe=False, safe_mask=None,
-             traj=None, logfunction=None, title='temp'):
+def ase_popt(
+                embedder,
+                coords,
+                atomnos,
+
+                constrained_indices=None,
+                constrained_distances=None,
+
+                constrained_angles_indices=None,
+                constrained_angles_values=None,
+
+                constrained_dihedrals_indices=None,
+                constrained_dihedrals_values=None,
+
+                steps=500,
+                safe=False,
+                safe_mask=None,
+                traj=None,
+                logfunction=None,
+                title='temp',
+        ):
     '''
     embedder: firecode embedder object
     coords: 
@@ -563,10 +752,25 @@ def ase_popt(embedder, coords, atomnos, constrained_indices=None,
     constraints = []
 
     if constrained_indices is not None:
+        constrained_distances = constrained_distances or [None for _ in constrained_indices]
         for i, c in enumerate(constrained_indices):
             i1, i2 = c
-            tgt_dist = norm_of(coords[i1]-coords[i2]) if targets is None else targets[i]
+            tgt_dist = constrained_distances[i] or norm_of(coords[i1]-coords[i2])
             constraints.append(Spring(i1, i2, tgt_dist))
+
+    if constrained_angles_indices is not None:
+        constrained_angles_values = constrained_angles_values or [None for _ in constrained_angles_indices]
+        for i, c in enumerate(constrained_angles_indices):
+            i1, i2, i3 = c
+            tgt_angle = constrained_angles_values[i] or point_angle(coords[i1], coords[i2], coords[i3])
+            constraints.append(PlanarAngleSpring(i1, i2, i3, tgt_angle))
+
+    if constrained_dihedrals_indices is not None:
+        constrained_dihedrals_values = constrained_dihedrals_values or [None for _ in constrained_dihedrals_indices]
+        for i, c in enumerate(constrained_dihedrals_indices):
+            i1, i2, i3, i4 = c
+            tgt_angle = constrained_dihedrals_values[i] or dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
+            constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
 
     if safe:
         constraints.append(PreventScramblingConstraint(graphize(coords, atomnos, safe_mask),
@@ -702,7 +906,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
             traj_obj.write()
 
         # check if we are stuck
-        if np.max(np.abs(np.linalg.norm(atoms.get_positions() - mol.atomcoords[0], axis=1))) < 0.01:
+        if np.max(np.abs(norm_of(atoms.get_positions() - mol.atomcoords[0], axis=1))) < 0.01:
             unproductive_iterations += 1
 
             if unproductive_iterations == 10:

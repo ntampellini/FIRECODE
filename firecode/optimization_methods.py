@@ -69,8 +69,16 @@ def optimize(
             method=None,
             maxiter=None,
             conv_thr="tight",
+
             constrained_indices=None,
             constrained_distances=None,
+                  
+            constrained_dihedrals_indices=None,
+            constrained_dihedrals_values=None,
+
+            constrained_angles_indices=None,
+            constrained_angles_values=None,
+
             mols_graphs=None,
             procs=1,
             solvent=None,
@@ -126,8 +134,16 @@ def optimize(
     # success checks that calculation had a normal termination
     opt_coords, energy, success = opt_func(coords,
                                             atomnos,
+
                                             constrained_indices=constrained_indices,
                                             constrained_distances=constrained_distances,
+                                            
+                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                            constrained_dihedrals_values=constrained_dihedrals_values,
+
+                                            constrained_angles_indices=constrained_angles_indices,
+                                            constrained_angles_values=constrained_angles_values,
+
                                             method=method,
                                             procs=procs,
                                             solvent=solvent,

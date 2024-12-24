@@ -92,11 +92,11 @@ def get_sp_n(index, graph):
         return None
 
     d = {
-        6:{2:1, 3:2, 4:3},      # C - 2 neighbors means sp, 3 nb means sp2, 4 nb sp3
+        6:{2:1, 3:2, 4:3}, # C - 2 neighbors means sp, 3 nb means sp2, 4 nb sp3
         7:{2:2, 3:None, 4:3},      # N - 2 neighbors means sp2, 3 nb could mean sp3 or sp2, 4 nb sp3
-        8:{1:2, 2:3, 3:3, 4:3}, # O
-        15:{2:2, 3:3, 4:3},     # P - like N
-        16:{2:2, 3:3, 4:3},     # S
+        8:{1:2, 2:3, 3:3, 4:3},    # O
+        15:{2:2, 3:3, 4:3},        # P - like N
+        16:{2:2, 3:3, 4:3},        # S
     }
     return d[element].get(len(neighbors(graph, index)))
 

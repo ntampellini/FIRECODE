@@ -80,7 +80,7 @@ class Single:
 
                 if orb_dim is None:
                     orb_dim = norm_of(self.coord - self.other)
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
 
             self.center = orb_dim * self.orb_vecs + self.coord
 
@@ -117,7 +117,7 @@ class Sp2:
                 
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
             
             self.center = self.orb_vecs * orb_dim      
 
@@ -151,7 +151,10 @@ class Sp3:
 
             else: # if we cannot infer, ask user if we didn't have already 
                 try:
-                    self.leaving_group_coords = self._set_leaving_group(mol, neighbors_indices)
+                    # self.leaving_group_coords = self._set_leaving_group(mol, neighbors_indices)
+
+                    # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
+                    self.leaving_group_coords = self.others[0]
 
                 except Exception:
                 # if something goes wrong, we fallback to command line input for reactive atom index collection
@@ -207,7 +210,7 @@ class Sp3:
                 
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
 
             self.center = np.array([orb_dim * norm(vec) + self.coord for vec in self.orb_vecs])
 
@@ -277,7 +280,7 @@ class Ether:
                 
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
 
             self.orb_vecs = orb_dim * np.array([norm(v) for v in self.orb_vecs]) # making both vectors a fixed, defined length
 
@@ -317,7 +320,7 @@ class Ketone:
                 
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
 
             neighbors_of_neighbor_indices = neighbors(mol.graph, neighbors_indices[0])
             neighbors_of_neighbor_indices.remove(i)
@@ -407,7 +410,7 @@ class Imine:
                 
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
         
             if mol.sigmatropic[conf]:
                 # two p lobes
@@ -493,7 +496,7 @@ class Sp_or_carbene:
                 
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
-                    print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
         
             if self.type == 'sp':
 
@@ -608,7 +611,7 @@ atom_type_dict = {
             'S2' : Ether,
             'S3' : Sp2, # Not sure if this can be valid, but it's basically treating it as a bent carbonyl, should work
             #  'S3' : Sulphoxide, # Should we consider this? Or just ok with Sp2()?
-            # 'S4' : Sulphone,
+            'S4' : Sp3,
 
             'F1' : Single,
             'Cl1': Single,

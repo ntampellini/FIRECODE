@@ -71,6 +71,7 @@ def multiembed_bifunctional(embedder):
             if len(structures) > 0:
                 structures_out.append(structures)
                 constr_ids.append(constrained_indices)
+                embedder.write_structures('embedded', energies=False)
 
     structures_out = np.concatenate(structures_out)
 

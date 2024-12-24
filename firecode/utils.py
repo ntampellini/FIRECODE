@@ -38,6 +38,23 @@ from firecode.graph_manipulations import graphize
 from firecode.pt import pt
 
 
+class Constraint:
+    '''
+    Simple constraint class with indices, type and value attributes.
+    
+    '''
+    def __init__(self, indices, value=None):
+        
+        self.indices = indices
+
+        self.type = {
+            2 : 'B',
+            3 : 'A',
+            4 : 'D',
+        }[len(indices)]
+
+        self.value=value        
+
 class suppress_stdout_stderr(object):
     '''
     A context manager for doing a "deep suppression" of stdout and stderr in 

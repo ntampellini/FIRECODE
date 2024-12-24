@@ -397,10 +397,14 @@ class OptionSetter:
     def ffopt(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('FFOPT')]
         value = kw.split('=')[1].upper()
-        if value not in ('ON', 'OFF'):
-            raise SystemExit('FFOPT keyword can only have value \'ON\' or \'OFF\' (i.e. \'FFOPT=OFF\')')
 
-        options.ff_opt = True if value == 'ON' else False
+        on = ('ON', 'TRUE', 'YES')
+        off = ('OFF', 'FALSE', 'NO')
+
+        if value not in on and value not in off:
+            raise SystemExit('FFOPT keyword can only have values ON/TRUE/YES or OFF/NO/FALSE (i.e. \'FFOPT=OFF\')')
+
+        options.ff_opt = True if value in on else False
 
     def images(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('IMAGES')]

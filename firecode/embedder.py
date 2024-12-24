@@ -61,10 +61,10 @@ from firecode.references import references
 from firecode.rmsd import rmsd_and_max_numba
 from firecode.settings import DEFAULT_LEVELS, PROCS
 from firecode.torsion_module import _get_quadruplets, csearch
-from firecode.utils import (_saturation_check, align_structures, ase_view,
-                            auto_newline, cartesian_product, clean_directory,
-                            graphize, loadbar, scramble_check, time_to_string,
-                            timing_wrapper, write_xyz)
+from firecode.utils import (Constraint, _saturation_check, align_structures,
+                            ase_view, auto_newline, cartesian_product,
+                            clean_directory, graphize, loadbar, scramble_check,
+                            time_to_string, timing_wrapper, write_xyz)
 
 
 class Embedder:
@@ -328,8 +328,11 @@ class Embedder:
             self.log(f'{_l+1:2}> | '+line.rstrip('\n').ljust(longest)+'   |')
         self.log('    '+'-'*(longest+6)+'\n')
 
-        # start parsing: get rid of comment and blank lines
-        lines = [line.replace(', ',',') for line in lines if line[0] not in ('#', '\n')]
+        # Remove comments
+        lines = [line.split('#')[0].rstrip() for line in lines]
+
+        # start parsing: get rid of comment lines and blank lines
+        lines = [line.replace(', ',',') for line in lines if line != '' and line[0] not in ('\n')]
         
         def _remove_internal_constraints(string):
             numbers = [int(re.sub('[^0-9]', '', i)) for i in string]
@@ -348,6 +351,11 @@ class Embedder:
             inp = []
             for _l, line in enumerate(self.mol_lines):
 
+                # if line starts with a space, it must be a constraint or an attribute.
+                # Skip for now, we'll deal with it later in _read_pairings
+                if line[0] == " ":
+                    continue
+
                 if '>' in line:
                     self.options.operators_dict[_l] = [op.rstrip().lstrip() for op in reversed(line.rstrip('\n').split('>')[:-1])]
                     self.options.operators.append(line.rstrip('\n'))
@@ -357,10 +365,10 @@ class Embedder:
                 filename, *reactive_atoms = line.split()
 
                 if reactive_atoms:
-                    # remove attributes from reactive indices
+                    # remove attributes from reactive indices (i.e. charge=1)
                     reactive_atoms = [fragment for fragment in reactive_atoms if '=' not in fragment]
 
-                    # remove inteernal constraints from reactive indices
+                    # remove internal constraints from reactive indices
                     reactive_indices = _remove_internal_constraints(reactive_atoms)
                 else:
                     reactive_indices = None
@@ -440,8 +448,26 @@ class Embedder:
         unlabeled_list = []
         self.pairings_dict = {i:{} for i, _ in enumerate(self.objects)}
 
+        # removing constraint lines from mol_lines, saving constraints
+        mol_and_constr_lines = deepcopy(self.mol_lines)
+        self.mol_lines = []
+
+        for line in mol_and_constr_lines:
+            if line[0] == " ":
+                try:
+                    parts = line.split()
+                    indices = [int(i) for i in parts[:-1]]
+                    target = float(parts[-1])
+                    c = Constraint(indices, target)
+                    self.objects[len(self.mol_lines)-1].constraints.append(c)
+
+                except Exception:
+                    raise Exception(f'Error while parsing line \"{line}\". Constrain syntax: \"i1 i2 i3 [i4] value\".')
+            else:
+                self.mol_lines.append(line)
+
+        # now i is also the molecule index in self.objects and we can parse inter-file pairings/constraints
         for i, line in enumerate(self.mol_lines):
-        # now i is also the molecule index in self.objects
 
             fragments = line.split('>')[-1].split()[1:]
             # remove operators (if present) and the molecule name, keeping pairs only ['2a','5b']
@@ -508,7 +534,7 @@ class Embedder:
             for cumulative_pair in pairings:
                 parsed.append(cumulative_pair)
         # parsed looks like [[1, 'a'], [9, 'a']] where numbers are
-        # cumulative indices for TSs
+        # cumulative indices for embeddings
 
         links = {j:[] for j in set([i[1] for i in parsed])}
         for index, tag in parsed:
@@ -526,10 +552,10 @@ class Embedder:
         for letter, ids in self.pairings_table.items():
 
             if len(ids) == 1:
-                raise SyntaxError(f'Letter \'{letter}\' is only specified once. Please flag the second reactive atom.')
+                raise SyntaxError(f'Letter \'{letter}\' is only specified once. Please flag the second reactive/constrained atom.')
 
             if len(ids) > 2:
-                raise SyntaxError(f'Letter \'{letter}\' is specified more than two times. Please remove the unwanted letters.')
+                raise SyntaxError(f'Letter \'{letter}\' is specified more than two times. Please remove the extra instances of the letter.')
         
         if len(self.mol_lines) == 3:
         # adding third pairing if we have three molecules and user specified two pairings
@@ -546,7 +572,7 @@ class Embedder:
                 self.pairings_table['?'] = second_constraint
 
         # Now record the internal constraints, that is the intramolecular
-        # distances to freeze and later enforce to the imposed spacings
+        # distances/angles to freeze and later relax or enforce to the imposed values
         self.internal_constraints = []
 
         # making sure we set the kw_line attribute
@@ -561,7 +587,17 @@ class Embedder:
                     # set_options function is still to be called at this stage
                     if f'{letter}=' in self.kw_line:
                         self.internal_constraints.append([pair])
+
         self.internal_constraints = np.concatenate(self.internal_constraints) if self.internal_constraints else []
+
+        # finally, define the internal angle/dihedral constraints for the embedder
+        self.internal_angle_dih_constraints = []
+        for i, mol in enumerate(self.objects):
+            n = 0 if i == 0 else sum(self.ids[:i])
+            for constraint in mol.constraints:
+                emb_ids = [i+n for i in constraint.indices]
+                emb_constr = Constraint(emb_ids, constraint.value)
+                self.internal_angle_dih_constraints.append(emb_constr)
 
     def _set_custom_orbs(self, orb_string):
         '''
@@ -809,7 +845,14 @@ class Embedder:
                     mol.compute_orbitals(override='Single' if self.options.simpleorbitals else None)
 
             if self.embed == 'error':
-                raise InputError(('Bad input - The only molecular configurations accepted are:\n' 
+
+                orbitalstring = ''
+                for mol in self.objects:
+                    orbitalstring += f' - {mol.filename} ({len(mol.reactive_indices)} reactive indices - {" ".join([str(i) for i in mol.reactive_indices])})\n'
+
+                raise InputError((f'Bad input:\n{orbitalstring}\n'
+
+                                  'The only molecular configurations accepted are:\n' 
                                   '1) One molecule with two reactive centers (monomolecular embed)\n'
                                   '2) One molecule with four indices(dihedral embed)\n'
                                   '3) Two or three molecules with two reactive centers each (cyclical embed)\n'
@@ -1282,7 +1325,7 @@ class RunEmbedding(Embedder):
                                                                 energies)):
 
                 kind = 'REFINED - ' if status else 'NOT REFINED - '
-                write_xyz(structure, self.atomnos, _f, title=f'Structure {i+1} - {kind}Rel. E. = {round(energy, 3)} kcal/mol ({self.options.ff_level})')
+                write_xyz(structure, self.atomnos, _f, title=f'Structure {i+1} - {kind}Rel. E. = {round(energy, 3)} kcal/mol')
 
         with open(f'{outname}_constraints.dat', 'w') as _f:
             for i, constraints in enumerate(self.constrained_indices):
@@ -1439,7 +1482,7 @@ class RunEmbedding(Embedder):
                     self.log(f'Discarded {int(len([b for b in mask if not b]))} candidates for MOI similarity ({len([b for b in mask if b])} left, {time_to_string(time.perf_counter()-t_start)})')
 
             else:
-                self.log('Skipped MOI pruning (>100k) structures')
+                self.log('Skipped MOI pruning (>100k structures)')
 
         if rmsd and len(self.structures) <= 1E5:
 
@@ -1456,7 +1499,7 @@ class RunEmbedding(Embedder):
 
             ### Second step: again but symmetry-corrected (unless we have too many structures)
 
-            if len(self.structures) <= 1E4 and hasattr(self, 'embed_graph'):
+            if len(self.structures) <= 1E3 and hasattr(self, 'embed_graph'):
 
                 before2 = len(self.structures)
 
@@ -1476,10 +1519,10 @@ class RunEmbedding(Embedder):
                     self.log(f'Discarded {int(len([b for b in mask if not b]))} candidates for symmetry-corrected RMSD similarity ({len([b for b in mask if b])} left, {time_to_string(time.perf_counter()-t_start)})')
 
             elif hasattr(self, 'embed_graph'):
-                self.log('Skipped rotationally-corrected RMSD pruning (>10k) structures')
+                self.log('Skipped rotationally-corrected RMSD pruning (>1k structures)')
 
         else:
-            self.log('Skipped RMSD pruning (>100k) structures')
+            self.log('Skipped RMSD pruning (>100k structures)')
 
         if verbose and len(self.structures) == before:
             self.log(f'All structures passed the similarity check.{" "*15}')
@@ -1535,6 +1578,13 @@ class RunEmbedding(Embedder):
 
                 pairing_dists = [self.get_pairing_dists_from_constrained_indices(_c) for _c in constraints]
 
+                (
+                    constrained_angles_indices,
+                    constrained_angles_values,
+                    constrained_dihedrals_indices,
+                    constrained_dihedrals_values,
+                ) = self._get_angle_dih_constraints()
+
                 process = executor.submit(
                                             timing_wrapper,
                                             opt_function,
@@ -1547,8 +1597,16 @@ class RunEmbedding(Embedder):
                                             charge=self.options.charge,
                                             maxiter=None,
                                             conv_thr=conv_thr,
+
                                             constrained_indices=constraints,
                                             constrained_distances=pairing_dists,
+
+                                            constrained_angles_indices=constrained_angles_indices,
+                                            constrained_angles_values=constrained_angles_values,
+
+                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                            constrained_dihedrals_values=constrained_dihedrals_values,
+
                                             procs=2, # FF just needs two per structure
                                             title=f'Candidate_{i+1}',
                                             spring_constant=0.2 if prevent_scrambling else 1,
@@ -1733,6 +1791,35 @@ class RunEmbedding(Embedder):
 
                 self.target_distances[(index1, index2)] = dist1 + dist2
  
+    def _get_angle_dih_constraints(self):
+        '''
+        Gets angle and dihedral constraints in a list format
+        from the self.internal_angle_dih_constraints attribute.
+        
+        '''
+        (
+            constrained_angles_indices,
+            constrained_angles_values,
+            constrained_dihedrals_indices,
+            constrained_dihedrals_values,
+        ) = [], [], [], []
+
+        for constraint in self.internal_angle_dih_constraints:
+            if constraint.type == "A":
+                constrained_angles_indices.append(constraint.indices)
+                constrained_angles_values.append(constraint.value)
+
+            elif constraint.type == "D":
+                constrained_dihedrals_indices.append(constraint.indices)
+                constrained_dihedrals_values.append(constraint.value)
+
+        return (
+                    constrained_angles_indices,
+                    constrained_angles_values,
+                    constrained_dihedrals_indices,
+                    constrained_dihedrals_values,
+                )
+
     def optimization_refining(self, maxiter=None, conv_thr='tight', only_fixed_constraints=False):
         '''
         Refines structures by constrained optimizations with the active calculator,
@@ -1788,6 +1875,13 @@ class RunEmbedding(Embedder):
 
                 pairing_dists = [self.get_pairing_dists_from_constrained_indices(_c) for _c in constraints]
 
+                (  
+                    constrained_angles_indices,
+                    constrained_angles_values,
+                    constrained_dihedrals_indices,
+                    constrained_dihedrals_values,
+                ) = self._get_angle_dih_constraints()
+
                 process = executor.submit(
                                             timing_wrapper,
                                             opt_func,
@@ -1798,8 +1892,16 @@ class RunEmbedding(Embedder):
                                             charge=self.options.charge,
                                             maxiter=maxiter,
                                             conv_thr=conv_thr,
+
                                             constrained_indices=constraints,
                                             constrained_distances=pairing_dists,
+                                            
+                                            constrained_angles_indices=constrained_angles_indices,
+                                            constrained_angles_values=constrained_angles_values,
+
+                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                            constrained_dihedrals_values=constrained_dihedrals_values,
+                                            
                                             procs=self.procs,
                                             title=f'Candidate_{i+1}',
                                             spring_constant=2 if only_fixed_constraints else 1,
@@ -1867,7 +1969,7 @@ class RunEmbedding(Embedder):
                                                                             self.rel_energies())):
 
                             kind = 'REFINED - ' if status else 'NOT REFINED - '
-                            write_xyz(structure, self.atomnos, f, title=f'Structure {j+1} - {kind}Rel. E. = {round(energy, 3)} kcal/mol ({self.options.ff_level})')
+                            write_xyz(structure, self.atomnos, f, title=f'Structure {j+1} - {kind}Rel. E. = {round(energy, 3)} kcal/mol ({self.options.theory_level})')
 
                     elapsed = time.perf_counter() - t_start
                     average = (elapsed)/(i+1)
@@ -2299,6 +2401,24 @@ class RunEmbedding(Embedder):
                             s += f'       Index {a} ({pt[mol.atomnos[a]].name}) on {mol.rootname}\n'
 
                 self.log(s)
+
+        for m, mol in enumerate(self.objects):
+            n = 0 if m == 0 else sum(self.ids[:i])
+            if mol.constraints:
+                for constraint in mol.constraints:
+                    ids = '-'.join([str(i) for i in constraint.indices])
+                    cum_ids = '-'.join([str(i+n) for i in constraint.indices])
+                    elements = '-'.join([str(pt[mol.atomnos[i]]) for i in constraint.indices])
+                    t, uom = {
+                        'B' : ('Bond', ' Å'),
+                        'A' : ('Angle', '°'),
+                        'D' : ('Dihedral', '°'),
+                        }[constraint.type]
+                    self.log(f'--> Additional constraint ({mol.filename}): {t} - {elements} -> {round(constraint.value, 3)}{uom}')
+                    self.log(f'    Molecular ids:  {ids}')
+                    self.log(f'    Cumulative ids: {cum_ids}')
+
+        self.log()
 
         ######################################################################################################## EMBEDDING/CALC OPTIONS
 

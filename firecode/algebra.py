@@ -73,8 +73,11 @@ def clip(n, lower, higher):
     else:
         return n
 
-@nb.njit
+# @nb.njit
 def point_angle(p1, p2, p3):
+    '''
+    Returns the planar angle between three points in space, in degrees.
+    '''
     return np.arccos(np.clip(norm(p1 - p2) @ norm(p3 - p2), -1.0, 1.0))*180/np.pi
 
 @nb.njit

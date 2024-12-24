@@ -116,7 +116,7 @@ class Torsion:
                     return 3
                 
                 elif self.mode == 'symmetry':
-                    return sp_n_i3
+                    return sp_n_i3 or 2
             
             if 2 in (sp_n_i2, sp_n_i3):
                 return 2
@@ -129,7 +129,7 @@ class Torsion:
                 3:(0, 120, 240),
                 4:(0, 90, 180, 270),
                 6:(0, 60, 120, 180, 240, 300),
-                }[self.n_fold]
+                }.get(self.n_fold)
 
     def sort_torsion(self, graph, constrained_indices) -> None:
         '''
@@ -250,7 +250,7 @@ def _is_nondummy(i, root, graph) -> bool:
 
     return False
 
-def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=45, fragments=None):
+def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=45, elements=None, fragments=None):
     '''
     Returns a list of tuples with the indices
     of hydrogen bonding partners.
@@ -260,6 +260,8 @@ def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=
     - with an Y-X distance between d_min and d_max (i.e. N-O, Angstroms)
     - with an Y-H-X angle below max_angle (i.e. N-H-O, degrees)
 
+    elements: iterable of donors and acceptors atomic numbers. default: ((7, 8), (7, 8))
+
     If fragments is specified (iterable of iterable of indices for each fragment)
     the function only returns inter-fragment hydrogen bonds.
     '''
@@ -267,52 +269,55 @@ def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=
     hbs = []
     # initializing output list
 
-    het_idx = np.array([i for i, a in enumerate(atomnos) if a in (7,8)], dtype=int)
-    # indices where N or O atoms are present. Let's ignore F for now.
+    if elements is None:
+        elements = ((7, 8), (7, 8))
 
-    for i, i1 in enumerate(het_idx):
-        for i2 in het_idx[i+1:]:
+    het_idx_from = np.array([i for i, a in enumerate(atomnos) if a in elements[0]], dtype=int)
+    het_idx_to = np.array([i for i, a in enumerate(atomnos) if a in elements[1]], dtype=int)
+    # indices where N or O (or user-specified elements) atoms are present.
 
+    for i1 in het_idx_from:
+        for i2 in het_idx_to:
+
+            # if inter-fragment HBs are requested, skip intra-HBs
             if fragments is not None:
                 if any(((i1 in f and i2 in f) for f in fragments)):
                     continue
-            # if inter-fragment HBs are requested, skip intra-HBs
 
+            # keep close pairs
             if d_min < norm_of(coords[i1]-coords[i2]) < d_max:
-            # getting all pairs of O/N atoms between these distances
 
-                Hs = [i for i in (neighbors(graph, i1) +
-                                  neighbors(graph, i2)) if graph.nodes[i]['atomnos'] == 1]
                 # getting the indices of all H atoms attached to them
+                Hs = [i for i in (neighbors(graph, i1)) if graph.nodes[i]['atomnos'] == 1]
 
-                versor = norm(coords[i2]-coords[i1])
                 # versor connectring the two Heteroatoms
+                versor = norm(coords[i2]-coords[i1])
 
                 for iH in Hs:
 
+                    # vectors connecting heteroatoms to H
                     v1 = coords[iH]-coords[i1]
                     v2 = coords[iH]-coords[i2]
-                    # vectors connecting heteroatoms to H
 
+                    # lengths of these vectors
                     d1 = norm_of(v1)
                     d2 = norm_of(v2)
-                    # lengths of these vectors
 
+                    # scalar projection in the heteroatom direction
                     l1 = v1 @ versor
                     l2 = v2 @ -versor
-                    # scalar projection in the heteroatom direction
 
-                    alfa = vec_angle(v1, versor) if l1 < l2 else vec_angle(v2, -versor)
                     # largest planar angle between Het-H and Het-Het, in degrees (0 to 90°)
+                    alfa = vec_angle(v1, versor) if l1 < l2 else vec_angle(v2, -versor)
 
-                    if alfa < max_angle:
                     # if the three atoms are not too far from being in line
+                    if alfa < max_angle:
 
+                        # adding the correct pair of atoms to results
                         if d1 < d2:
                             hbs.append(sorted((iH,i2)))
                         else:
                             hbs.append(sorted((iH,i1)))
-                        # adding the correct pair of atoms to results
 
                         break
 
