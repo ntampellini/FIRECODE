@@ -12,7 +12,6 @@
 #
 import os
 import sys
-from firecode.__main__ import __version__
 
 # sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(0, os.path.join(os.path.abspath('..'), 'firecode'))
@@ -26,7 +25,7 @@ author = 'Nicolò Tampellini'
 
 # The full version, including alpha/beta/rc tags
 
-release = __version__
+release = '1.1.0'
 # release='latest'
 
 # -- General configuration ---------------------------------------------------
