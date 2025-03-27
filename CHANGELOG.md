@@ -4,6 +4,11 @@
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
 
+## FIRECODE 1.1.1 🔥 (January 2025)
+- Added pretty error traceback with rich.
+<!-- SMARTS Constraint class -->
+
+
 ## FIRECODE 1.1.0 🔥 (December 24 2024)
 - Implemented planar angle and dihedral constraints in ensemble optimization (only intra-file, but also available in embedding runs). These are propagated to xtb, ASE-mediated calculators and PyTorch models, as well as to operators like mtd> (CREST). These constraints can be specified in new input lines that start with a blank space under the reference molecule line, with the syntax "i1 i2 i3 \[i4\] target(float)" (i.e. "0 1 2 3 90.0" for dihedrals or "0 1 2 0.0" for planar angles). For now, these constraints are enforced at every step (as capital letter constraints, but not associated to any letter).
 - Improved comments parsing: possible to comment in any input line (with "#", following a Pyhton-style syntax).

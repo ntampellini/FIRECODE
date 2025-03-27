@@ -36,7 +36,7 @@ import numpy as np
 from psutil import virtual_memory
 
 from firecode.__main__ import __version__
-from firecode.algebra import norm_of
+from firecode.algebra import dihedral, norm_of, point_angle
 from firecode.ase_manipulations import ase_saddle
 from firecode.calculators._xtb import (xtb_metadyn_augmentation, xtb_opt,
                                        xtb_pre_opt)
@@ -454,12 +454,22 @@ class Embedder:
 
         for line in mol_and_constr_lines:
             if line[0] == " ":
+                mol = self.objects[len(self.mol_lines)-1]
                 try:
                     parts = line.split()
                     indices = [int(i) for i in parts[:-1]]
-                    target = float(parts[-1])
+
+                    # if value is auto, take current value
+                    if parts[-1] == 'auto':
+                        if len(indices) == 3:
+                            target = point_angle(*mol.atomcoords[0][np.array(indices)])
+                        elif len(indices) == 4:
+                            target = dihedral(mol.atomcoords[0][np.array(indices)])
+                    else:
+                        target = float(parts[-1])
+
                     c = Constraint(indices, target)
-                    self.objects[len(self.mol_lines)-1].constraints.append(c)
+                    mol.constraints.append(c)
 
                 except Exception:
                     raise Exception(f'Error while parsing line \"{line}\". Constrain syntax: \"i1 i2 i3 [i4] value\".')
@@ -737,6 +747,9 @@ class Embedder:
         if any('refine>' in op for op in self.options.operators) or self.options.noembed:
             self.embed = 'refine'
 
+            # in a refine run, the global charge must be the one of the single molecule
+            self.options.charge = self.objects[0].charge
+
             # If the run is a refine>/REFINE one, the self.embed
             # attribute is set in advance by the self._set_options
             # function through the OptionSetter class
@@ -932,6 +945,35 @@ class Embedder:
         # The more atomic pivots, the more candidates
 
         return int(candidates)
+
+    def _get_angle_dih_constraints(self):
+        '''
+        Gets angle and dihedral constraints in a list format
+        from the self.internal_angle_dih_constraints attribute.
+        
+        '''
+        (
+            constrained_angles_indices,
+            constrained_angles_values,
+            constrained_dihedrals_indices,
+            constrained_dihedrals_values,
+        ) = [], [], [], []
+
+        for constraint in self.internal_angle_dih_constraints:
+            if constraint.type == "A":
+                constrained_angles_indices.append(constraint.indices)
+                constrained_angles_values.append(constraint.value)
+
+            elif constraint.type == "D":
+                constrained_dihedrals_indices.append(constraint.indices)
+                constrained_dihedrals_values.append(constraint.value)
+
+        return (
+                    constrained_angles_indices,
+                    constrained_angles_values,
+                    constrained_dihedrals_indices,
+                    constrained_dihedrals_values,
+                )
 
     def _set_embedder_structures_from_mol(self):
         '''
@@ -1791,35 +1833,6 @@ class RunEmbedding(Embedder):
 
                 self.target_distances[(index1, index2)] = dist1 + dist2
  
-    def _get_angle_dih_constraints(self):
-        '''
-        Gets angle and dihedral constraints in a list format
-        from the self.internal_angle_dih_constraints attribute.
-        
-        '''
-        (
-            constrained_angles_indices,
-            constrained_angles_values,
-            constrained_dihedrals_indices,
-            constrained_dihedrals_values,
-        ) = [], [], [], []
-
-        for constraint in self.internal_angle_dih_constraints:
-            if constraint.type == "A":
-                constrained_angles_indices.append(constraint.indices)
-                constrained_angles_values.append(constraint.value)
-
-            elif constraint.type == "D":
-                constrained_dihedrals_indices.append(constraint.indices)
-                constrained_dihedrals_values.append(constraint.value)
-
-        return (
-                    constrained_angles_indices,
-                    constrained_angles_values,
-                    constrained_dihedrals_indices,
-                    constrained_dihedrals_values,
-                )
-
     def optimization_refining(self, maxiter=None, conv_thr='tight', only_fixed_constraints=False):
         '''
         Refines structures by constrained optimizations with the active calculator,

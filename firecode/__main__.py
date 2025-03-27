@@ -22,6 +22,8 @@ Nicolo' Tampellini - nicolo.tampellini@yale.edu
 import argparse
 import os
 import sys
+from rich.traceback import install
+install(show_locals=True)
 
 __version__ = '1.1.0'
 
