@@ -4,6 +4,11 @@
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
 
+## FIRECODE 1.1.2 🔥 (April 29 2025)
+- Added CRESTLEVEL keyword to specify CREST theory level (i.e. "CRESTLEVEL=GFN2").
+- Updated aimnet2 bindings to only useunderscore in the module name calls and not hyphens.
+- Fixed bug with the default value for the attribute "charge".
+
 ## FIRECODE 1.1.1 🔥 (January 2025)
 - Added pretty error traceback with rich.
 <!-- SMARTS Constraint class -->

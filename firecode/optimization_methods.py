@@ -57,7 +57,7 @@ class Opt_func_dispatcher:
 
         except ImportError:
             raise Exception(('Cannot import AIMNet2 python bindings for FIRECODE. Install them with:\n'
-                            '>>> pip install aimnet2-firecode'))
+                            '>>> pip install aimnet2_firecode'))
             
         self.opt_funcs_dict['AIMNET2'] = aimnet2_opt
         self.aimnet2_calc = get_aimnet2_calc(theory_level, logfunction=logfunction)

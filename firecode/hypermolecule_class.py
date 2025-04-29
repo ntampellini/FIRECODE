@@ -108,6 +108,7 @@ class Hypermolecule:
             try:
                 filename = smi_to_3d(filename, "generated_3D_coords")
                 print(f"--> Embedded SMILES string to 3D structure, saved as {filename}")
+                
             except Exception:
                 raise SyntaxError((f'The program is trying to read something that is not a valid molecule input ({filename}). ' +
                             'If this looks like a keyword, it is probably faulted by a syntax error.'))

@@ -25,7 +25,7 @@ import sys
 from rich.traceback import install
 install(show_locals=True)
 
-__version__ = '1.1.0'
+__version__ = '1.1.2'
 
 if __name__ == '__main__':
 

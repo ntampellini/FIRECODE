@@ -539,6 +539,7 @@ def mtd_search_operator(filename, embedder):
 
                                             solvent=embedder.options.solvent,
                                             charge=mol.charge,
+                                            method=getattr(embedder.options, "crestlevel", 'GFN2-XTB//GFN-FF'),
                                             kcal=embedder.options.kcal_thresh,
                                             ncimode=embedder.options.crestnci,
                                             title=mol.rootname+"_mtd_csearch",

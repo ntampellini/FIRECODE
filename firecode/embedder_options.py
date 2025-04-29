@@ -562,6 +562,10 @@ class OptionSetter:
     def csearch(self, options, *args):
         options.csearch_aug = True
 
+    def crestlevel(self, options, *args):
+        kw = self.keywords_simple[self.keywords.index('CRESTLEVEL')]
+        options.crestlevel = kw.split('=')[1]
+
     def set_options(self):
 
         # self.keywords = sorted(self.keywords, key=lambda x: __keywords__.index(x))

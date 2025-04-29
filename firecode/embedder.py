@@ -748,7 +748,7 @@ class Embedder:
             self.embed = 'refine'
 
             # in a refine run, the global charge must be the one of the single molecule
-            self.options.charge = self.objects[0].charge
+            self.options.charge = getattr(self.objects[0], "charge", 0)
 
             # If the run is a refine>/REFINE one, the self.embed
             # attribute is set in advance by the self._set_options

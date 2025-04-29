@@ -270,7 +270,7 @@ def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=
     # initializing output list
 
     if elements is None:
-        elements = ((7, 8), (7, 8))
+        elements = ((7, 8), (7, 8, 9))
 
     het_idx_from = np.array([i for i, a in enumerate(atomnos) if a in elements[0]], dtype=int)
     het_idx_to = np.array([i for i, a in enumerate(atomnos) if a in elements[1]], dtype=int)
