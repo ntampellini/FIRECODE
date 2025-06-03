@@ -74,22 +74,22 @@ class Constraint:
         
         if self.type == 'B':
             a, b = self.indices
-            deltas = [round(abs(norm_of(coords[match[a]]-coords[match[b]])-self.value), 3) for match in match_indices_list]
+            deltas = [abs(norm_of(coords[match[a]]-coords[match[b]])-self.value) for match in match_indices_list]
             best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
         if self.type == 'A':
             a, b, c = self.indices
-            deltas = [round(abs(point_angle(coords[match[a]], 
+            deltas = [abs(point_angle(coords[match[a]], 
                                       coords[match[b]],
-                                      coords[match[c]])-self.value), 3) for match in match_indices_list]
+                                      coords[match[c]])-self.value) for match in match_indices_list]
             best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
         if self.type == 'D':
             a, b, c, d = self.indices
-            deltas = [round(abs(dihedral((coords[match[a]],
+            deltas = [abs(dihedral((coords[match[a]],
                                     coords[match[b]],
                                     coords[match[c]],
-                                    coords[match[d]]))-self.value), 3) for match in match_indices_list]
+                                    coords[match[d]]))-self.value) for match in match_indices_list]
             best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
         old_indices = self.indices[:]

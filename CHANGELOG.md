@@ -4,6 +4,10 @@
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
 
+## FIRECODE 1.1.3 🔥 (June 3 2025)
+- The CREST MTD operator checks that CREST 2 is installed before trying to run a search. For now, only CREST 2 is supported, as CREST 3 needs some updated interface
+- Solved CRETSLEVEL bug.
+
 ## FIRECODE 1.1.2 🔥 (April 29 2025)
 - Added CRESTLEVEL keyword to specify CREST theory level (i.e. "CRESTLEVEL=GFN2").
 - Updated aimnet2 bindings to only useunderscore in the module name calls and not hyphens.

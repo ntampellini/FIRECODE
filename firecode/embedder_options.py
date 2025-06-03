@@ -48,6 +48,8 @@ keywords_dict = {
             
             'CRESTNCI' : 1,     # passes the "--nci" flag to CREST metadynamic conformational searches.
 
+            'CRESTLEVEL' : 1,   # level of the CREST run
+
             'DEEP' : 1,           # Performs a deeper search, retaining more starting points
                                 # for calculations and smaller turning angles.
 

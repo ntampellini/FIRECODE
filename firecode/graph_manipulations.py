@@ -32,8 +32,8 @@ from firecode.algebra import all_dists, dihedral, norm_of
 from firecode.pt import pt
 
 
-def d_min_bond(e1, e2):
-    return 1.2 * (pt[e1].covalent_radius + pt[e2].covalent_radius)
+def d_min_bond(e1, e2, factor=1.2):
+    return factor * (pt[e1].covalent_radius + pt[e2].covalent_radius)
     # return 0.2 + (pt[e1].covalent_radius + pt[e2].covalent_radius)
 # if this is somewhat prone to bugs, this might help https://cccbdb.nist.gov/calcbondcomp1x.asp
 

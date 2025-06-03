@@ -23,6 +23,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 # import pickle
 import time
+from shutil import which
 from subprocess import CalledProcessError
 
 import numpy as np
@@ -39,10 +40,11 @@ from firecode.optimization_methods import _refine_structures, optimize
 from firecode.pka import pka_routine
 from firecode.pruning import prune_by_rmsd, prune_by_rmsd_rot_corr
 from firecode.settings import (CALCULATOR, DEFAULT_FF_LEVELS, DEFAULT_LEVELS,
-                             FF_CALC, FF_OPT_BOOL, PROCS)
+                               FF_CALC, FF_OPT_BOOL, PROCS)
 from firecode.torsion_module import _get_quadruplets, csearch
 from firecode.utils import (align_structures, get_scan_peak_index,
-                          molecule_check, read_xyz, time_to_string, write_xyz)
+                            molecule_check, read_xyz, time_to_string,
+                            write_xyz)
 
 
 def operate(input_string, embedder):
@@ -430,6 +432,9 @@ def mtd_search_operator(filename, embedder):
     '''
     Run a CREST metadynamic conformational search and return the output filename.
     '''
+
+    assert crest_is_installed(), 'CREST 2 does not seem to be installed. Install it with: conda install -c conda-forge crest==2.*'
+
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
     # load molecule to be optimized from embedder
 
@@ -797,6 +802,14 @@ def distance_scan(embedder):
 
     # Log data to the embedder class
     mol.scan_data = (dists, energies)
+
+def crest_is_installed() -> bool:
+    '''
+    Returns True if a CREST installation is found.
+    For now, only CREST 2 is supported.
+
+    '''
+    return (which('crest') is not None)
 
 def _get_lowest_calc(embedder=None):
     '''
