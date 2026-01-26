@@ -4,7 +4,7 @@
 <div align="center">
 
 [![License: GNU LGPL v3](https://img.shields.io/github/license/ntampellini/firecode)](https://opensource.org/licenses/LGPL-3.0)
-![Python Version](https://img.shields.io/badge/Python-3.8.10-blue)
+![Python Version](https://img.shields.io/badge/Python-3.12-blue)
 ![Size](https://img.shields.io/github/languages/code-size/ntampellini/firecode)
 ![Lines](https://sloc.xyz/github/ntampellini/firecode/)
 [![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/ntampellini/firecode)](https://www.codefactor.io/repository/github/ntampellini/firecode)
