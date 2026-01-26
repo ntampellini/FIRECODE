@@ -3,10 +3,31 @@
 
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
+## FIRECODE 1.4.0 🔥 (January 25 2026)
+- Similarity pruning is now done via the standalone [PRISM](https://github.com/ntampellini/prism_pruner) library.
+- Removed dependencies: numba, cclib, periodictable.
+- Removed MOPAC, GAUSSIAN and OPENBABEL calculator interfaces completely.
+- Removed SADDLE, CSEARCH and NCI keywords, as well as the saddle> operator.
+- Bumped minimum Python version from 3.8 to 3.12.
+
+
+## FIRECODE 1.3.0 🔥 (December 15 2025)
+- Added [UMA](https://fair-chem.github.io/core/uma.html) as a calculator with Meta MLIPs, via ASE and the fairchem-core library. The model path needs to be specified in the settings.py file.
+- Polished the neb> and scan> operators to work in sequence (neb> scan> start.xyz i1 i2).
+- Added standalone structure optimizer, called with "python -m firecode -o mol.xyz".
+- Corrected behavior of fixed constraints with no specified distance, which before would relax. Now they are kept fixed at the initial distance.
+- Moved tests to their own folders.
+<!-- - Added free energy calculation via ASE vibrational analysis. -->
+
+## FIRECODE 1.2.0 🔥 (July 2025)
+- Ignored KeyError exceptions from get_atom_type.
+- Implemented [tblite](https://github.com/tblite/tblite) as a calculator (yes, ready for g-xtb!).
+- Implemented multiplicity support for main calculators (XTB and TBLITE - AIMNET2 will raise a NotImplementedError, ORCA pending).
+- Gaussian and MOPAC calculators are now legacy, and officially deprecated.
 
 ## FIRECODE 1.1.3 🔥 (June 3 2025)
 - The CREST MTD operator checks that CREST 2 is installed before trying to run a search. For now, only CREST 2 is supported, as CREST 3 needs some updated interface
-- Solved CRETSLEVEL bug.
+- Solved CRESTLEVEL bug.
 
 ## FIRECODE 1.1.2 🔥 (April 29 2025)
 - Added CRESTLEVEL keyword to specify CREST theory level (i.e. "CRESTLEVEL=GFN2").

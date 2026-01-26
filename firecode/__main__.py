@@ -2,7 +2,7 @@
 '''
 
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,15 +25,18 @@ import sys
 from rich.traceback import install
 install(show_locals=True)
 
-__version__ = '1.1.3'
+__version__ = '1.4.0'
 
 if __name__ == '__main__':
 
 
-    usage = '''\n\n  🔥 python -m firecode [-h] [-s] [-t] inputfile [-n NAME]
+    usage = '''\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
+    🔥 python -m firecode -cl "refine> mtd> mol.xyz"
+    🔥 python -m firecode -c
+    🔥 python -m firecode -o mol.xyz
         
         positional arguments:
-          inputfile               Input filename, can be any text file.
+          inpufile.txt            Input filename, can be any text file.
 
         optional arguments:
           -h, --help              Show this help message and exit.
@@ -43,8 +46,8 @@ if __name__ == '__main__':
           -cl,--command_line      Read instructions from the command line instead of from an input file.
           -c, --cite              Print citation links.
           -p, --profile           Profile the run through cProfiler.
-          -b, --benchmark FILE    Benchmark the geometry optimization of FILE (.xyz) to get the optimal number of procs per job.
-          --procs                 Number of processors to be used by each optimization job.
+          -o, --optimize FILE     Run a standalone structure optimization tool.
+
           '''
 
     parser = argparse.ArgumentParser(usage=usage)
@@ -55,20 +58,12 @@ if __name__ == '__main__':
     parser.add_argument("-n", "--name", help="Specify a custom name for the run.", action='store', required=False)
     parser.add_argument("-c", "--cite", help="Print the appropriate document links for citation purposes.", action='store_true', required=False)
     parser.add_argument("-p", "--profile", help="Profile the run through cProfiler.", action='store_true', required=False)
-    parser.add_argument("-b", "--benchmark", help=("Benchmark the geometry optimization of FILE to get the optimal number " +
-                        "of procs per job."), action='store', required=False, default=False)
-    # parser.add_argument("-r", "--restart", help="Restarts previous run from an embedder.pickle object.", action='store', required=False, default=False)
-    parser.add_argument("--procs", help="Number of processors to be used by each optimization job.", action='store', required=False, default=None)
+    parser.add_argument("-o", "--optimize", help="Run a standalone structure optimization tool.", action='store', required=False, nargs='+')
 
     args = parser.parse_args()
 
-    if (not (args.test or args.setup or args.command_line or args.benchmark)) and args.inputfile is None:
-        parser.error("One of the following arguments are required: inputfile, -t, -s, -b.\n")
-
-    if args.benchmark:
-        from firecode.concurrent_test import run_concurrent_test
-        run_concurrent_test(args.benchmark)
-        sys.exit()
+    if (not (args.test or args.setup or args.command_line or args.optimize)) and args.inputfile is None:
+        parser.error("One of the following arguments are required: inputfile, -t, -s, -o.\n")
 
     if args.setup:
         from firecode.modify_settings import run_setup
@@ -82,6 +77,11 @@ if __name__ == '__main__':
     if args.test:
         from firecode.tests import run_tests
         run_tests()
+        sys.exit()
+
+    if args.optimize:
+        from firecode.standalone_optimizer import main
+        main(args.optimize)
         sys.exit()
 
     if args.command_line:
@@ -101,19 +101,7 @@ if __name__ == '__main__':
         profiled_wrapper(filename, args.name)
         sys.exit()
 
-    # if args.restart:
-    #     import pickle
-    #     with open(args.restart, 'rb') as _f:
-    #         embedder = pickle.load(_f)
-        # initialize embedder from pickle file
-
-        # embedder.run()
-        # run the program
-
-    # import faulthandler
-    # faulthandler.enable()
-
-    embedder = Embedder(filename, stamp=args.name, procs=args.procs)
+    embedder = Embedder(filename, stamp=args.name)
     # initialize embedder from input file
 
     embedder.run()

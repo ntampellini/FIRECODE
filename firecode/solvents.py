@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -103,7 +103,6 @@ solvent_synonyms = {
 
 new_theory_level = {
     'MOPAC':lambda theory_level, solvent: f'EPS={epsilon_dict[solvent]}',
-    'GAUSSIAN':lambda theory_level, solvent: f'scrf=(cpcm,solvent={solvent})',
     'ORCA':lambda theory_level, solvent: f'! CPCM\n%cpcm\nepsilon {epsilon_dict[solvent]}\nend',
     # 'XTB':lambda theory_level, _: '',
 }

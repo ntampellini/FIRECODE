@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 

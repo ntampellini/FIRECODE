@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -23,19 +23,19 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 import os
 import sys
-from subprocess import DEVNULL, STDOUT, CalledProcessError, check_call
+from subprocess import STDOUT, CalledProcessError, check_call
 
 import numpy as np
 
-from firecode.algebra import norm, norm_of
+from firecode.algebra import norm_of, normalize
 from firecode.calculators.__init__ import NewFolderContext
 from firecode.graph_manipulations import get_sum_graph
 from firecode.utils import clean_directory, read_xyz, write_xyz
 
 
 def xtb_opt(
+        atoms,
         coords,
-        atomnos,
 
         constrained_indices=None,
         constrained_distances=None,
@@ -50,8 +50,9 @@ def xtb_opt(
         maxiter=500,
         solvent=None,
         charge=0,
+        mult=1,
         title='temp',
-        read_output=True, 
+        read_output=True,
         procs=4,
         opt=True,
         conv_thr="tight",
@@ -69,7 +70,7 @@ def xtb_opt(
 
     coords: array of shape (n,3) with cartesian coordinates for atoms.
 
-    atomnos: array of atomic numbers for atoms.
+    atoms: array of strings indicating elements.
 
     constrained_indices: array of shape (n,2), with the indices
     of atomic pairs to be constrained.
@@ -145,13 +146,14 @@ def xtb_opt(
                         recursive_c_d[i] = target_d + (recursive_stepsize * np.sign(d-target_d))
                         # print(f"-------->  d is {round(d, 3)}, target d is {round(target_d, 3)}, delta is {round(delta, 3)}, setting new pretarget at {recursive_c_d}")
                         coords, _, _ = xtb_opt(
+                                                atoms,
                                                 coords,
-                                                atomnos,
                                                 constrained_indices,
                                                 constrained_distances=recursive_c_d,
                                                 method=method,
                                                 solvent=solvent,
                                                 charge=charge,
+                                                mult=mult,
                                                 maxiter=50,
                                                 title=title,
                                                 procs=procs,
@@ -170,17 +172,17 @@ def xtb_opt(
                     
                     d = norm_of(coords[b] - coords[a])
                     delta = d - target_d
-                    coords[b] -= norm(coords[b] - coords[a]) * delta
+                    coords[b] -= normalize(coords[b] - coords[a]) * delta
                     # print(f"--------> moved atoms from {round(d, 3)} A to {round(norm_of(coords[b] - coords[a]), 3)} A")
 
             except RecursionError:
                 with open(f'{title}_crashed.xyz', 'w') as f:
-                    write_xyz(coords, atomnos, f, title=title)
+                    write_xyz(atoms, coords, f, title=title)
                 print("Recursion limit reached in constrained optimization - Crashed.")
                 sys.exit()
 
         with open(f'{title}.xyz', 'w') as f:
-            write_xyz(coords, atomnos, f, title=title)
+            write_xyz(atoms, coords, f, title=title)
 
         # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
         outname = 'xtbopt.xyz'
@@ -246,6 +248,9 @@ def xtb_opt(
         if charge != 0:
             flags += f' --chrg {charge}'
 
+        if mult != 1:
+            flags += f' --uhf {int(int(mult)-1)}'
+
         if procs is not None:
             flags += f' -P {procs}'
 
@@ -260,6 +265,10 @@ def xtb_opt(
         elif method.upper() in ('GFN-FF', 'GFNFF'):
             flags += ' --alpb ch2cl2'
             # if using the GFN-FF force field, add CH2Cl2 solvation for increased accuracy
+
+        # NOTE: temporary!
+        if method == 'g-xTB':
+            flags += ' --driver \"gxtb -grad -c xtbdriver.xyz\"'
 
         try:
             with open(f"{title}.out", "w") as f:
@@ -276,7 +285,7 @@ def xtb_opt(
 
         if spring_constant > 0.25:
             print()
-
+            
         if read_output:
             
             if opt:
@@ -310,8 +319,8 @@ def xtb_opt(
             return coords, energy, True
         
 def xtb_pre_opt(
+                atoms, 
                 coords,
-                atomnos, 
                 graphs,
                 constrained_indices=None,
                 constrained_distances=None, 
@@ -346,8 +355,8 @@ def xtb_pre_opt(
     constrain_string += "\n$end"
 
     return xtb_opt(
+                    atoms,
                     coords,
-                    atomnos,
                     constrained_indices=constrained_indices,
                     constrained_distances=constrained_distances,
                     constrain_string=constrain_string,
@@ -383,10 +392,20 @@ def energy_grepper(filename, signal_string, position):
             if signal_string in line:
                 return float(line.split()[position]) * 627.5096080305927 # Eh to kcal/mol
             if not line:
-                raise Exception()
+                raise Exception(f'Could not find \'{signal_string}\' in file ({filename}).')
 
-def xtb_get_free_energy(coords, atomnos, method='GFN2-xTB', solvent=None,
-                        charge=0, title='temp', sph=False, grep='G', **kwargs):
+def xtb_get_free_energy(
+                        atoms,
+                        coords,
+                        method='GFN2-xTB',
+                        solvent=None,
+                        charge=0,
+                        title='temp',
+                        sph=False,
+                        grep='G',
+                        debug=False,
+                        **kwargs,
+                    ):
     '''
     Calculates free energy with XTB,
     without optimizing the provided structure.
@@ -394,10 +413,10 @@ def xtb_get_free_energy(coords, atomnos, method='GFN2-xTB', solvent=None,
     sph: whether to run as single point hessian or not
     
     '''
-    with NewFolderContext(title):
+    with NewFolderContext(title, delete_after=not debug):
 
         with open(f'{title}.xyz', 'w') as f:
-            write_xyz(coords, atomnos, f, title=title)
+            write_xyz(atoms, coords, f, title=title)
 
         outname = 'xtbopt.xyz'
         trajname = f'{title}_opt_log.xyz'
@@ -444,86 +463,27 @@ def xtb_get_free_energy(coords, atomnos, method='GFN2-xTB', solvent=None,
             print('KeyboardInterrupt requested by user. Quitting.')
             sys.exit()
 
-        try:
-            to_grep, index = {
-                'G' : ('TOTAL FREE ENERGY', 4),
-                'Gcorr' : ('G(RRHO) contrib.', 3),
+        # try:
+        to_grep, index = {
+            'G' : ('TOTAL FREE ENERGY', 4),
+            'Gcorr' : ('G(RRHO) contrib.', 3),
             }[grep]
-            result = energy_grepper('temp_hess.log', to_grep, index)
-
-            clean_directory()
-            for filename in ('gfnff_topo', 'charges', 'wbo', 'xtbrestart', 'xtbtopo.mol', '.xtboptok',
-                            'hessian', 'g98.out', 'vibspectrum', 'wbo', 'xtbhess.xyz', 'charges', 'temp_hess.log'):
-                try:
-                    os.remove(filename)
-                except FileNotFoundError:
-                    pass
-
-            return result
-
-        except FileNotFoundError:
-            # return 1E10
-            # print(f'temp_hess.log not present here - we are in', os.getcwd())
-            print(os.listdir())
-            sys.exit()
-
-def xtb_metadyn_augmentation(coords, atomnos, constrained_indices=None, new_structures:int=5, title=0, debug=False):
-    '''
-    Runs a metadynamics simulation (MTD) through
-    the XTB program to obtain new conformations.
-    The GFN-FF force field is used.
-    '''
-    with open('temp.xyz', 'w') as f:
-        write_xyz(coords, atomnos, f, title='temp')
-
-    s = (
-        '$md\n'
-        '   time=%s\n' % (new_structures) +
-        '   step=1\n'
-        '   temp=300\n'
-        '$end\n'
-        '$metadyn\n'
-        '   save=%s\n' % (new_structures) +
-        '$end'
-        )
-         
-    if constrained_indices is not None:
-        s += '\n$constrain\n'
-        for a, b in constrained_indices:
-            s += '   distance: %s, %s, %s\n' % (a+1, b+1, round(norm_of(coords[a]-coords[b]), 5))
-
-    s = ''.join(s)
-    with open('temp.inp', 'w') as f:
-        f.write(s)
-
-    try:
-        check_call(f'xtb --md --input temp.inp temp.xyz --gfnff > Structure{title}_MTD.log 2>&1'.split(), stdout=DEVNULL, stderr=STDOUT)
-
-    except KeyboardInterrupt:
-        print('KeyboardInterrupt requested by user. Quitting.')
-        sys.exit()
-
-    structures = [coords]
-    for n in range(1,new_structures):
-        name = 'scoord.'+str(n)
-        structures.append(parse_xtb_out(name))
-        os.remove(name)
-
-    for filename in ('gfnff_topo', 'xtbmdoc', 'mdrestart'):
+        
         try:
-            os.remove(filename)
-        except FileNotFoundError:
-            pass
+            result = energy_grepper('temp_hess.log', to_grep, index)
+        except Exception as e:
+            os.system(f'cat {outfile}')
+            raise e
 
-    # if debug:
-    os.rename('xtb.trj', f'Structure{title}_MTD_traj.xyz')
+        clean_directory()
+        for filename in ('gfnff_topo', 'charges', 'wbo', 'xtbrestart', 'xtbtopo.mol', '.xtboptok',
+                        'hessian', 'g98.out', 'vibspectrum', 'wbo', 'xtbhess.xyz', 'charges', 'temp_hess.log'):
+            try:
+                os.remove(filename)
+            except FileNotFoundError:
+                pass
 
-    # else:
-    #     os.remove('xtb.traj')  
-
-    structures = np.array(structures)
-
-    return structures
+        return result
 
 def parse_xtb_out(filename):
     '''
@@ -539,8 +499,8 @@ def parse_xtb_out(filename):
     return coords * 0.529177249 # Bohrs to Angstroms
 
 def crest_mtd_search(
+        atoms,
         coords,
-        atomnos,
 
         constrained_indices=None,
         constrained_distances=None,
@@ -566,7 +526,7 @@ def crest_mtd_search(
 
     coords: array of shape (n,3) with cartesian coordinates for atoms.
 
-    atomnos: array of atomic numbers for atoms.
+    atoms: array of strings for elements.
 
     constrained_indices: array of shape (n,2), with the indices
     of atomic pairs to be constrained.
@@ -603,7 +563,7 @@ def crest_mtd_search(
                 constrained_distances = None
 
         with open(f'{title}.xyz', 'w') as f:
-            write_xyz(coords, atomnos, f, title=title)
+            write_xyz(atoms, coords, f, title=title)
 
         s = '$opt\n   '
             
@@ -651,7 +611,7 @@ def crest_mtd_search(
                 constrained_atoms_cumulative.add(c4)
 
         # write atoms that need to be moved during metadynamics (all but constrained)
-        active_ids = np.array([i+1 for i, _ in enumerate(atomnos) if i not in constrained_atoms_cumulative])
+        active_ids = np.array([i+1 for i, _ in enumerate(atoms) if i not in constrained_atoms_cumulative])
 
         while len(active_ids) > 2:
             i = next((i for i, _ in enumerate(active_ids[:-2]) if active_ids[i+1]-active_ids[i]>1), len(active_ids)-1)
@@ -723,7 +683,7 @@ def crest_mtd_search(
             os.chdir(os.path.dirname(os.getcwd()))
             raise CalledProcessError
 
-        new_coords = read_xyz('crest_conformers.xyz').atomcoords
+        new_coords = read_xyz('crest_conformers.xyz').coords
 
         # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))     
 
@@ -743,7 +703,16 @@ def crest_mtd_search(
         
         return new_coords
 
-def xtb_gsolv(coords, atomnos, model='alpb', charge=0, solvent='ch2cl2', title='temp', assert_convergence=True):
+def xtb_gsolv(
+            atoms,
+            coords,
+            model='alpb',
+            charge=0,
+            mult=1,
+            solvent='ch2cl2',
+            title='temp',
+            assert_convergence=True,
+        ):
     '''
     Returns the solvation free energy in kcal/mol, as computed by XTB.
     Single-point energy calculation carried out with GFN-FF.
@@ -753,7 +722,7 @@ def xtb_gsolv(coords, atomnos, model='alpb', charge=0, solvent='ch2cl2', title='
     with NewFolderContext(title):
 
         with open(f'{title}.xyz', 'w') as f:
-            write_xyz(coords, atomnos, f, title=title)
+            write_xyz(atoms, coords, f, title=title)
 
         # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
         outname = 'xtbopt.xyz'    
@@ -764,6 +733,9 @@ def xtb_gsolv(coords, atomnos, model='alpb', charge=0, solvent='ch2cl2', title='
 
         if charge != 0:
             flags += f' --chrg {charge}'
+
+        if mult != 1:
+            flags += f' --uhf {int(int(mult)-1)}'
 
         flags += f' --{model} {solvent}'
 

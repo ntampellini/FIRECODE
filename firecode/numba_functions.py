@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -21,13 +21,14 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 '''
 
-from networkx import Graph, connected_components 
 import numpy as np
-from numba import njit, float32, prange
+from networkx import Graph, connected_components
+from prism_pruner.algebra import dihedral
+from scipy.spatial.distance import cdist
 
-from firecode.algebra import all_dists, dihedral, norm_of
+from firecode.algebra import norm_of
 
-@njit
+
 def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool:
     '''
     coords: 3D molecule coordinates
@@ -48,19 +49,17 @@ def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool
     m2 = coords[antimask]
     # fragment identification by boolean masking
 
-    return 0 if np.count_nonzero(all_dists(m2,m1) < thresh) > max_clashes else 1
+    return 0 if np.count_nonzero(cdist(m2,m1) < thresh) > max_clashes else 1
  
-@njit
 def count_clashes(coords):
     '''
     '''
     return np.count_nonzero(
-                            (all_dists(coords,coords) < 0.5) & (
-                             all_dists(coords,coords) > 0)
+                            (cdist(coords,coords) < 0.5) & (
+                             cdist(coords,coords) > 0)
                             )
 
 
-@njit
 def compenetration_check(coords, ids=None, thresh=1.5, max_clashes=0) -> bool:
     '''
     coords: 3D molecule coordinates
@@ -82,7 +81,7 @@ def compenetration_check(coords, ids=None, thresh=1.5, max_clashes=0) -> bool:
         m2 = coords[ids[0]:]
         # fragment identification by length (contiguous)
 
-        return 0 if np.count_nonzero(all_dists(m2,m1) < thresh) > max_clashes else 1
+        return 0 if np.count_nonzero(cdist(m2,m1) < thresh) > max_clashes else 1
 
     # if len(ids) == 3:
 
@@ -94,15 +93,15 @@ def compenetration_check(coords, ids=None, thresh=1.5, max_clashes=0) -> bool:
     m3 = coords[ids[0]+ids[1]:]
     # fragment identification by length (contiguous)
 
-    clashes += np.count_nonzero(all_dists(m2,m1) < thresh)
+    clashes += np.count_nonzero(cdist(m2,m1) < thresh)
     if clashes > max_clashes:
         return 0
 
-    clashes += np.count_nonzero(all_dists(m3,m2) < thresh)
+    clashes += np.count_nonzero(cdist(m3,m2) < thresh)
     if clashes > max_clashes:
         return 0
 
-    clashes += np.count_nonzero(all_dists(m1,m3) < thresh)
+    clashes += np.count_nonzero(cdist(m1,m3) < thresh)
     if clashes > max_clashes:
         return 0
 
@@ -203,18 +202,16 @@ def prune_conformers_tfd(structures, quadruplets, thresh=10, verbose=False):
 
     return structures[final_mask], final_mask
 
-@njit(parallel=True)
 def _get_tf_mat(structures, quadruplets):
     '''
     '''
-    tf_mat = np.empty(shape=(len(structures), len(quadruplets)), dtype=float32)
+    tf_mat = np.empty(shape=(len(structures), len(quadruplets)), dtype=float)
 
-    for i in prange(len(structures)):
+    for i in range(len(structures)):
         tf_mat[i] = get_torsion_fingerprint(structures[i], quadruplets)
 
     return tf_mat
 
-@njit
 def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
     '''
     Return True if the two structure are similar under the torsion fingeprint criteria.
@@ -231,9 +228,8 @@ def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
 
     return False
 
-@njit
 def get_torsion_fingerprint(coords, quadruplets):
-    out = np.zeros(quadruplets.shape[0], dtype=float32)
+    out = np.zeros(quadruplets.shape[0], dtype=float)
     for i, q in enumerate(quadruplets):
         i1, i2, i3, i4 = q
         out[i] = dihedral([coords[i1],
@@ -242,7 +238,6 @@ def get_torsion_fingerprint(coords, quadruplets):
                            coords[i4]])
     return out
 
-@njit(parallel=True)
 def _score_embed_poses(structures, constrained_indices, constrained_distances):
     '''
     Returns array of scores for embedded structures.
@@ -250,9 +245,9 @@ def _score_embed_poses(structures, constrained_indices, constrained_distances):
     the desired embed distances.
     '''
     _l = len(structures)
-    scores = np.zeros(shape=_l, dtype=float32)
+    scores = np.zeros(shape=_l, dtype=float)
 
-    for j in prange(_l):
+    for j in range(_l):
         for i, (i1, i2) in enumerate(constrained_indices[j]):
             dist = norm_of(structures[j][i1] - structures[j][i2])
             scores[j] += np.abs(dist - constrained_distances[j][i])

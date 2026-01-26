@@ -22,19 +22,21 @@ from copy import deepcopy
 
 import numpy as np
 from numpy.linalg import LinAlgError
+from prism_pruner.algebra import get_inertia_moments
+from prism_pruner.graph_manipulations import graphize
+from prism_pruner.rmsd import get_alignment_matrix
+from prism_pruner.utils import flatten
 
-from firecode.algebra import get_inertia_moments, norm_of
+from firecode.algebra import norm_of
 from firecode.errors import CCReadError, NoOrbitalError
-from firecode.graph_manipulations import (graphize, is_sigmatropic, is_vicinal,
-                                        neighbors)
+from firecode.graph_manipulations import is_sigmatropic, is_vicinal
 from firecode.pt import pt
 from firecode.reactive_atoms_classes import get_atom_type
-from firecode.rmsd import get_alignment_matrix
-from firecode.utils import flatten, read_xyz, smi_to_3d
+from firecode.utils import read_xyz, smi_to_3d
 
 warnings.simplefilter("ignore", UserWarning)
 
-def align_by_moi(structures, atomnos, **kwargs):
+def align_by_moi(atoms, structures):
     '''
     Aligns molecules of a structure array (shape is (n_structures, n_atoms, 3))
     to the first one, based on the the moments of inertia vectors.
@@ -44,7 +46,7 @@ def align_by_moi(structures, atomnos, **kwargs):
 
     reference, *targets = structures
   
-    masses = np.array([pt[a].mass for a in atomnos])
+    masses = np.array([pt.mass(el) for el in atoms])
 
     # center all the structures at the origin
     reference -= np.mean(reference, axis=0)
@@ -123,14 +125,15 @@ class Hypermolecule:
         else:
             self.reactive_indices = np.array(reactive_indices) if isinstance(reactive_indices, (tuple, list)) else ()
 
-        ccread_object = read_xyz(filename)
+        conf_ensemble_object = read_xyz(filename)
 
-        if ccread_object is None:
+        if conf_ensemble_object is None:
             raise CCReadError(f'Cannot read file {filename}')
 
-        coordinates = np.array(ccread_object.atomcoords)
+        coordinates = np.array(conf_ensemble_object.coords)
         
-        self.atomnos = ccread_object.atomnos
+        self.atomnos = conf_ensemble_object.atomnos
+        self.atoms = conf_ensemble_object.atoms
         self.position = np.array([0,0,0], dtype=float)  # used in Embedder class
         self.rotation = np.identity(3)                  # used in Embedder class - rotation matrix
 
@@ -141,11 +144,11 @@ class Hypermolecule:
 
         self.centroid = np.sum(np.sum(coordinates, axis=0), axis=0) / (len(coordinates) * len(coordinates[0]))
 
-        self.atomcoords = coordinates - self.centroid
-        self.graph = graphize(self.atomcoords[0], self.atomnos)
+        self.coords = coordinates - self.centroid
+        self.graph = graphize(self.atoms, self.coords[0])
         # show_graph(self)
 
-        self.atoms = np.array([atom for structure in self.atomcoords for atom in structure])       # single list with all atomic positions
+        self.all_atoms_coords = np.array([coord for structure in self.coords for coord in structure])       # single list with all atomic positions
         
     def compute_orbitals(self, override=None):
         '''
@@ -160,11 +163,11 @@ class Hypermolecule:
         self._inspect_reactive_atoms(override=override)
         # sets reactive atoms properties
 
-        # self.atomcoords = align_structures(self.atomcoords, self.get_alignment_indices())
-        self.sigmatropic = [is_sigmatropic(self, c) for c, _ in enumerate(self.atomcoords)]
+        # self.coords = align_structures(self.coords, self.get_alignment_indices())
+        self.sigmatropic = [is_sigmatropic(self, c) for c, _ in enumerate(self.coords)]
         self.sp3_sigmastar = is_vicinal(self)
 
-        for c, _ in enumerate(self.atomcoords):
+        for c, _ in enumerate(self.coords):
             for index, reactive_atom in self.reactive_atoms_classes_dict[c].items():
                 reactive_atom.init(self, index, update=True, conf=c)
                 # update properties into reactive_atom class.
@@ -182,10 +185,8 @@ class Hypermolecule:
         from ase.gui.images import Images
 
         data = read_xyz(filename)
-        coords = data.atomcoords[0]
-        labels = ''.join([pt[i].symbol for i in data.atomnos])
-
-        atoms = Atoms(labels, positions=coords)
+        coords = data.coords[0]
+        atoms = Atoms(data.atoms, positions=coords)
 
         while atoms.constraints == []:
             print(('\nPlease, manually select the reactive atom(s) for molecule %s.'
@@ -221,28 +222,35 @@ class Hypermolecule:
         '''
         Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict
         '''
-        self.reactive_atoms_classes_dict = {c:{} for c, _ in enumerate(self.atomcoords)}
+        self.reactive_atoms_classes_dict = {c:{} for c, _ in enumerate(self.coords)}
         
-        for c, _ in enumerate(self.atomcoords):
+        for c, _ in enumerate(self.coords):
             for index in self.reactive_indices:
-                symbol = pt[self.atomnos[index]].symbol
+                symbol = self.atoms[index]
 
-                atom_type = get_atom_type(self.graph, index, override=override)()
+                try:
+                    atom_type = get_atom_type(self.graph, index, override=override)()
 
-                # setting the reactive_atom class type
-                atom_type.init(self, index, conf=c)
+                    # setting the reactive_atom class type
+                    atom_type.init(self, index, conf=c)
 
-                # understanding the type of reactive atom in order to align the ensemble correctly and build the correct pseudo-orbitals
-                self.reactive_atoms_classes_dict[c][index] = atom_type
+                    # understanding the type of reactive atom in order to align the ensemble correctly and build the correct pseudo-orbitals
+                    self.reactive_atoms_classes_dict[c][index] = atom_type
 
-                if self.debug_logfunction is not None:
-                    self.debug_logfunction(f'DEBUG: Hypermolecule._inspect_reactive_atoms {self.filename} - Reactive atom {index+1} is a {symbol} atom of {atom_type} type. It is bonded to {len(neighbors(self.graph, index))} neighbor(s): {atom_type.neighbors_symbols}')
+                    if self.debug_logfunction is not None:
+                        self.debug_logfunction(f'DEBUG: Hypermolecule._inspect_reactive_atoms {self.filename} - Reactive atom {index+1} is a {symbol} atom of {atom_type} type. It is bonded to {len(self.graph.neighbors(index))} neighbor(s): {atom_type.neighbors_symbols}')
+
+                # deal with this in the Embedder class
+                except KeyError:
+                    pass
+                    
+
 
     def _scale_orbs(self, value):
         '''
         Scale each orbital dimension according to value.
         '''
-        for c, _ in enumerate(self.atomcoords):
+        for c, _ in enumerate(self.coords):
             for index, atom in self.reactive_atoms_classes_dict[c].items():
                 orb_dim = norm_of(atom.center[0]-atom.coord)
                 atom.init(self, index, update=True, orb_dim=orb_dim*value, conf=c)
@@ -260,22 +268,23 @@ class Hypermolecule:
         return np.array([[v for v in atom.center] for atom in self.get_r_atoms(c)])
 
     # def calc_positioned_conformers(self):
-    #     self.positioned_conformers = np.array([[self.rotation @ v + self.position for v in conformer] for conformer in self.atomcoords])
+    #     self.positioned_conformers = np.array([[self.rotation @ v + self.position for v in conformer] for conformer in self.coords])
 
     def _compute_hypermolecule(self):
         '''
         '''
 
-        self.energies = [0 for _ in self.atomcoords]
+        self.energies = [0 for _ in self.coords]
 
         self.hypermolecule_atomnos = []
         clusters = {i:{} for i, _ in enumerate(self.atomnos)}  # {atom_index:{cluster_number:[position,times_found]}}
+
         for i, atom_number in enumerate(self.atomnos):
-            atoms_arrangement = [conformer[i] for conformer in self.atomcoords]
+            atoms_arrangement = [conformer[i] for conformer in self.coords]
             cluster_number = 0
             clusters[i][cluster_number] = [atoms_arrangement[0], 1]  # first structure has rel E = 0 so its weight is surely 1
             self.hypermolecule_atomnos.append(atom_number)
-            radii = pt[atom_number].covalent_radius
+            radii = pt.covalent_radius(self.atoms[i])
             for j, atom in enumerate(atoms_arrangement[1:]):
 
                 weight = np.exp(-self.energies[j+1] * 503.2475342795285 / self.T)
@@ -311,13 +320,13 @@ class Hypermolecule:
 
         hyp_name = self.rootname + '_hypermolecule.xyz'
         with open(hyp_name, 'w') as f:
-            for c, _ in enumerate(self.atomcoords):
-                f.write(str(sum([len(atom.center) for atom in self.reactive_atoms_classes_dict[c].values()]) + len(self.atomcoords[0])))
-                f.write(f'\FIRECODE Hypermolecule {c} for {self.rootname} - reactive indices {self.reactive_indices}\n')
+            for c, _ in enumerate(self.coords):
+                f.write(str(sum([len(atom.center) for atom in self.reactive_atoms_classes_dict[c].values()]) + len(self.coords[0])))
+                f.write(f'FIRECODE Hypermolecule {c} for {self.rootname} - reactive indices {self.reactive_indices}\n')
                 orbs =np.vstack([atom_type.center for atom_type in self.reactive_atoms_classes_dict[c].values()]).ravel()
                 orbs = orbs.reshape((int(len(orbs)/3), 3))
-                for i, atom in enumerate(self.atomcoords[c]):
-                    f.write('%-5s %-8s %-8s %-8s\n' % (pt[self.atomnos[i]].symbol, round(atom[0], 6), round(atom[1], 6), round(atom[2], 6)))
+                for i, atom in enumerate(self.coords[c]):
+                    f.write('%-5s %-8s %-8s %-8s\n' % (self.atoms[i], round(atom[0], 6), round(atom[1], 6), round(atom[2], 6)))
                 for orb in orbs:
                     f.write('%-5s %-8s %-8s %-8s\n' % ('X', round(orb[0], 6), round(orb[1], 6), round(orb[2], 6)))
 

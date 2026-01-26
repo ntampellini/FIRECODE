@@ -6,7 +6,7 @@ Copyright (C) 2021-2026 Nicolò Tampellini
 SPDX-License-Identifier: LGPL-3.0-or-later
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
+it under the terms of the GNU Lesser General Public License as publishedby
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
@@ -20,21 +20,8 @@ along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 '''
-from dataclasses import dataclass
 
-from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
-
-
-@dataclass
-class PeriodicTable:
-
-    def covalent_radius(self, symbol):
-        return RADII_TABLE[symbol]
-
-    def mass(self, symbol):
-        return MASSES_TABLE[symbol]
-    
-    def number(self, symbol):
-        return INDEX_TABLE[symbol]
-    
-pt = PeriodicTable()
+ANGSTROEM_TO_BOHR = 0.529177249
+EH_TO_EV = 27.211399
+EH_TO_KCAL = 627.5096080305927
+EV_TO_KCAL = 23.060541945329334

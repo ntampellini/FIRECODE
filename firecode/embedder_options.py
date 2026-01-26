@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -21,7 +21,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 '''
 from firecode.settings import (CALCULATOR, DEFAULT_FF_LEVELS, FF_CALC,
-                             FF_OPT_BOOL)
+                             FF_OPT_BOOL, SINGLE_THREAD_BOOL)
 
 # Known keywords and relative priority level:
 # 1 : First to run, set some option
@@ -72,6 +72,7 @@ keywords_dict = {
 
             'FFLEVEL' : 1,        # Manually set the theory level to be used.
                                 # . Syntax: `FFLEVEL=UFF
+            'FINALSPLEVEL' : 1,   # add a single point calc after optimization at a different level
 
             'IMAGES' : 1,         # Number of images to be used in NEB and mep_relax> jobs
 
@@ -86,7 +87,7 @@ keywords_dict = {
                                 
             'MTD' : 1,            # Run conformational augmentation through metadynamic sampling (XTB)
 
-            'NCI' : 1,            # Estimate and print non-covalent interactions present in the generated poses.
+            'MULT' : 1,         # Set global multiplicity.
 
             'NEB' : 1,            # Perform an automatical climbing image nudged elastic band (CI-NEB)
                                 # TS search after the partial optimization step, inferring reagents
@@ -94,7 +95,7 @@ keywords_dict = {
                                 # approaching the reactive atoms until they are at the right distance,
                                 # and then partially constrained (reagents) or free (products) optimizations
                                 # are carried out to get the start and end points for a CI-NEB TS search.
-                                # For trimolecular transition states, only the first imposed pairing (a) 
+                                # For trimolecular assemblies, only the first imposed pairing (a) 
                                 # is approached - i.e. the C-C reactive distance in the example above.
                                 # This NEB option is only really usable for those reactions in which two
                                 # (or three) molecules are bound together (or strongly interacting) after
@@ -125,8 +126,6 @@ keywords_dict = {
                                 # range to be explored around the structure pivot.
                                 # Default is 120. Syntax: `ROTRANGE=120`
 
-            'SADDLE' : 1,         # After embed and refinement, optimize to first order saddle points
-
             'SHRINK' : 1,         # Exaggerate orbital dimensions during embed, scaling them by a factor
                                 # of one and a half. This makes it easier to perform the embed without
                                 # having molecules clashing one another. Then, the correct distance between
@@ -151,8 +150,6 @@ keywords_dict = {
             'RMSD' : 1,           # RMSD threshold (Angstroms) for structure pruning. The smaller,
                                 # the more retained structures. Default is 0.5 A.
                                 # Syntax: `RMSD=n`, where n is a number.
-
-            'TS' : 1,             # Uses various scans/saddle algorithms to locate the TS
 }
 
 def get_keyword_suggestion(unknown_kw):
@@ -211,8 +208,10 @@ class Options:
         self.optimization = True
         self.calculator = CALCULATOR
         self.theory_level = None        # set later in _calculator_setup()
+        self.final_sp_level = None
         self.solvent = None
         self.charge = 0
+        self.mult = 1
         self.ff_opt = FF_OPT_BOOL
         self.ff_calc = FF_CALC
 
@@ -220,9 +219,7 @@ class Options:
             self.ff_level = DEFAULT_FF_LEVELS[FF_CALC]
 
         self.neb = False
-        self.saddle = False
         self.ts = False
-        self.nci = False
         self.crestnci = False
         self.shrink = False
         self.shrink_multiplier = 1
@@ -233,7 +230,6 @@ class Options:
         # self.keep_enantiomers = False
         self.double_bond_protection = False
         self.keep_hb = False
-        self.csearch_aug = False
         self.dryrun = False
         self.checkpoint_frequency = 50
 
@@ -260,20 +256,20 @@ class Options:
         self.operators_dict = {}
         # Analogous dictionary that will contain the seuquences of operators for each molecule
 
+        self.single_thread = SINGLE_THREAD_BOOL
+        # enforce the use of a single thread in multimolecular optimization
+
     def __repr__(self):
         d = {var:self.__getattribute__(var) for var in dir(self) if var[0:2] != '__'}
         
         repr_if_true = (
             'bypass',
             'check_structures',
-            'csearch_aug',
             'crestnci',
             'debug',
             'let',
             'metadynamics',
-            'nci',
             'neb',
-            'saddle',
             'ts',
             'ff_opt',
             'noembed',
@@ -362,6 +358,10 @@ class OptionSetter:
         kw = self.keywords_simple[self.keywords.index('CHARGE')]
         options.charge = int(kw.split('=')[1])
 
+    def mult(self, options, *args):
+        kw = self.keywords_simple[self.keywords.index('MULT')]
+        options.mult = int(kw.split('=')[1])
+
     def confs(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('CONFS')]
         options.max_confs = int(kw.split('=')[1])
@@ -380,6 +380,10 @@ class OptionSetter:
         options.rotation_steps = 72
         options.max_clashes = 1
         options.clash_thresh = 1.4
+        
+    def finalsplevel(self, options, *args):
+        kw = self.keywords_simple[self.keywords.index('FINALSPLEVEL')]
+        options.final_sp_level = kw.split('=')[1].upper()
 
     def rotrange(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('ROTRANGE')]
@@ -441,7 +445,7 @@ class OptionSetter:
 
     def neb(self, options, *args):
         options.neb = Truthy_struct()
-        options.neb.images = 6
+        options.neb.images = 7
         options.neb.preopt = False
 
         kw = self.keywords_simple[self.keywords.index('NEB')]
@@ -458,7 +462,7 @@ class OptionSetter:
                         options.neb.preopt = True
                 else:
                     raise SyntaxError((f'Syntax error in NEB keyword -> NEB({neb_options_string}). ' +
-                                        'Correct syntax looks like: NEB(images=8,preopt=true)'))
+                                        'Correct syntax looks like: NEB(images=7,preopt=true)'))
         
     def level(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('LEVEL')]
@@ -476,9 +480,6 @@ class OptionSetter:
 
     def rigid(self, options, *args):
         options.rigid = True
-
-    def nci(self, options, *args):
-        options.nci = True
 
     def onlyrefined(self, options, *args):
         options.only_refined = True
@@ -538,11 +539,6 @@ class OptionSetter:
                                 'Change it in settings.py or use the CALC=XTB keyword.\n'))
         options.metadynamics = True
 
-    def saddle(self, options, *args):
-        if not options.optimization:
-            raise SystemExit('SADDLE keyword can only be used if optimization is turned on. (Not compatible with NOOPT).')
-        options.saddle = True
-
     def solvent(self, options, *args):
         from firecode.solvents import solvent_synonyms
         kw = self.keywords_simple[self.keywords.index('SOLVENT')]
@@ -561,16 +557,11 @@ class OptionSetter:
 
         raise SyntaxError(f'{molname} must be present in the molecule lines, along with the pka> operator. Syntax: pka(mol.xyz)=n')
 
-    def csearch(self, options, *args):
-        options.csearch_aug = True
-
     def crestlevel(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('CRESTLEVEL')]
         options.crestlevel = kw.split('=')[1]
 
     def set_options(self):
-
-        # self.keywords = sorted(self.keywords, key=lambda x: __keywords__.index(x))
 
         for kw in self.sorted_keywords():
             setter_function = getattr(self, kw.lower())

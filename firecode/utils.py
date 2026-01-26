@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -24,7 +24,6 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 import os
 import sys
 import time
-from _tkinter import TclError
 from collections import defaultdict
 from itertools import permutations, product
 from shutil import rmtree
@@ -32,14 +31,15 @@ from subprocess import DEVNULL, STDOUT, CalledProcessError, check_call, run
 from typing import List, Tuple, Union
 
 import numpy as np
-from cclib.io import ccread
-from numpy.linalg import LinAlgError
+from networkx import shortest_path
 from openbabel import pybel
+from prism_pruner.algebra import dihedral, normalize, rot_mat_from_pointer
+from prism_pruner.conformer_ensemble import ConformerEnsemble
+from prism_pruner.graph_manipulations import graphize
+from prism_pruner.rmsd import rmsd_and_max
 
-from firecode.algebra import (dihedral, get_alignment_matrix, norm_of,
-                              point_angle, rot_mat_from_pointer)
+from firecode.algebra import norm_of, point_angle
 from firecode.errors import TriangleError
-from firecode.graph_manipulations import graphize
 from firecode.pt import pt
 
 
@@ -175,92 +175,32 @@ def run_command(command:str, p=False):
         print("Command Result: {}".format(result.stdout.decode('utf-8')))
     return result
 
-def align_structures(structures:np.array, indices=None, **kwargs):
-    '''
-    Aligns molecules of a structure array (shape is (n_structures, n_atoms, 3))
-    to the first one, based on the indices. If not provided, all atoms are used
-    to get the best alignment. Return is the aligned array.
-
-    '''
-
-    reference = structures[0]
-    targets = structures[1:]
-    if isinstance(indices, (list, tuple)):
-        indices = np.array(indices)
-
-    indices = slice(0,len(reference)) if (indices is None or len(indices) == 0) else indices.ravel()
-
-    reference -= np.mean(reference[indices], axis=0)
-    for t, _ in enumerate(targets):
-        targets[t] -= np.mean(targets[t,indices], axis=0)
-
-    output = np.zeros(structures.shape)
-    output[0] = reference
-
-    for t, target in enumerate(targets):
-
-        try:
-            matrix = get_alignment_matrix(reference[indices], target[indices])
-
-        except LinAlgError:
-        # it is actually possible for the kabsch alg not to converge
-            matrix = np.eye(3)
-        
-        # output[t+1] = np.array([matrix @ vector for vector in target])
-        output[t+1] = (matrix @ target.T).T
-
-    return output
-
-def write_xyz(coords:np.array, atomnos:np.array, output, title='temp'):
+def write_xyz(atoms:np.array, coords:np.array, output, title='temp'):
     '''
     output is of _io.TextIOWrapper type
 
     '''
-    assert atomnos.shape[0] == coords.shape[0]
+    assert atoms.shape[0] == coords.shape[0]
     assert coords.shape[1] == 3
     string = ''
     string += str(len(coords))
     string += f'\n{title}\n'
-    for i, atom in enumerate(coords):
-        string += '%s     % .6f % .6f % .6f\n' % (pt[atomnos[i]].symbol, atom[0], atom[1], atom[2])
+    for atom, coord in zip(atoms, coords):
+        string += '%s     % .6f % .6f % .6f\n' % (atom, coord[0], coord[1], coord[2])
     output.write(string)
 
 def read_xyz(filename):
     '''
-    Wrapper for ccread. Raises an error if unsuccessful.
+    Wrapper for PRISM's ConformerEnsemble xyz reader, adding FIRECODE support.
+    
+    Raises an error if unsuccessful.
 
     '''
-    mol = ccread(filename)
+    mol = ConformerEnsemble.from_xyz(filename)
+    mol.atomnos = np.array([pt.number(letter) for letter in mol.atoms])
+    
     assert mol is not None, f'Reading molecule {filename} failed - check its integrity.'
     return mol
-
-def time_to_string(total_time: float, verbose=False, digits=1):
-    '''
-    Converts totaltime (float) to a timestring
-    with hours, minutes and seconds.
-    '''
-    timestring = ''
-
-    names = ('days', 'hours', 'minutes', 'seconds') if verbose else ('d', 'h', 'm', 's')
-
-    if total_time > 24*3600:
-        d = total_time // (24*3600)
-        timestring += f'{int(d)} {names[0]} '
-        total_time %= (24*3600)
-
-    if total_time > 3600:
-        h = total_time // 3600
-        timestring += f'{int(h)} {names[1]} '
-        total_time %= 3600
-
-    if total_time > 60:
-        m = total_time // 60
-        timestring += f'{int(m)} {names[2]} '
-        total_time %= 60
-
-    timestring += f'{round(total_time, digits):{2+digits}} {names[3]}'
-
-    return timestring
 
 def pretty_num(n):
     if n < 1e3:
@@ -371,47 +311,19 @@ def ase_view(mol):
     if hasattr(mol, 'reactive_atoms_classes_dict'):
         images = []
 
-        for c, coords in enumerate(mol.atomcoords):
+        for c, coords in enumerate(mol.coords):
             centers = np.vstack([atom.center for atom in mol.reactive_atoms_classes_dict[c].values()])
-            atomnos = np.concatenate((mol.atomnos, [0 for _ in centers]))
             totalcoords = np.concatenate((coords, centers))
-            images.append(Atoms(atomnos, positions=totalcoords))
+            images.append(Atoms(mol.atoms, positions=totalcoords))
 
     else:
-        images = [Atoms(mol.atomnos, positions=coords) for coords in mol.atomcoords]
+        images = [Atoms(mol.atoms, positions=coords) for coords in mol.coords]
         
     try:
         GUI(images=Images(images), show_bonds=True).run()
-    except TclError:
+    # except TclError:
+    except Exception:
         print('--> GUI not available from command line interface. Skipping it.')
-
-double_bonds_thresholds_dict = {
-    'CC':1.4,
-    'CN':1.3,
-}
-
-def get_double_bonds_indices(coords, atomnos):
-    '''
-    Returns a list containing 2-elements tuples
-    of indices involved in any double bond
-    '''
-    mask = (atomnos != 1)
-    numbering = np.arange(len(coords))[mask]
-    coords = coords[mask]
-    atomnos = atomnos[mask]
-    output = []
-
-    for i1, _ in enumerate(coords):
-        for i2 in range(i1+1, len(coords)):
-            dist = norm_of(coords[i1] - coords[i2])
-            tag = ''.join(sorted([pt[atomnos[i1]].symbol,
-                                  pt[atomnos[i2]].symbol]))
-            
-            threshold = double_bonds_thresholds_dict.get(tag)
-            if threshold is not None and dist < threshold:
-                output.append((numbering[i1], numbering[i2]))
-
-    return output
 
 def get_scan_peak_index(energies, max_thr=50, min_thr=0.1):
     '''
@@ -438,12 +350,12 @@ def get_scan_peak_index(energies, max_thr=50, min_thr=0.1):
     return energies.index(max(peaks_nrg))
     # if more than one, return the highest
 
-def molecule_check(old_coords, new_coords, atomnos, max_newbonds=0):
+def molecule_check(atoms, old_coords, new_coords, max_newbonds=0):
     '''
     Checks if two molecules have the same bonds between the same atomic indices
     '''
-    old_bonds = {(a, b) for a, b in list(graphize(old_coords, atomnos).edges) if a != b}
-    new_bonds = {(a, b) for a, b in list(graphize(new_coords, atomnos).edges) if a != b}
+    old_bonds = {(a, b) for a, b in list(graphize(atoms, old_coords).edges) if a != b}
+    new_bonds = {(a, b) for a, b in list(graphize(atoms, new_coords).edges) if a != b}
 
     delta_bonds = (old_bonds | new_bonds) - (old_bonds & new_bonds)
 
@@ -452,13 +364,13 @@ def molecule_check(old_coords, new_coords, atomnos, max_newbonds=0):
 
     return True
 
-def scramble_check(TS_structure, TS_atomnos, excluded_atoms, mols_graphs, max_newbonds=0, logfunction=None, title=None) -> bool:
+def scramble_check(embedded_atoms, embedded_structure, excluded_atoms, mols_graphs, max_newbonds=0, logfunction=None, title=None) -> bool:
     '''
     Check if a multimolecular arrangement has scrambled during some optimization
     steps. If more than a given number of bonds changed (formed or broke) the
     structure is considered scrambled, and the method returns False.
     '''
-    assert len(TS_structure) == sum([len(graph.nodes) for graph in mols_graphs])
+    assert len(embedded_structure) == sum([len(graph.nodes) for graph in mols_graphs])
 
     bonds = set()
     for i, graph in enumerate(mols_graphs):
@@ -467,9 +379,9 @@ def scramble_check(TS_structure, TS_atomnos, excluded_atoms, mols_graphs, max_ne
         
         for bond in [tuple(sorted((a+pos, b+pos))) for a, b in list(graph.edges) if a != b]:
             bonds.add(bond)
-    # creating bond set containing all bonds present in the desired transition state
+    # creating bond set containing all bonds present in the desired molecular assembly
 
-    new_bonds = {tuple(sorted((a, b))) for a, b in list(graphize(TS_structure, TS_atomnos).edges) if a != b}
+    new_bonds = {tuple(sorted((a, b))) for a, b in list(graphize(embedded_atoms, embedded_structure).edges) if a != b}
     delta_bonds = (bonds | new_bonds) - (bonds & new_bonds)
     # delta_bonds -= {tuple(sorted(pair)) for pair in constrained_indices}
 
@@ -486,43 +398,78 @@ def scramble_check(TS_structure, TS_atomnos, excluded_atoms, mols_graphs, max_ne
 
     return True
 
-def rotate_dihedral(coords, dihedral, angle, mask=None, indices_to_be_moved=None):
+def set_planar_angle(coords, indices, target, graph):
     '''
-    Rotate a molecule around a given bond.
-    Atoms that will move are the ones
-    specified by mask or indices_to_be_moved.
-    If both are None, only the first index of
-    the dihedral iterable is moved.
+    Modifies a planar angle, setting the angle
+    value to target degrees. Moves the part
+    of the molecule attached to the last of
+    the three indices defining the angle.
 
-    angle: angle, in degrees
     '''
 
-    i1, i2, i3 ,_ = dihedral
+    assert len(indices) == 3
+    
+    # define points, axis of rotation and center
+    i1, i2 ,i3 = indices
+    p1 ,p2, p3 = coords[np.array(indices)]
+    delta = target - point_angle(p1, p2, p3)
 
-    if indices_to_be_moved is not None:
-        mask = np.array([i in indices_to_be_moved for i, _ in enumerate(coords)])
+    rot_axis = np.cross(p1-p2, p3-p2)
+    rot_mat = rot_mat_from_pointer(rot_axis, delta)
+    center = p2
 
-    if mask is None:
-        mask = i1
+    # define indices to be moved through graph connectivity
+    # (faster to modify graph than copying it)
+    graph.remove_edge(i2, i3)
 
-    axis = coords[i2] - coords[i3]
-    mat = rot_mat_from_pointer(axis, angle)
-    center = coords[i3]
+    # get all indices reachable from i3 not going through i2-i3
+    indices_to_be_moved = shortest_path(graph, i3).keys()
 
-    coords[mask] = (mat @ (coords[mask] - center).T).T + center
+    # restore modified graph
+    graph.add_edge(i2, i3)
+
+    # get rotation mask
+    mask = np.array([i in indices_to_be_moved for i, _ in enumerate(coords)])
+
+    # center coordinates, rotate around axis, revert centering
+    coords[mask] = (rot_mat @ (coords[mask] - center).T).T + center
 
     return coords
 
-def flatten(array, typefunc=float):
-    out = []
-    def rec(_l):
-        for e in _l:
-            if type(e) in [list, tuple, np.ndarray]:
-                rec(e)
-            else:
-                out.append(typefunc(e))
-    rec(array)
-    return out
+def set_distance(coords, indices, target, graph):
+    '''
+    Modifies a distance, setting the 
+    value to target Angström. Moves the part
+    of the molecule attached to the last of
+    the two indices defining the distance.
+
+    '''
+
+    assert len(indices) == 2
+    
+    # define points, axis of rotation and center
+    i1, i2 = indices
+    p1 ,p2 = coords[np.array(indices)]
+    delta = target - norm_of(p1-p2)
+    versor = normalize(p2-p1)
+
+    # define indices to be moved through graph connectivity
+    # (faster to modify graph than copying it)
+    graph.remove_edge(i1, i2)
+
+    # get all indices reachable from i2 not going through i1-i2
+    indices_to_be_moved = shortest_path(graph, i2).keys()
+
+    # restore modified graph
+    graph.add_edge(i1, i2)
+
+    # get mask
+    mask = np.array([i in indices_to_be_moved for i, _ in enumerate(coords)])
+
+    # translate coordinates
+    coords[mask] += versor * delta
+
+    return coords
 
 def auto_newline(string, max_line_len=50, padding=2):
     string = str(string)
@@ -566,7 +513,7 @@ def timing_wrapper(function, *args, payload=None, **kwargs):
     
     return func_return, payload, elapsed
 
-def _saturation_check(atomnos, charge=0):
+def _saturation_check(atoms, charge=0):
 
     transition_metals = [
                     "Sc", "Ti", "V", "Cr", "Mn", "Fe",
@@ -582,7 +529,7 @@ def _saturation_check(atomnos, charge=0):
 
     # if we have any transition metal, it's hard to tell
     # if the structure looks ok: in this case we assume it is.
-    organometallic = any([pt[a].symbol in transition_metals for a in atomnos])
+    organometallic = any([el in transition_metals for el in atoms])
 
     odd_valent = [  #1 valent
                     "H", "Li", "Na", "K", "Rb", "Cs",
@@ -593,7 +540,7 @@ def _saturation_check(atomnos, charge=0):
                     "B", "Al", "Ga", "In", "Tl",
                  ]
 
-    n_odd_valent = sum([1 for a in atomnos if pt[a].symbol in odd_valent])
+    n_odd_valent = sum([1 for a in atoms if a in odd_valent])
     looks_ok = ((n_odd_valent + charge) / 2) % 1 < 0.001 if not organometallic else True
 
     return looks_ok
@@ -715,7 +662,7 @@ def find_symmetric_atoms(mol: pybel.Molecule, match: Tuple[int, ...]) -> List[Li
 def match_smarts_pattern(
     molecule_input: Union[str, Tuple[np.ndarray, np.ndarray]], 
     smarts_pattern: str,
-    symmetric_atoms: List[List[int]] = None,
+    symmetric_atoms: List[List[int]] | None = None,
     auto_symmetry: bool = True,
     input_format: str = 'xyz',
     single_match_expected: bool = False,
@@ -848,3 +795,21 @@ def match_smarts_pattern(
     
     except Exception as e:
         raise RuntimeError(f"Error matching SMARTS pattern: {str(e)}")
+
+
+def rmsd_similarity(ref, structures, rmsd_thr=0.5) -> bool:
+    '''
+    Simple, RMSD similarity eval function.
+
+    '''
+
+    # iterate over target structures
+    for structure in structures:
+        
+        # compute RMSD and max deviation
+        rmsd_value, maxdev_value = rmsd_and_max(ref, structure)
+
+        if rmsd_value < rmsd_thr and maxdev_value < 2 * rmsd_thr:
+            return True
+            
+    return False

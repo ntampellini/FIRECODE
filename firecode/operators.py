@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -26,24 +26,27 @@ import time
 from shutil import which
 from subprocess import CalledProcessError
 
+import matplotlib.pyplot as plt
 import numpy as np
+from prism_pruner.graph_manipulations import graphize
+from prism_pruner.pruner import prune_by_rmsd, prune_by_rmsd_rot_corr
+from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.ase_manipulations import ase_saddle
+from firecode.algebra import norm_of
 from firecode.atropisomer_module import dihedral_scan
 from firecode.automep import automep
 from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
-from firecode.graph_manipulations import graphize
+from firecode.explode_search import explode_search
 from firecode.mep_relaxer import ase_mep_relax
 from firecode.numba_functions import prune_conformers_tfd
 from firecode.optimization_methods import _refine_structures, optimize
 from firecode.pka import pka_routine
-from firecode.pruning import prune_by_rmsd, prune_by_rmsd_rot_corr
+from firecode.pt import pt
 from firecode.settings import (CALCULATOR, DEFAULT_FF_LEVELS, DEFAULT_LEVELS,
                                FF_CALC, FF_OPT_BOOL, PROCS)
-from firecode.torsion_module import _get_quadruplets, csearch
-from firecode.utils import (align_structures, get_scan_peak_index,
-                            molecule_check, read_xyz, time_to_string,
+from firecode.torsion_module import csearch, get_quadruplets
+from firecode.utils import (get_scan_peak_index, molecule_check, read_xyz,
                             write_xyz)
 
 
@@ -80,14 +83,30 @@ def operate(input_string, embedder):
     elif any(string in input_string for string in ('mtd_search>', 'mtd>')):
         outname = mtd_search_operator(filename, embedder)
 
-    elif 'saddle>' in input_string:
-        saddle_operator(filename, embedder)
-        embedder.normal_termination()
-      
-    elif 'scan>' in input_string:
-        scan_operator(filename, embedder)
-        outname = filename
+    elif 'explode_search>' in input_string:
+        # outname = explode_search(filename, embedder)
 
+        ### DEBUG - PROFILING
+        import cProfile
+        import sys
+        from pstats import Stats
+
+        datafile = "explode_search_cProfile.dat"
+        cProfile.runctx("explode_search(filename, embedder)", {"explode_search" : explode_search}, locals(), filename=datafile)
+
+        with open("explode_search_cProfile_output_time.txt", "w") as f:
+            p = Stats(datafile, stream=f)
+            p.sort_stats("time").print_stats()
+
+        with open("explode_search_cProfile_output_cumtime.txt", "w") as f:
+            p = Stats(datafile, stream=f)
+            p.sort_stats("cumtime").print_stats()
+    
+        sys.exit()
+
+    elif 'scan>' in input_string:
+        outname = scan_operator(filename, embedder)
+      
     elif 'automep>' in input_string:
         automep(embedder, n_images=embedder.options.images if hasattr(embedder.options, 'images') else 9)
         # neb_operator(automep_filename, embedder)
@@ -118,7 +137,7 @@ def operate(input_string, embedder):
 
             mep, _, exit_status = ase_mep_relax(
                                                 embedder,
-                                                data.atomcoords,
+                                                data.coords,
                                                 data.atomnos,
                                                 title=embedder.stamp+"_safe",
                                                 n_images=embedder.options.images if hasattr(embedder.options, 'images') else None,
@@ -129,7 +148,7 @@ def operate(input_string, embedder):
                                                 )
             
         else:
-            mep = data.atomcoords
+            mep = data.coords
             exit_status = True
         
         if exit_status:
@@ -170,29 +189,33 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
 
     data = read_xyz(filename)
 
-    if len(data.atomcoords) > 1:
+    if len(data.coords) > 1:
         embedder.log('Requested conformational search on multimolecular file - will do\n' +
                       'an individual search from each conformer (might be time-consuming).')
                                 
     # calc, method, procs = _get_lowest_calc(embedder)
     conformers = []
 
-    for i, coords in enumerate(data.atomcoords):
+    for i, coords in enumerate(data.coords):
 
         # opt_coords = optimize(coords, data.atomnos, calculator=calc, method=method, procs=procs)[0] if embedder.options.optimization else coords
         opt_coords = coords
         # optimize starting structure before running csearch
 
         conf_batch = csearch(
+                                data.atoms,
                                 opt_coords,
-                                data.atomnos,
+                                charge=embedder.options.charge,
+                                mult=embedder.options.mult,
                                 constrained_indices=_get_internal_constraints(filename, embedder),
                                 keep_hb=keep_hb,
                                 mode=mode,
-                                n_out=embedder.options.max_confs//len(data.atomcoords),
+                                n_out=embedder.options.max_confs//len(data.coords),
                                 title=f'{filename}_conf{i}',
                                 logfunction=embedder.log,
-                                write_torsions=embedder.options.debug
+                                dispatcher=embedder.dispatcher,
+                                write_torsions=embedder.options.debug,
+                                debug=embedder.options.debug,
                             )
         # generate the most diverse conformers starting from optimized geometry
 
@@ -230,85 +253,108 @@ def opt_operator(filename, embedder, logfunction=None):
 
     if logfunction is not None:
         logfunction(f'--> Performing {embedder.options.calculator} {embedder.options.theory_level}' + (
-                    f'{f"/{embedder.options.solvent}" if embedder.options.solvent is not None else ""} optimization on {filename} ({len(mol.atomcoords)} conformers)'))
+                    f'{f"/{embedder.options.solvent}" if embedder.options.solvent is not None else ""} optimization on {filename} ({len(mol.coords)} conformers)'))
 
     constrained_indices = _get_internal_constraints(filename, embedder)
     constrained_distances = [embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices]
 
+    (
+        constrained_angles_indices,
+        constrained_angles_values,
+        constrained_dihedrals_indices,
+        constrained_dihedrals_values,
+    ) = embedder._get_angle_dih_constraints()
+
     energies = []
-    lowest_calc = _get_lowest_calc(embedder)
+    # lowest_calc = _get_lowest_calc(embedder)
 
     t_start = time.perf_counter()
 
-    conformers, energies = _refine_structures(mol.atomcoords,
+    conformers, energies = _refine_structures(mol.coords,
                                               mol.atomnos,
+                                              calculator=embedder.options.calculator,
+                                              method=embedder.options.theory_level,
+                                              procs=embedder.procs,
+                                              charge=embedder.options.charge,
+                                              mult=embedder.options.mult,
+
                                               constrained_indices=constrained_indices,
                                               constrained_distances=constrained_distances,
-                                              *lowest_calc,
+
+                                              constrained_angles_indices=constrained_angles_indices,
+                                              constrained_angles_values=constrained_angles_values,
+
+                                              constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                              constrained_dihedrals_values=constrained_dihedrals_values,
+
+                                            #   *lowest_calc,
                                               loadstring='Optimizing conformer',
-                                              logfunction=lambda s:embedder.log(s, p=False))
+                                              logfunction=lambda s:embedder.log(s, p=False),
+                                              debug=embedder.options.debug,
+                                              dispatcher=embedder.dispatcher)
 
     energies, conformers = zip(*sorted(zip(energies, conformers), key=lambda x: x[0]))
-    energies = np.array(energies) - np.min(energies)
+    energies = np.array(energies)
+    rel_energies = energies - np.min(energies)
     conformers = np.array(conformers)
     # sorting structures based on energy
 
-    mask = energies < 20
+    mask = rel_energies < 20
     # getting the structures to reject (Rel Energy > 20 kcal/mol)
 
     if logfunction is not None:
         s = 's' if len(conformers) > 1 else ''
         s = f'Completed optimization on {len(conformers)} conformer{s}. ({time_to_string(time.perf_counter()-t_start)}, ~{time_to_string((time.perf_counter()-t_start)/len(conformers))} per structure).\n'
 
-        if max(energies) > 20:
+        if max(rel_energies) > 20:
             s += f'Discarded {len(conformers)-np.count_nonzero(mask)}/{len(conformers)} unstable conformers (Rel. E. > 20 kcal/mol)\n'
 
-    conformers, energies = conformers[mask], energies[mask]
+    conformers, energies, rel_energies = conformers[mask], energies[mask], rel_energies[mask]
     # applying the mask that rejects high energy confs
 
     optname = filename[:-4] + '_opt.xyz'
     with open(optname, 'w') as f:
         for i, conformer in enumerate(align_structures(conformers)):
-            write_xyz(conformer, mol.atomnos, f, title=f'Optimized conformer {i} - Rel. E. = {round(energies[i], 3)} kcal/mol')
+            write_xyz(conformer, mol.atomnos, f, title=f'Optimized conformer {i} - E(kcal/mol) = {energies[i]:.3f} - Rel. E. = {rel_energies[i]:.3f} kcal/mol')
 
     logfunction(s+'\n')
     logfunction(f'Wrote {len(conformers)} optimized structures to {optname}\n')
 
     return optname
 
-def neb_operator(filename, embedder, attempts=5):
+def neb_operator(filename, embedder, attempts=3):
     '''
     '''
     embedder.t_start_run = time.perf_counter()
     data = read_xyz(filename)
-    n_str = len(data.atomcoords)
-    assert (n_str in (2, 3) or n_str % 2 == 1), 'NEB calculations need a .xyz input file with two, three or an odd number of geometries.'
+    n_str = len(data.coords)
+    n_images = embedder.options.neb.images if embedder.options.neb else 7
 
     if n_str == 2:
-        reagents, products = data.atomcoords
+        reagents, products = data.coords
         ts_guess = None
         mep_override = None
         embedder.log('--> Two structures as input: using them as start and end points.')
 
     elif n_str == 3:
-        reagents, ts_guess, products = data.atomcoords
+        reagents, ts_guess, products = data.coords
         mep_override = None
         embedder.log('--> Three structures as input: using them as start, TS guess and end points.')
 
     else:
-        reagents, *_, products = data.atomcoords
-        ts_guess = data.atomcoords[n_str//2]
-        mep_override = data.atomcoords
-        embedder.log(f'--> {n_str} structures as input: using these as the NEB MEP guess.')
+        reagents, *_, products = data.coords
+        ts_guess = data.coords[n_str//2]
+        mep_override = data.coords
+        embedder.log(f'--> {n_str} structures as input: casting {n_images} images from these as the NEB MEP guess.')
 
     from firecode.ase_manipulations import ase_neb 
 
     title = filename[:-4] + '_NEB'
 
-    # if embedder.options.neb.preopt:
-    if True:
+    # do preopt unless user specifies not to
+    if not (hasattr(embedder.options.neb, "preopt") and not embedder.options.neb.preopt):
 
-        embedder.log(f'--> Performing NEB TS optimization. Preoptimizing structures from {filename}\n'
+        embedder.log(f'--> Performing NEB TS optimization. Preoptimizing start/end structures from {filename}\n'
                      f'Theory level is {embedder.options.theory_level}/{embedder.options.solvent or "vacuum"} via {embedder.options.calculator}')
 
         reagents, reag_energy, _ = optimize(
@@ -316,10 +362,14 @@ def neb_operator(filename, embedder, attempts=5):
                                             data.atomnos,
                                             embedder.options.calculator,
                                             method=embedder.options.theory_level,
+                                            charge=embedder.options.charge,
+                                            mult=embedder.options.mult,
                                             procs=embedder.procs,
                                             solvent=embedder.options.solvent,
                                             title='reagents',
                                             logfunction=embedder.log,
+                                            dispatcher=embedder.dispatcher,
+                                            debug=embedder.options.debug,
                                             )
 
         products, prod_energy, _ = optimize(
@@ -327,10 +377,14 @@ def neb_operator(filename, embedder, attempts=5):
                                             data.atomnos,
                                             embedder.options.calculator,
                                             method=embedder.options.theory_level,
+                                            charge=embedder.options.charge,
+                                            mult=embedder.options.mult,
                                             procs=embedder.procs,
                                             solvent=embedder.options.solvent,
                                             title='products',
                                             logfunction=embedder.log,
+                                            dispatcher=embedder.dispatcher,
+                                            debug=embedder.options.debug,
                                             )
         
         if mep_override is not None:
@@ -354,10 +408,12 @@ def neb_operator(filename, embedder, attempts=5):
                                                                 reagents,
                                                                 products,
                                                                 data.atomnos,
-                                                                # n_images=embedder.options.neb.images,
-                                                                n_images=7,
+                                                                n_images=n_images,
+                                                                
+                                                                charge=embedder.options.charge,
+                                                                mult=embedder.options.mult,
                                                                 ts_guess= ts_guess,
-                                                                mep_override=mep_override,
+                                                                mep_input=mep_override,
                                                                 title=title,
                                                                 logfunction=embedder.log,
                                                                 write_plot=True,
@@ -368,7 +424,7 @@ def neb_operator(filename, embedder, attempts=5):
             break
 
         elif exit_status == "MAX ITER" and attempt+2 < attempts:
-            mep_override = read_xyz(f'{title}_MEP_start_of_CI.xyz').atomcoords
+            mep_override = read_xyz(f'{title}_MEP_start_of_CI.xyz').coords
             reagents, *_, products = mep_override
             embedder.log(f'--> Restarting NEB from checkpoint. Attempt {attempt+2}/3.\n')
 
@@ -379,12 +435,12 @@ def neb_operator(filename, embedder, attempts=5):
     dg2 = ts_energy - min(energies[4:])
 
     embedder.log(f'NEB completed, relative energy from start/end points (not barrier heights):\n'
-               f'  > E(TS)-E(start): {"+" if e1>=0 else "-"}{round(e1, 3)} kcal/mol\n'
-               f'  > E(TS)-E(end)  : {"+" if e2>=0 else "-"}{round(e2, 3)} kcal/mol\n')
+               f'  > E(TS)-E(start): {"+" if e1>=0 else "-"}{e1:.3f} kcal/mol\n'
+               f'  > E(TS)-E(end)  : {"+" if e2>=0 else "-"}{e2:.3f} kcal/mol\n')
     
     embedder.log(f'Barrier heights (based on lowest energy point on each side):\n'
-               f'  > E(TS)-E(left) : {"+" if dg1>=0 else "-"}{round(dg1, 3)} kcal/mol\n'
-               f'  > E(TS)-E(right): {"+" if dg2>=0 else "-"}{round(dg2, 3)} kcal/mol')
+               f'  > E(TS)-E(left) : {"+" if dg1>=0 else "-"}{dg1:.3f} kcal/mol\n'
+               f'  > E(TS)-E(right): {"+" if dg2>=0 else "-"}{dg2:.3f} kcal/mol')
 
     if not (e1 > 0 and e2 > 0):
         embedder.log('\nNEB failed, TS energy is lower than both the start and end points.\n')
@@ -392,41 +448,6 @@ def neb_operator(filename, embedder, attempts=5):
     with open(f'{title}_TS.xyz', 'w') as f:
         write_xyz(ts_coords, data.atomnos, f, title='NEB TS - see log for relative energies')
 
-def saddle_operator(filename, embedder):
-    '''
-    Perform a saddle optimization on the specified structure
-    '''
-
-    mol = next((mol for mol in embedder.objects if mol.filename == filename))
-    # load molecule to be optimized from embedder
-
-    assert len(mol.atomcoords) == 1, 'saddle> operator works with a single structure as input.'
-
-    logfunction = embedder.log
-    
-    logfunction(f'--> Performing {embedder.options.calculator} {embedder.options.theory_level}' + (
-                    f'{f"/{embedder.options.solvent}" if embedder.options.solvent is not None else ""} saddle optimization on {filename}'))
-
-    new_structure, energy, success = ase_saddle(
-                                                embedder,
-                                                mol.atomcoords[0],
-                                                mol.atomnos,
-                                                constrained_indices=None,
-                                                mols_graphs=None,
-                                                title=mol.rootname,
-                                                logfile=mol.rootname+"_saddle_opt_log.txt",
-                                                traj=None,
-                                                freq=False,
-                                                maxiterations=200
-                                            )
-
-    with open(mol.rootname+"_saddle.xyz", 'w') as f:
-        write_xyz(new_structure, mol.atomnos, f, f"ASE Saddle optimization {'succeded' if success else 'failed'} ({embedder.options.calculator}" +
-                f'{embedder.options.theory_level}/{embedder.options.solvent})')
-    if success:
-        embedder.log(
-            f'Saddle optimization completed, relative energy from start/end points (not barrier heights):\n'
-            f'  > E(Saddle_point) : {round(energy, 3)} kcal/mol\n')
 
 def mtd_search_operator(filename, embedder):
     '''
@@ -442,7 +463,7 @@ def mtd_search_operator(filename, embedder):
         mol.charge = 0
 
     if not embedder.options.let:
-        if len(mol.atomcoords) >= 20:
+        if len(mol.coords) >= 20:
             raise InputError('The mtd_search> operator was given more than 20 input structures. ' +
                              'This would run >20 metadynamic conformational searches. If this was not a mistake, ' +
                              'add the LET keyword an re-run the job.')
@@ -462,8 +483,8 @@ def mtd_search_operator(filename, embedder):
     return_char = "\n"
     logfunction(f'    {len(constrained_indices)} constraints applied{": "+str(constrained_indices).replace(return_char, " ") if len(constrained_indices) > 0 else ""}')
     
-    for c, coords in enumerate(mol.atomcoords.copy()):
-        logfunction(f"    Optimizing conformer {c+1}/{len(mol.atomcoords)}")
+    for c, coords in enumerate(mol.coords.copy()):
+        logfunction(f"    Optimizing conformer {c+1}/{len(mol.coords)}")
 
         opt_coords, _, success = optimize(
                                     coords,
@@ -472,7 +493,9 @@ def mtd_search_operator(filename, embedder):
                                     method=embedder.options.theory_level,
                                     solvent=embedder.options.solvent,
                                     charge=embedder.options.charge,
+                                    mult=embedder.options.mult,
                                     procs=embedder.procs,
+                                    dispatcher=embedder.dispatcher,
 
                                     constrained_indices=constrained_indices,
                                     constrained_distances=constrained_distances,
@@ -484,34 +507,37 @@ def mtd_search_operator(filename, embedder):
                                     constrained_dihedrals_values=constrained_dihedrals_values,
 
                                     title=f'{filename.split(".")[0]}_conf{c+1}',
+                                    debug=embedder.options.debug,
+
                                 ) if embedder.options.optimization else (coords, None, True)
         
         exit_status = "" if success else "CRASHED"
         
         if success:
-            success = molecule_check(coords, opt_coords, mol.atomnos)
+            success = molecule_check(mol.atoms, coords, opt_coords)
             exit_status = "" if success else "SCRAMBLED"
 
         if not success:
             dumpname = filename.split(".")[0] + f"_conf{c+1}_{exit_status}.xyz"
             with open(dumpname, "w") as f:
-                write_xyz(opt_coords, mol.atomnos, f, title=f"{filename}, conformer {c+1}/{len(mol.atomcoords)}, {exit_status}")
+                write_xyz(opt_coords, mol.atomnos, f, title=f"{filename}, conformer {c+1}/{len(mol.coords)}, {exit_status}")
 
-            logfunction(f"{filename}, conformer {c+1}/{len(mol.atomcoords)} optimization {exit_status}. Inspect geometry at {dumpname}. Aborting run.")
+            logfunction(f"{filename}, conformer {c+1}/{len(mol.coords)} optimization {exit_status}. Inspect geometry at {dumpname}. Aborting run.")
 
             raise FatalError(filename)
         
         # update embedder structures after optimization
-        mol.atomcoords[c] = opt_coords
+        mol.coords[c] = opt_coords
 
     logfunction()
 
     # update mol and embedder graph after optimization 
-    mol.graph = graphize(mol.atomcoords[0], mol.atomnos)
+    mol.graph = graphize(mol.atoms, mol.coords[0])
     embedder.graphs = [m.graph for m in embedder.objects]
+    crest_method = getattr(embedder.options, "crestlevel", 'GFN2-XTB//GFN-FF')
 
     max_workers = embedder.avail_cpus//2 or 1
-    logfunction(f'--> Performing {embedder.options.calculator} GFN2//GFN-FF' + (
+    logfunction(f'--> Performing {crest_method}' + (
                 f'{f"/{embedder.options.solvent.upper()}" if embedder.options.solvent is not None else ""} ' +
                 f'metadynamic conformational search on {filename} via CREST.\n' +
                 f'    (2 cores/thread, {max_workers} threads, {embedder.options.kcal_thresh} kcal/mol thr.)'))
@@ -519,13 +545,13 @@ def mtd_search_operator(filename, embedder):
     if embedder.options.crestnci:
         logfunction('--> CRESTNCI: Running crest in NCI mode (wall potential applied)')
     
-    if len(mol.atomcoords) > 1:
+    if len(mol.coords) > 1:
         embedder.log('--> Requested conformational search on multimolecular file - will do\n' +
                       'an individual search from each conformer (might be time-consuming).')
 
     t_start = time.perf_counter()
     conformers = []
-    for i, coords in enumerate(mol.atomcoords):
+    for i, coords in enumerate(mol.coords):
 
         t_start_conf = time.perf_counter()
         try:
@@ -544,7 +570,7 @@ def mtd_search_operator(filename, embedder):
 
                                             solvent=embedder.options.solvent,
                                             charge=mol.charge,
-                                            method=getattr(embedder.options, "crestlevel", 'GFN2-XTB//GFN-FF'),
+                                            method=crest_method,
                                             kcal=embedder.options.kcal_thresh,
                                             ncimode=embedder.options.crestnci,
                                             title=mol.rootname+"_mtd_csearch",
@@ -581,7 +607,7 @@ def mtd_search_operator(filename, embedder):
         conformers.extend(conf_batch)
 
         elapsed = time.perf_counter() - t_start_conf
-        embedder.log(f'  Conformer {i+1:2}/{len(mol.atomcoords):2} - generated {len(conf_batch)} structures in {time_to_string(elapsed)}')
+        embedder.log(f'  Conformer {i+1:2}/{len(mol.coords):2} - generated {len(conf_batch)} structures in {time_to_string(elapsed)}')
 
     conformers = np.concatenate(conformers)
     conformers = conformers.reshape(-1, mol.atomnos.shape[0], 3)
@@ -591,17 +617,17 @@ def mtd_search_operator(filename, embedder):
     before = len(conformers)
 
     ### SIMILARITY PRUNING: TFD
-    quadruplets = _get_quadruplets(mol.graph)
+    quadruplets = get_quadruplets(mol.graph)
     conformers, _ = prune_conformers_tfd(conformers, quadruplets)
 
     # ### MOI - turned off, as it would get rid of enantiomeric conformations
-    # conformers, _ = prune_by_moment_of_inertia(conformers, mol.atomnos)
+    # conformers, _ = prune_by_moment_of_inertia(conformers, mol.atoms)
 
     ### RMSD
     if len(conformers) < 5E4:
-        conformers, _ = prune_by_rmsd(conformers, mol.atomnos, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
+        conformers, _ = prune_by_rmsd(conformers, mol.atoms, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
     if len(conformers) < 1E3:
-        conformers, _ = prune_by_rmsd_rot_corr(conformers, mol.atomnos, mol.graph, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
+        conformers, _ = prune_by_rmsd_rot_corr(conformers, mol.atoms, mol.graph, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
 
     embedder.log(f'  Discarded {before-len(conformers)} RMSD-similar structures ({len(conformers)} left)\n')
 
@@ -625,7 +651,7 @@ def scan_operator(filename, embedder):
     '''
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
 
-    assert len(mol.atomcoords) == 1, 'The scan> operator works on a single .xyz geometry.'
+    assert len(mol.coords) == 1, 'The scan> operator works on a single .xyz geometry.'
     assert len(mol.reactive_indices) in (2,4), 'The scan> operator needs two or four indices' + (
                                               f'({len(mol.reactive_indices)} were provided)')
 
@@ -641,18 +667,13 @@ def distance_scan(embedder):
     Scan direction is inferred by the reactive index distance.
     '''
 
-    import matplotlib.pyplot as plt
-
-    from firecode.algebra import norm_of
-    from firecode.pt import pt
-
     embedder.t_start_run = time.perf_counter()
     mol = embedder.objects[0]
     t_start = time.perf_counter()
 
     # shorthands for clearer code
     i1, i2 = mol.reactive_indices
-    coords = mol.atomcoords[0]
+    coords = mol.coords[0]
 
     # getting the start distance between scan indices and start energy
     d = norm_of(coords[i1]-coords[i2])
@@ -661,67 +682,64 @@ def distance_scan(embedder):
     bonds = list(mol.graph.edges)
     step = 0.05 if (i1, i2) in bonds else -0.05
 
-    # logging to file and terminal
-    embedder.log(f'--> {mol.rootname} - Performing a distance scan {"approaching" if step < 0 else "separating"} indices {i1} ' +
-                 f'and {i2} - step size {round(step, 2)} A\n    Theory level is {embedder.options.theory_level}/{embedder.options.solvent or "vacuum"} ' +
-                 f'via {embedder.options.calculator}')
-
     # creating a dictionary that will hold results
     # and the structure output list
     dists, energies, structures = [], [], []
 
     # getting atomic symbols
-    s1, s2 = mol.atomnos[[i1, i2]]
+    s1, s2 = mol.atoms[[i1, i2]]
+
+    # manually set final distance from input file
+    if hasattr(mol, "d"):
+        target = float(mol.d)
+
+        # making sure step has the right sign
+        step = 0.05 if target > d else -0.05
+        
+        max_iterations = round(abs(d-target) / abs(step))
+        embedder.log(f'--> {mol.rootname}: ({i1}-{i2}) final scan distance set to {target:.2f} A ({max_iterations} iterations)')
 
     # defining the maximum number of iterations
-    if step < 0:
-        smallest_d = 0.9*(pt[s1].covalent_radius+
-                        pt[s2].covalent_radius)
+    elif step < 0:
+        smallest_d = 0.9*(pt.covalent_radius(s1)+
+                        pt.covalent_radius(s2))
         max_iterations = round((d-smallest_d) / abs(step))
         # so that atoms are never forced closer than
         # a proportionally small distance between those two atoms.
 
     else:
-        max_d = 1.8*(pt[s1].covalent_radius+
-                   pt[s2].covalent_radius)
+        max_d = 1.6*(pt.covalent_radius(s1)+
+                   pt.covalent_radius(s2))
         max_iterations = round((max_d-d) / abs(step))
         # so that atoms are never spaced too far apart
 
-    from firecode.calculators._xtb import xtb_opt
-    if embedder.options.calculator == 'AIMNET2':
-        from aimnet2_firecode.interface import aimnet2_opt
+    # logging to file and terminal
+    embedder.log(f'--> {mol.rootname} - Performing a distance scan {"approaching" if step < 0 else "separating"} indices {i1} ' +
+                 f'and {i2} - step size {round(step, 2)} A\n    Theory level is {embedder.options.theory_level}/{embedder.options.solvent or "vacuum"} ' +
+                 f'via {embedder.options.calculator}')
 
     for i in range(max_iterations):
 
         t_start = time.perf_counter()
+           
+        coords, energy, _ = optimize(
+                                    coords,
+                                    mol.atomnos,
+                                    
+                                    calculator=embedder.options.calculator,
+                                    ase_calc=embedder.dispatcher.ase_calc,
+                                    
+                                    constrained_indices=np.array([mol.reactive_indices]),
+                                    constrained_distances=(d,),
+                                    
+                                    solvent=embedder.options.solvent,
+                                    charge=embedder.options.charge,
+                                    mult=embedder.options.mult,
+                                    dispatcher=embedder.dispatcher,
 
-        if embedder.options.calculator == 'XTB':
-            coords, energy, _ = xtb_opt(
-                                        coords,
-                                        mol.atomnos,
-                                        constrained_indices=np.array([mol.reactive_indices]),
-                                        constrained_distances=(d,),
-                                        method=embedder.options.theory_level,
-                                        solvent=embedder.options.solvent,
-                                        charge=embedder.options.charge,
-                                        title='temp',
-                                        procs=embedder.procs,
-                                        )
-            
-        elif embedder.options.calculator == 'AIMNET2':
-            coords, energy, _ = aimnet2_opt(
-                                        coords,
-                                        mol.atomnos,
-                                        ase_calc=embedder.dispatcher.aimnet2_calc,
-                                        constrained_indices=np.array([mol.reactive_indices]),
-                                        constrained_distances=(d,),
-                                        solvent=embedder.options.solvent,
-                                        charge=embedder.options.charge,
-                                        title='temp',
-                                        )
-            
-        else:
-            raise NotImplementedError()
+                                    title='temp',
+                                    debug=embedder.options.debug,
+                                    )
 
         if i == 0:
             e_0 = energy
@@ -732,7 +750,7 @@ def distance_scan(embedder):
         # print(f"------> target was {round(d, 3)} A, reached {round(norm_of(coords[mol.reactive_indices[0]]-coords[mol.reactive_indices[1]]), 3)} A")
         # saving the structure, distance and relative energy
 
-        embedder.log(f'Step {i+1:3}/{max_iterations:3} - d={round(d, 2)} A - {round(energy-e_0, 2):4} kcal/mol - {time_to_string(time.perf_counter()-t_start)}')
+        embedder.log(f'Step {i+1:3}/{max_iterations:3} - d={d:.2f} Å    {energy-e_0:+.2f} kcal/mol - {time_to_string(time.perf_counter()-t_start)}')
 
         with open("temp_scan.xyz", "w") as f:
             for i, (s, d, e) in enumerate(zip(structures, dists, energies)):
@@ -774,7 +792,7 @@ def distance_scan(embedder):
     plt.title(title)
     plt.xlabel(f'indices s{i1}-{i2} distance (A)')
 
-    if step > 0:
+    if step < 0:
         plt.gca().invert_xaxis()
         
     plt.ylabel(f'Rel. E. (kcal/mol) - {embedder.options.theory_level}/{embedder.options.calculator}/{embedder.options.solvent}')
@@ -802,6 +820,8 @@ def distance_scan(embedder):
 
     # Log data to the embedder class
     mol.scan_data = (dists, energies)
+
+    return f'{mol.filename[:-4]}_scan.xyz'
 
 def crest_is_installed() -> bool:
     '''

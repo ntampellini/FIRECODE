@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -29,20 +29,20 @@ from ase.constraints import FixInternals
 from ase.optimize import LBFGS
 from networkx.algorithms.components.connected import connected_components
 from networkx.algorithms.shortest_paths.generic import shortest_path
+from prism_pruner.algebra import dihedral
+from prism_pruner.graph_manipulations import graphize
+from prism_pruner.pruner import prune_by_rmsd
+from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.algebra import dihedral
-from firecode.ase_manipulations import ase_neb, ase_saddle, get_ase_calc
+from firecode.ase_manipulations import ase_neb
 from firecode.errors import ZeroCandidatesError
-from firecode.hypermolecule_class import graphize
 from firecode.optimization_methods import optimize
-from firecode.pruning import prune_by_rmsd
-from firecode.utils import (align_structures, clean_directory, loadbar,
-                          molecule_check, time_to_string, write_xyz)
+from firecode.utils import clean_directory, loadbar, molecule_check, write_xyz
 
 
 def ase_torsion_TSs(embedder,
+                    atoms,
                     coords,
-                    atomnos,
                     indices,
                     threshold_kcal=5,
                     title='temp',
@@ -63,7 +63,7 @@ def ase_torsion_TSs(embedder,
     
     ts_structures, energies = [], []
 
-    graph = graphize(coords, atomnos)
+    graph = graphize(atoms, coords)
     i1, i2, i3, i4 = indices
 
     if all([len(shortest_path(graph, start, end)) == 2 for start, end in zip(indices[0:-1], indices[1:])]):
@@ -116,8 +116,8 @@ def ase_torsion_TSs(embedder,
             logfile.write('\n')
 
         structures, energies = ase_dih_scan(embedder,
+                                        atoms,
                                         coords,
-                                        atomnos,
                                         indices=indices,
                                         degrees=degrees,
                                         steps=steps,
@@ -134,7 +134,7 @@ def ase_torsion_TSs(embedder,
         
         with open(title + tag + direction + '_scan.xyz', 'w') as outfile:
             for s, structure in enumerate(align_structures(np.array(structures), indices[:-1])):
-                write_xyz(structure, atomnos, outfile, title=f'Scan point {s+1}/{len(structures)} - Rel. E = {round(rel_energies[s], 3)} kcal/mol')
+                write_xyz(atoms, structure, outfile, title=f'Scan point {s+1}/{len(structures)} - Rel. E = {round(rel_energies[s], 3)} kcal/mol')
 
         if plot:
             import matplotlib.pyplot as plt
@@ -166,9 +166,10 @@ def ase_torsion_TSs(embedder,
 
             for p, peak in enumerate(peaks_indices):
 
-                sub_structures, sub_energies = ase_dih_scan(embedder,
+                sub_structures, sub_energies = ase_dih_scan(
+                                                        embedder,
+                                                        atoms,
                                                         structures[peak-1],
-                                                        atomnos,
                                                         indices=indices,
                                                         degrees=degrees/10, #1° or -1°
                                                         steps=20,
@@ -176,7 +177,8 @@ def ase_torsion_TSs(embedder,
                                                         ad_libitum=True, # goes on until the hill is crossed
                                                         indices_to_be_moved=indices_to_be_moved,
                                                         title=f'Accurate scan {p+1}/{len(peaks_indices)}',
-                                                        logfile=logfile)
+                                                        logfile=logfile,
+                                                    )
 
                 if logfile is not None:
                     logfile.write('\n')
@@ -203,12 +205,8 @@ def ase_torsion_TSs(embedder,
                     s = 's' if len(sub_peaks_indices) > 1 else ''
                     msg = f'Found {len(sub_peaks_indices)} sub-peak{s}.'
                     
-                    if embedder.options.saddle or embedder.options.neb:
-                        if embedder.options.saddle:
-                            tag = 'saddle'
-                        else:
-                            tag = 'NEB TS'
-
+                    if embedder.options.neb:
+                        tag = 'NEB TS'
                         msg += f'Performing {tag} optimization{s}.'
 
                     print(msg)
@@ -223,24 +221,8 @@ def ase_torsion_TSs(embedder,
                             y = sub_energies[sub_peak]-min_e
                             plt.plot(x, y, color='gold', marker='o', label='Maxima' if p == 0 else None, markersize=3)
 
-                        if embedder.options.saddle:
 
-                            loadbar_title = f'  > Saddle opt on sub-peak {s+1}/{len(sub_peaks_indices)}'
-                            # loadbar(s+1, len(sub_peaks_indices), loadbar_title+' '*(29-len(loadbar_title)))
-                            print(loadbar_title)
-                        
-                            optimized_geom, energy, _ = ase_saddle(embedder,
-                                                                    sub_structures[sub_peak],
-                                                                    atomnos,
-                                                                    title=f'Saddle opt - peak {p+1}, sub-peak {s+1}',
-                                                                    logfile=logfile,
-                                                                    traj=bernytraj+f'_{p+1}_{s+1}.traj' if bernytraj is not None else None)
-
-                            if molecule_check(coords, optimized_geom, atomnos):
-                                ts_structures.append(optimized_geom)
-                                energies.append(energy)
-
-                        elif embedder.options.neb:
+                        if embedder.options.neb:
 
                             loadbar_title = f'  > NEB TS opt on sub-peak {s+1}/{len(sub_peaks_indices)}, {direction[1:]}'
                             drctn = 'clkws' if direction == '_clockwise' else 'ccws'
@@ -248,14 +230,16 @@ def ase_torsion_TSs(embedder,
                             print(loadbar_title)
                         
                             optimized_geom, energy, success = ase_neb(embedder,
+                                                                        atoms,
                                                                         sub_structures[sub_peak-2],
                                                                         sub_structures[(sub_peak+1)%len(sub_structures)],
-                                                                        atomnos,
+                                                                        charge=embedder.options.charge,
+                                                                        mult=embedder.options.mult,
                                                                         n_images=5,
                                                                         title=f'{title}_NEB_peak_{p+1}_sub-peak_{s+1}_{drctn}',
                                                                         logfunction=embedder.log)
 
-                            if success and molecule_check(coords, optimized_geom, atomnos):
+                            if success and molecule_check(atoms, coords, optimized_geom):
                                 ts_structures.append(optimized_geom)
                                 energies.append(energy)
 
@@ -312,8 +296,8 @@ def atropisomer_peaks(data, min_thr, max_thr):
     return peaks
     
 def ase_dih_scan(embedder,
+            atoms,
             coords,
-            atomnos,
             indices,
             degrees=10,
             steps=36,
@@ -332,15 +316,15 @@ def ase_dih_scan(embedder,
         if not relaxed:
             raise Exception('The ad_libitum keyword is only available for relaxed scans.')
 
-    atoms = Atoms(atomnos, positions=coords)
+    atoms = Atoms(atoms, positions=coords)
     structures, energies = [], []
 
-    atoms.calc = get_ase_calc(embedder)
+    atoms.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
 
     if indices_to_be_moved is None:
-        indices_to_be_moved = range(len(atomnos))
+        indices_to_be_moved = range(len(atoms))
 
-    mask = np.array([i in indices_to_be_moved for i, _ in enumerate(atomnos)], dtype=bool)
+    mask = np.array([i in indices_to_be_moved for i, _ in enumerate(atoms)], dtype=bool)
 
     t_start = time()
 
@@ -453,36 +437,39 @@ def dihedral_scan(embedder):
 
     embedder.log(f'\n--> {mol.filename} - performing a scan of dihedral angle with indices {mol.reactive_indices}\n')
 
-    for c, coords in enumerate(mol.atomcoords):
+    for c, coords in enumerate(mol.coords):
 
-        embedder.log(f'\n--> Pre-optimizing input structure{"s" if len(mol.atomcoords) > 1 else ""} '
+        embedder.log(f'\n--> Pre-optimizing input structure{"s" if len(mol.coords) > 1 else ""} '
                    f'({embedder.options.theory_level} via {embedder.options.calculator})')
 
-        embedder.log(f'--> Performing relaxed scans (conformer {c+1}/{len(mol.atomcoords)})')
+        embedder.log(f'--> Performing relaxed scans (conformer {c+1}/{len(mol.coords)})')
 
         new_coords, ground_energy, success = optimize(
+                                                    mol.atoms,
                                                     coords,
-                                                    mol.atomnos,
                                                     embedder.options.calculator,
                                                     method=embedder.options.theory_level,
                                                     procs=embedder.procs,
-                                                    solvent=embedder.options.solvent
+                                                    solvent=embedder.options.solvent,
+                                                    debug=embedder.options.debug,
                                                 )
 
         if not success:
             embedder.log(f'Pre-optimization failed - Skipped conformer {c+1}', p=False)
             continue
 
-        structures, energies = ase_torsion_TSs(embedder,
-                                                new_coords,
-                                                mol.atomnos,
-                                                mol.reactive_indices,
-                                                threshold_kcal=embedder.options.kcal_thresh,
-                                                title=mol.rootname+f'_conf_{c+1}',
-                                                optimization=embedder.options.optimization,
-                                                logfile=embedder.logfile,
-                                                bernytraj=mol.rootname + '_berny' if embedder.options.debug else None,
-                                                plot=True)
+        structures, energies = ase_torsion_TSs(
+                                            embedder,
+                                            mol.atoms,
+                                            new_coords,
+                                            mol.reactive_indices,
+                                            threshold_kcal=embedder.options.kcal_thresh,
+                                            title=mol.rootname+f'_conf_{c+1}',
+                                            optimization=embedder.options.optimization,
+                                            logfile=embedder.logfile,
+                                            bernytraj=mol.rootname + '_berny' if embedder.options.debug else None,
+                                            plot=True,
+                                        )
 
         for structure, energy in zip(structures, energies):
             embedder.structures.append(structure)
@@ -491,6 +478,7 @@ def dihedral_scan(embedder):
     embedder.structures = np.array(embedder.structures)
     embedder.energies = np.array(embedder.energies)
     embedder.atomnos = mol.atomnos
+    embedder.atoms = mol.atoms
 
     if len(embedder.structures) == 0:
         s = ('\n--> Dihedral scan did not find any suitable maxima above the set threshold\n'
@@ -500,7 +488,7 @@ def dihedral_scan(embedder):
         raise ZeroCandidatesError()
 
     # remove similar structures (RMSD)
-    embedder.structures, mask = prune_by_rmsd(embedder.structures, mol.atomnos, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
+    embedder.structures, mask = prune_by_rmsd(embedder.structures, mol.atoms, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
     embedder.energies = embedder.energies[mask]
     if 0 in mask:
         embedder.log(f'Discarded {int(len([b for b in mask if not b]))} candidates for RMSD similarity ({len([b for b in mask if b])} left)')
@@ -511,5 +499,5 @@ def dihedral_scan(embedder):
     embedder.energies = np.array(embedder.energies)
 
     # write output and exit
-    embedder.write_structures('maxima', indices=mol.reactive_indices, relative=True, extra='(barrier height)', align='moi')
+    embedder.write_structures('maxima', indices=mol.reactive_indices, relative=True, extra='(barrier height)', align_by='moi')
     embedder.normal_termination()

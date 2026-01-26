@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -31,45 +31,42 @@ FF_OPT_BOOL = True
 FF_CALC = 'XTB'
 # Calculator to perform Force Field optimizations.
 # Possibilites are:
-# 'GAUSSIAN' : FF methods supported by Gaussian (UFF, MMFF)
 # 'XTB' : GFN-FF method
 
 DEFAULT_FF_LEVELS = {
-    ### DO NOT REMOVE
-    ### THESE TWO LINES
-    'GAUSSIAN':'UFF',
     'XTB':'GFN-FF',
 }
 # Default levels used to run calculations, overridden by FFLEVEL keyword
 
 CALCULATOR = 'XTB'
-# Calculator used to run geometry optimization.
+# Default calculator used to run geometry optimization.
 # Possibilites are:
-# 'MOPAC' : Semiempirical MOPAC2016 (PM7, PM6-DH3, ...)
-# 'ORCA' : All methods supported by ORCA
-# 'GAUSSIAN' : All methods supported by Gaussian
-# 'XTB' : All methods supported by XTB
-# 'AIMNET2' : wB97M-D3
+
+SINGLE_THREAD_BOOL = True
+# Enforce the use of a single thread in multimolecular optimization.
+# Multithread optimization is only possible with XTB, TBLITE and ORCA calculators
+# but may suffer from performance issues on some machines.
+
+UMA_MODEL_PATH = "./uma-s-1p1.pt"
+# Path of UMA model to load, either relative (to firecode/calculators/) or absolute 
 
 DEFAULT_LEVELS = {
-    'MOPAC':'PM7',
     'ORCA':'PM3',
-    'GAUSSIAN':'PM6',
+    'XTB':'GFN2-xTB',
     'XTB':'GFN2-xTB',
     'AIMNET2':'wB97M-D3',
+    'UMA':'OMOL',
 }
 # Default levels used to run calculations, overridden by LEVEL keyword
 
 COMMANDS = {
-    'MOPAC':'MOPAC2016.exe',
     'ORCA':'/vast/palmer/apps/avx.grace/software/ORCA/5.0.4-gompi-2020b/bin/orca',
-    'GAUSSIAN':'g09.exe',
     'XTB':'xtb',
 }
 # Command with which calculators will be called from the command line
 
-PROCS = 0
-# Number of processors (cores) per job to be used by XTB, ORCA and/or Gaussian (0 is auto)
+PROCS = 4
+# Number of processors (cores) per job to be used by XTB or ORCA (0 is auto)
 
-MEM_GB = 8
-# Memory allocated for each job (Gaussian/ORCA)
+MEM_GB = 4
+# Memory allocated for each job (ORCA)

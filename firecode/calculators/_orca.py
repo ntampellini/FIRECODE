@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -26,27 +26,30 @@ from subprocess import STDOUT, check_call
 
 from firecode.settings import COMMANDS, MEM_GB
 from firecode.solvents import get_solvent_line
-from firecode.utils import clean_directory, pt, read_xyz
+from firecode.utils import clean_directory, read_xyz
 
 
-def orca_opt(coords,
-             atomnos,
-             constrained_indices=None,
-             method='PM3',
-             charge=0,
-             procs=1,
-             maxiter=None,
-             mem=MEM_GB,
-             solvent=None,
-             title='temp',
-             read_output=True,
-             **kwargs):
+def orca_opt(
+            atoms,
+            coords,
+            constrained_indices=None,
+            method='PM3',
+            charge=0,
+            mult=1,
+            procs=1,
+            maxiter=None,
+            mem=MEM_GB,
+            solvent=None,
+            title='temp',
+            read_output=True,
+            **kwargs,
+        ):
     '''
     This function writes an ORCA .inp file, runs it with the subprocess
     module and reads its output.
 
+    :params atoms: array of element strings.
     :params coords: array of shape (n,3) with cartesian coordinates for atoms.
-    :params atomnos: array of atomic numbers for atoms.
     :params constrained_indices: array of shape (n,2), with the indices
                                  of atomic pairs to be constrained.
     :params method: string, specifiyng the first line of keywords for the MOPAC input file.
@@ -77,10 +80,10 @@ def orca_opt(coords,
         s += f'%{""}geom\n  MaxIter {maxiter}\nend\n'
         # weird f-string to prevent python misinterpreting %
 
-    s += f'*xyz {charge} 1\n'
+    s += f'*xyz {charge} {mult}\n'
 
     for i, atom in enumerate(coords):
-        s += '%s     % .6f % .6f % .6f\n' % (pt[atomnos[i]].symbol, atom[0], atom[1], atom[2])
+        s += '%s     % .6f % .6f % .6f\n' % (atoms[i], atom[0], atom[1], atom[2])
 
     s += '*\n'
 
@@ -99,7 +102,7 @@ def orca_opt(coords,
     if read_output:
 
         try:
-            opt_coords = read_xyz(f'{title}.xyz').atomcoords[0]
+            opt_coords = read_xyz(f'{title}.xyz').coords[0]
             energy = read_orca_property(f'{title}_property.txt')
 
             clean_directory((f'{title}.inp',))

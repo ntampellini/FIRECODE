@@ -5,18 +5,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import CalculationFailed
-from ase.dyneb import DyNEB
+from ase.mep import DyNEB
 from ase.optimize import LBFGS
+from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.ase_manipulations import (PreventScramblingConstraint, ase_dump,
-                                      get_ase_calc)
-from firecode.utils import align_structures, time_to_string
+from firecode.ase_manipulations import PreventScramblingConstraint, ase_dump
 
 
 def ase_mep_relax(
         embedder,
+        atoms,
         structures,
-        atomnos,
         n_images=None,
         maxiter=200,
         title='temp',
@@ -29,7 +28,7 @@ def ase_mep_relax(
     '''
     embedder: firecode embedder object
     structures: array of coordinates to be used as starting points
-    atomnos: 1-d array of atomic numbers
+    atoms: 1-d array of atomic strings
     n_images: total number of optimized images connecting reag/prods
     maxiter: maximum number of ensemble optimization steps
     title: name used to write the final MEP as a .xyz file
@@ -45,24 +44,16 @@ def ase_mep_relax(
         n_images = 10
 
     if len(structures) < n_images:
-        # images = interpolate_structures(align_structures(structures), atomnos, n=n_images)
 
-        # # If any molecule exploded, try linear interpolation
-        # if any([True in np.isnan(image.get_positions()) for image in images]) or (
-        #     np.max([image.get_positions() for image in images]) > 100):
-
-        #     if logfunction is not None:
-        #         logfunction(f'\n--> IDPP interpolation of structures failed, falling back to linear interpolation.')
-
-        images = interpolate_structures(align_structures(structures), atomnos, n=n_images, method='linear')
+        images = interpolate_structures(atoms, align_structures(structures), n=n_images, method='linear')
 
         if logfunction is not None:
             logfunction(f'\n--> Interpolation of structures successful ({len(images)} images)')
 
     else:
-        images = [Atoms(atomnos, positions=coords) for coords in align_structures(structures)]
+        images = [Atoms(atoms, positions=coords) for coords in align_structures(structures)]
 
-    ase_dump('interpolated_MEP_guess.xyz', images, atomnos)
+    ase_dump('interpolated_MEP_guess.xyz', atoms, images)
 
     neb = DyNEB(images,
                 k=0.1,
@@ -77,7 +68,7 @@ def ase_mep_relax(
   
     # Set calculators for all images
     for _, image in enumerate(images):
-        image.calc = get_ase_calc(embedder)
+        image.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
 
         if safe:
             bond_constr = PreventScramblingConstraint(embedder.objects[0].graph, image)
@@ -105,7 +96,7 @@ def ase_mep_relax(
                     if logfunction is not None:
                         logfunction(f'--> Ran {maxiter//10*ss} steps, wrote partially optimized traj to {title}_MEP.xyz')
 
-                    ase_dump(f'{title}_MEP.xyz', images, atomnos, [image.get_total_energy() * 23.06054194532933 for image in images])
+                    ase_dump(f'{title}_MEP.xyz', atoms, images, [image.get_total_energy() * 23.06054194532933 for image in images])
 
                 iterations = opt.nsteps
                 exit_status = 'CONVERGED' if iterations < maxiter-1 else 'MAX ITER'
@@ -114,7 +105,7 @@ def ase_mep_relax(
         if logfunction is not None:
             logfunction(f'    - MEP relax for {title} CRASHED ({time_to_string(time.perf_counter()-t_start)})\n')
             try:
-                ase_dump(f'{title}_MEP_crashed.xyz', neb.images, atomnos)
+                ase_dump(f'{title}_MEP_crashed.xyz', atoms, neb.images)
             except Exception():
                 pass
         return None, None, False
@@ -127,7 +118,7 @@ def ase_mep_relax(
   
     energies = [image.get_total_energy() * 23.06054194532933 for image in images] # eV to kcal/mol
     
-    ase_dump(f'{title}_MEP.xyz', images, atomnos, energies)
+    ase_dump(f'{title}_MEP.xyz', atoms, images, energies)
     # Save the converged MEP (minimum energy path) to an .xyz file
 
     if write_plot:
@@ -151,7 +142,7 @@ def ase_mep_relax(
 
     return mep, energies, exit_status
 
-def interpolate_structures(structures, atomnos, n, method='idpp'):
+def interpolate_structures(atoms, structures, n, method='idpp'):
     '''
     Return n interpolated structures from the
     first to the last present in structures
@@ -160,8 +151,8 @@ def interpolate_structures(structures, atomnos, n, method='idpp'):
     '''
     if len(structures) == 2:
         images = [None for _ in range(n)]
-        images[0] = Atoms(atomnos, positions=structures[0])
-        images[-1] = Atoms(atomnos, positions=structures[-1])
+        images[0] = Atoms(atoms, positions=structures[0])
+        images[-1] = Atoms(atoms, positions=structures[-1])
         group_ranges = [(0,n-1)]
 
     else:
@@ -173,9 +164,9 @@ def interpolate_structures(structures, atomnos, n, method='idpp'):
         mappings[-1] = len(structures)
 
         # initialize output container with initial structures mapped in
-        images = [Atoms(atomnos, positions=structures[mappings.index(i)])
+        images = [Atoms(atoms, positions=structures[mappings.index(i)])
                     if i in mappings else None for i in range(n)]
-        images[-1] = Atoms(atomnos, positions=structures[-1])
+        images[-1] = Atoms(atoms, positions=structures[-1])
 
         # calculate ranges to fill
         group_ranges = [(mappings[i], mappings[i+1]) for i, _ in enumerate(mappings[:-1])

@@ -1,12 +1,12 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
+it under the terms of the GNU Lesser General Public License as publishedby
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
@@ -22,32 +22,34 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 '''
 
 import os
+import sys
 import time
 import warnings
 from copy import deepcopy
+from shutil import rmtree
 
 import matplotlib.pyplot as plt
 import numpy as np
 from ase import Atoms
 from ase.calculators.calculator import (CalculationFailed,
                                         PropertyNotImplementedError)
-from ase.calculators.gaussian import Gaussian
-from ase.calculators.mopac import MOPAC
-from ase.calculators.orca import ORCA
 from ase.constraints import FixInternals
-from ase.dyneb import DyNEB
-from ase.optimize import BFGS, LBFGS
+from ase.mep import DyNEB
+from ase.optimize import BFGS, FIRE, LBFGS
+from ase.thermochemistry import IdealGasThermo
 from ase.vibrations import Vibrations
-from sella import Sella
+from prism_pruner.algebra import dihedral, get_alignment_matrix, normalize
+from prism_pruner.graph_manipulations import d_min_bond, find_paths, graphize
+from prism_pruner.rmsd import rmsd_and_max
+from prism_pruner.utils import (align_structures, get_double_bonds_indices,
+                                time_to_string)
 
-from firecode.algebra import dihedral, norm, norm_of, point_angle
-from firecode.graph_manipulations import findPaths, graphize, neighbors
-from firecode.rmsd import get_alignment_matrix
-from firecode.settings import COMMANDS, MEM_GB
-from firecode.solvents import get_solvent_line
-from firecode.utils import (HiddenPrints, align_structures, clean_directory,
-                            get_double_bonds_indices, molecule_check,
-                            scramble_check, time_to_string, write_xyz)
+from firecode.algebra import norm_of, point_angle
+from firecode.calculators.__init__ import NewFolderContext
+from firecode.calculators.dummy_ase_calc import DummyCalculator
+from firecode.units import EH_TO_EV, EH_TO_KCAL, EV_TO_KCAL
+from firecode.utils import (HiddenPrints, cartesian_product, clean_directory,
+                            molecule_check, suppress_stdout_stderr, write_xyz)
 
 
 class Spring:
@@ -77,8 +79,8 @@ class Spring:
         spring_force = np.clip(spring_force, -50, 50)
         # force is clipped at 50 eV/A ()
 
-        forces[self.i1] += (norm(direction) * spring_force)
-        forces[self.i2] -= (norm(direction) * spring_force)
+        forces[self.i1] += (normalize(direction) * spring_force)
+        forces[self.i2] -= (normalize(direction) * spring_force)
         # applying harmonic force to each atom, directed toward the other one
 
     def __repr__(self):
@@ -91,9 +93,10 @@ class HalfSpring:
     only if those two atoms are at least d_max
     Angstroms apart.
     '''
-    def __init__(self, i1, i2, d_max, k=1000):
+    def __init__(self, i1, i2, d_max, d_eq, k=300):
         self.i1, self.i2 = i1, i2
         self.d_max = d_max
+        self.d_eq = d_eq
         self.k = k
 
     def adjust_positions(self, atoms, newpositions):
@@ -106,18 +109,18 @@ class HalfSpring:
 
         if norm_of(direction) > self.d_max:
 
-            spring_force = self.k * (norm_of(direction) - self.d_max)
+            spring_force = self.k * (norm_of(direction) - self.d_eq)
             # absolute spring force (float). Positive if spring is overstretched.
 
             spring_force = np.clip(spring_force, -50, 50)
             # force is clipped at 50 eV/A
 
-            forces[self.i1] += (norm(direction) * spring_force)
-            forces[self.i2] -= (norm(direction) * spring_force)
+            forces[self.i1] += (normalize(direction) * spring_force)
+            forces[self.i2] -= (normalize(direction) * spring_force)
             # applying harmonic force to each atom, directed toward the other one
 
     def __repr__(self):
-        return f'Spring - ids:{self.i1}/{self.i2} - d_max:{self.d_max}, k:{self.k}'
+        return f'Halfspring - ids:{self.i1}/{self.i2} - d_max:{self.d_max}, d_eq:{self.d_eq}, k:{self.k}'
 
 class PlanarAngleSpring:
     '''
@@ -165,7 +168,7 @@ class PlanarAngleSpring:
         normal = np.cross(e21, e23)
         if norm_of(normal) > 1e-10:  # Check if atoms aren't collinear
             
-            normal = norm(normal)
+            normal = normalize(normal)
             
             # Calculate perpendicular directions in the plane
             f1_direction = np.cross(e21, normal)
@@ -289,151 +292,69 @@ class DihedralSpring:
     def __repr__(self):
         return f'DihedralSpring(ids: {self.i1}/{self.i2}/{self.i3}/{self.i4}, eq_angle: {self.eq_angle})'
 
-def get_ase_calc(embedder):
+class NewBondPreventer:
     '''
-    Attach the correct ASE calculator
-    to the ASE Atoms object.
-    embedder: either a firecode embedder object or
-    a 4-element strings tuple containing
-    (calculator, method, procs, solvent)
+    ASE Custom Constraint Class
+    Adds an harmonic force between close pairs of atoms (<4 Å)
+    that should not be bonded, in order to push them apart.
+
     '''
-    if isinstance(embedder, tuple):
-        calculator, method, procs, solvent = embedder
 
-    else:
-        calculator = embedder.options.calculator
-        method = embedder.options.theory_level
-        procs = embedder.procs
-        solvent = embedder.options.solvent
+    def __init__(self, atoms, ref_coords, bonds):
+        self.atoms = atoms
+        self.bonds = bonds
+        self.k = 5
 
-    if calculator == 'XTB':
-        try:
-            from xtb.ase.calculator import XTB
-        except ImportError:
-            raise Exception(('Cannot import xtb python bindings. Install them with:\n'
-                             '>>> conda install -c conda-forge xtb-python\n'
-                             '(See https://github.com/grimme-lab/xtb-python)'))
+        n = len(atoms)
+        self.nonbound_pairs = []
+        for i1, i2 in cartesian_product(range(n), range(n)):
+            if i2 > i1 and (i1, i2) not in bonds and (i2, i1) not in bonds:
+                if norm_of(ref_coords[i1]-ref_coords[i2]) < 4:
+                    self.nonbound_pairs.append((i1, i2))
 
-        from firecode.solvents import (solvent_synonyms, xtb_solvents,
-                                       xtb_supported)
-                                     
-        solvent = solvent_synonyms[solvent] if solvent in solvent_synonyms else solvent
-        solvent = 'none' if solvent is None else solvent
+        self.nonbound_dists = []
+        for bond in self.nonbound_pairs:
+            i1, i2 = bond
+            e1, e2 = atoms[i1], atoms[i2]
+            cov_rad = d_min_bond(e1, e2, factor=1.0)
+            self.nonbound_dists.append(cov_rad)
 
-        if solvent not in xtb_solvents:
-            raise Exception(f'Solvent \'{solvent}\' not supported by XTB. Supported solvents are:\n{xtb_supported}')
+        print(self)
 
-        return XTB(method=method, solvent=solvent)
-    
-    if calculator == 'AIMNET2':
-        try:
-            from aimnet2_firecode.interface import get_aimnet2_calc
-        except ImportError:
-            raise Exception(('Cannot import AIMNET2 python bindings. Install them with:\n'
-                             '>>> pip install aimnet2_firecode\n'))
-        
-        if hasattr(embedder.dispatcher, "aimnet2_calc"):
-            return embedder.dispatcher.aimnet2_calc
-        
-        else:
-            return get_aimnet2_calc(method=method, logfunction=embedder.log)
-    
-    command = COMMANDS[calculator]
+    def adjust_positions(self, atoms, newpositions):
+        pass
 
-    if calculator == 'MOPAC':
+    def adjust_forces(self, atoms, forces):
 
-        if solvent is not None:
-            method = method + ' ' + get_solvent_line(solvent, calculator, method)
+        for pair, dist in zip(self.nonbound_pairs, self.nonbound_dists):
 
-        return MOPAC(label='temp',
-                    command=f'{command} temp.mop > temp.cmdlog 2>&1',
-                    method=method+' GEO-OK')
+            i1, i2 = pair
 
-    if calculator == 'ORCA':
+            direction = atoms.positions[i2] - atoms.positions[i1]
+            # vector connecting atom1 to atom2
 
-        orcablocks = ''
+            norm_of_d = norm_of(direction)
 
-        if procs > 1:
-            orcablocks += f'%pal nprocs {procs} end'
+            spring_force = self.k * 1/((norm_of_d - dist + 0.5)**2)
+            # absolute spring force (float). Positive if spring is overstretched.
 
-        if solvent is not None:
-            orcablocks += get_solvent_line(solvent, calculator, method)
+            spring_force = np.clip(spring_force, -50, 50)
+            # force is clipped at 50 eV/A
 
-        return ORCA(label='temp',
-                    command=f'{command} temp.inp "--oversubscribe" > temp.out 2>&1',
-                    orcasimpleinput=method,
-                    orcablocks=orcablocks)
+            forces[i1] -= (normalize(direction) * spring_force)
+            forces[i2] += (normalize(direction) * spring_force)
+            # applying harmonic force to each atom, directed toward the other one
 
-    if calculator == 'GAUSSIAN':
+    def __repr__(self):
+        return f'NewBondPreventer - k:{self.k} - nonbound_pairs : {len(self.nonbound_pairs)}'
 
-        if solvent is not None:
-            method = method + ' ' + get_solvent_line(solvent, calculator, method)
 
-        mem = str(MEM_GB)+'GB' if MEM_GB >= 1 else str(int(1000*MEM_GB))+'MB'
-
-        calc = Gaussian(label='temp',
-                        command=f'{command} temp.com',
-                        method=method,
-                        nprocshared=procs,
-                        mem=mem,
-                        )
-
-        if 'g09' in command:
-
-            from ase.io import read
-            def g09_read_results(self=calc):
-                output = read(self.label + '.out', format='gaussian-out')
-                self.calc = output.calc
-                self.results = output.calc.results
-
-            calc.read_results = g09_read_results
-
-            # Adapting for g09 outputting .out files instead of g16 .log files.
-            # This is a bad fix and the issue should be corrected in the ASE
-            # source code: merge request on GitHub pending to be written
-
-            return calc
-
-def ase_saddle(embedder, coords, atomnos, constrained_indices=None, mols_graphs=None, title='temp', logfile=None, traj=None, freq=False, maxiterations=200):
-    '''
-    Runs a first order saddle optimization through the ASE package
-    '''
-    atoms = Atoms(atomnos, positions=coords)
-
-    atoms.calc = get_ase_calc(embedder)
-    
-    t_start = time.perf_counter()
-    with HiddenPrints():
-        with Sella(atoms,
-                    logfile=logfile,
-                    order=1,
-                    trajectory=traj) as opt:
-
-            opt.run(fmax=0.05, steps=maxiterations)
-            iterations = opt.nsteps
-
-    if logfile is not None:
-        t_end_berny = time.perf_counter()
-        elapsed = t_end_berny - t_start
-        exit_str = 'converged' if iterations < maxiterations else 'stopped'
-        logfile.write(f'{title} - {exit_str} in {iterations} steps ({time_to_string(elapsed)})\n')
-
-    new_structure = atoms.get_positions()
-    energy = atoms.get_total_energy() * 23.06054194532933 #eV to kcal/mol
-
-    if mols_graphs is not None:
-        success = scramble_check(new_structure, atomnos, constrained_indices, mols_graphs, max_newbonds=embedder.options.max_newbonds)
-    else:
-        success = molecule_check(coords, new_structure, atomnos, max_newbonds=embedder.options.max_newbonds)
-
-    return new_structure, energy, success
-
-def ase_vib(embedder, coords, atomnos, logfunction=None, title='temp'):
+def ase_vib(embedder, atoms, coords, logfunction=None, title='temp'):
     '''
     Calculate frequencies through ASE - returns frequencies and number of negatives (not in use)
     '''
-    atoms = Atoms(atomnos, positions=coords)
-    atoms.calc = get_ase_calc(embedder)
+    atoms = Atoms(atoms, positions=coords)
+    atoms.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
     vib = Vibrations(atoms, name=title)
 
     if os.path.isdir(title):
@@ -452,7 +373,7 @@ def ase_vib(embedder, coords, atomnos, logfunction=None, title='temp'):
         vib.run()
 
     # freqs = vib.get_frequencies()
-    freqs = vib.get_energies()* 8065.544 # from eV to cm-1 
+    freqs = vib.get_energies() * 8065.544 # from eV to cm-1 
 
     if logfunction is not None:
         elapsed = time.perf_counter() - t_start
@@ -462,12 +383,27 @@ def ase_vib(embedder, coords, atomnos, logfunction=None, title='temp'):
 
     return freqs, np.count_nonzero(freqs.imag > 1e-3)
 
-def ase_neb(embedder, reagents, products, atomnos, ts_guess=None, n_images=6, mep_override=None, title='temp', optimizer=LBFGS, logfunction=None, write_plot=False, verbose_print=False):
+def ase_neb(
+        embedder,
+        atoms,
+        reagents,
+        products,
+        charge=0,
+        mult=1,
+        ts_guess=None,
+        n_images=6,
+        mep_input=None,
+        title='temp',
+        optimizer=LBFGS, 
+        logfunction=None, 
+        write_plot=False, 
+        verbose_print=False,
+    ):
     '''
     embedder: firecode embedder object
     reagents: coordinates for the atom arrangement to be used as reagents
     products: coordinates for the atom arrangement to be used as products
-    atomnos: 1-d array of atomic numbers
+    atoms: 1-d array of atomic element strings
     n_images: number of optimized images connecting reag/prods
     title: name used to write the final MEP as a .xyz file
     optimizer: ASE optimizer to be used in 
@@ -477,12 +413,25 @@ def ase_neb(embedder, reagents, products, atomnos, ts_guess=None, n_images=6, me
     energy in kcal/mol and a boolean value indicating success.
     '''
     reagents, products = align_structures(np.array([reagents, products]))
-    first = Atoms(atomnos, positions=reagents)
-    last = Atoms(atomnos, positions=products)
+    first = Atoms(atoms, positions=reagents)
+    last = Atoms(atoms, positions=products)
 
-    if mep_override is not None:
+    if mep_input is not None:
 
-        images = [Atoms(atomnos, positions=coords) for coords in mep_override]
+        if len(mep_input) == n_images:
+            images = [Atoms(atoms, positions=coords) for coords in mep_input]
+            if logfunction is not None:
+                logfunction(f'--> Running NEB with the provided {n_images} images.')
+
+        elif len(mep_input) > n_images:
+            picked_indices = most_different_structures_ids(mep_input, n_images)
+            images = [Atoms(atoms, positions=mep_input[i]) for i in picked_indices]
+
+            if logfunction is not None:
+                logfunction(f'--> NEB: Picking the most different {n_images} images from the {len(mep_input)} structures input.')
+                s = ", ".join([str(i) if i in picked_indices else "_" for i, _ in enumerate(mep_input)])
+                logfunction(f'[{s}]')
+
         neb = DyNEB(images, fmax=0.05, climb=False, method='eb', scale_fmax=1, allow_shared_calculator=True)
 
     elif ts_guess is None:
@@ -493,8 +442,11 @@ def ase_neb(embedder, reagents, products, atomnos, ts_guess=None, n_images=6, me
         neb = DyNEB(images, fmax=0.05, climb=False, method='eb', scale_fmax=1, allow_shared_calculator=True)
         neb.interpolate(method='idpp')
 
+        if logfunction is not None:
+            logfunction(f'--> NEB: Interpolating {n_images} images from the two input structures.')
+
     else:
-        ts_guess = Atoms(atomnos, positions=ts_guess)
+        ts_guess = Atoms(atoms, positions=ts_guess)
 
         images_1 = [first] + [first.copy() for _ in range(round((n_images-3)/2))] + [ts_guess]
         interp_1 = DyNEB(images_1)
@@ -508,15 +460,21 @@ def ase_neb(embedder, reagents, products, atomnos, ts_guess=None, n_images=6, me
 
         neb = DyNEB(images, fmax=0.05, climb=False, method='eb', scale_fmax=1, allow_shared_calculator=True)
 
-    if mep_override is None:
-        ase_dump(f'{title}_MEP_guess.xyz', images, atomnos)
+        if logfunction is not None:
+            logfunction(f'--> NEB: Interpolating {n_images} images from the two input structures and TS guess.')
 
-    if verbose_print and logfunction is not None and mep_override is None:
+
+    if mep_input is None:
+        ase_dump(f'{title}_MEP_guess.xyz', atoms, images)
+
+    if verbose_print and logfunction is not None and mep_input is None:
         logfunction(f'\n\n--> Saved interpolated MEP guess to {title}_MEP_guess.xyz\n')
     
     # Set calculators for all images
+    ase_calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
     for _, image in enumerate(images):
-        image.calc = get_ase_calc(embedder)
+        image.calc = ase_calc
+        image.info.update({'charge':charge, 'spin':mult})
 
     t_start = time.perf_counter()
 
@@ -528,38 +486,43 @@ def ase_neb(embedder, reagents, products, atomnos, ts_guess=None, n_images=6, me
             # ignore runtime warnings from the NEB module:
             # if something went wrong, we will deal with it later
 
-            with optimizer(neb, maxstep=0.1, logfile=None if not verbose_print else 'neb_opt.log') as opt:
+        with optimizer(neb, maxstep=0.2, logfile='neb_opt.log' if verbose_print else None) as opt:
+            
+            # Phase 1: Fast initial relaxation with large steps
+            if verbose_print and logfunction is not None:
+                logfunction(f'\n--> Running NEB through ASE ({embedder.options.theory_level})')
+            
+            opt.run(fmax=0.2, steps=50)
+            
+            # Phase 2: Medium steps, tighter convergence
+            opt.maxstep = 0.1
+            opt.run(fmax=0.1, steps=50+opt.nsteps)
 
-                if verbose_print and logfunction is not None:
-                    logfunction(f'\n--> Running NEB-CI through ASE ({embedder.options.theory_level} via {embedder.options.calculator})')
+            # Phase 3: Fine-tune before climbing
+            opt.maxstep = 0.05
+            opt.run(fmax=0.075, steps=30+opt.nsteps)
+            
+            # Phase 4: Climbing image with small steps
+            if verbose_print and logfunction is not None:
+                logfunction('--> Activating Climbing Image')
 
-                opt.run(fmax=0.05, steps=20)
-                while neb.get_residual() > 0.1:
-                    opt.run(fmax=0.05, steps=10+opt.nsteps)
-                    # some free relaxation before starting to climb
-                    if opt.nsteps > 500 or opt.converged:
-                        break
-
-                if verbose_print and logfunction is not None:
-                    logfunction('--> fmax below 0.1: Activated Climbing Image and smaller maxstep')
-
-                ase_dump(f'{title}_MEP_start_of_CI.xyz', neb.images, atomnos)
-
-                optimizer.maxstep = 0.01
-                neb.climb = True
-
-                opt.run(fmax=0.05, steps=250+opt.nsteps)
-
-                iterations = opt.nsteps
-                exit_status = 'CONVERGED' if iterations < 279 else 'MAX ITER'
-
+            energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
+            ase_dump(f'{title}_MEP_start_of_CI.xyz', atoms, neb.images, energies)
+            
+            opt.maxstep = 0.01
+            neb.climb = True
+            
+            opt.run(fmax=0.05, steps=400+opt.nsteps)
+            
+            # iterations = opt.nsteps
+            exit_status = 'CONVERGED' if opt.converged else 'MAX ITER'                
         # success = True if exit_status == 'CONVERGED' else False
 
     except (PropertyNotImplementedError, CalculationFailed):
         if logfunction is not None:
             logfunction(f'    - NEB for {title} CRASHED ({time_to_string(time.perf_counter()-t_start)})\n')
             try:
-                ase_dump(f'{title}_MEP_crashed.xyz', neb.images, atomnos)
+                ase_dump(f'{title}_MEP_crashed.xyz', atoms, neb.images)
             except Exception():
                 pass
         return None, None, None, False
@@ -570,14 +533,14 @@ def ase_neb(embedder, reagents, products, atomnos, ts_guess=None, n_images=6, me
     if logfunction is not None:
         logfunction(f'    - NEB for {title} {exit_status} ({time_to_string(time.perf_counter()-t_start)})\n')
 
-    energies = [image.get_total_energy() * 23.06054194532933 for image in images] # eV to kcal/mol
+    energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
     
     ts_id = energies.index(max(energies))
     # print(f'TS structure is number {ts_id}, energy is {max(energies)}')
 
-    if mep_override is None:
+    if mep_input is None:
         os.remove(f'{title}_MEP_guess.xyz')
-    ase_dump(f'{title}_MEP.xyz', images, atomnos, energies)
+    ase_dump(f'{title}_MEP.xyz', atoms, images, energies)
     # Save the converged MEP (minimum energy path) to an .xyz file
 
     if write_plot:
@@ -647,11 +610,11 @@ class OrbitalSpring:
         # spring_force = np.clip(spring_force, -50, 50)
         # # force is clipped at 5 eV/A
 
-        force_direction1 = np.sign(spring_force) * norm(np.mean((norm(+orb_direction),
-                                                                    norm(self.orb1-atoms.positions[self.i1])), axis=0))
+        force_direction1 = np.sign(spring_force) * normalize(np.mean((normalize(+orb_direction),
+                                                                    normalize(self.orb1-atoms.positions[self.i1])), axis=0))
 
-        force_direction2 = np.sign(spring_force) * norm(np.mean((norm(-orb_direction),
-                                                                    norm(self.orb2-atoms.positions[self.i2])), axis=0))
+        force_direction2 = np.sign(spring_force) * normalize(np.mean((normalize(-orb_direction),
+                                                                    normalize(self.orb2-atoms.positions[self.i2])), axis=0))
 
         # versors specifying the direction at which forces act, that is on the
         # bisector of the angle between vector connecting atom to orbital and
@@ -669,11 +632,11 @@ class OrbitalSpring:
         if norm_of(orb_direction) > 2:
             torque1 = np.cross(self.orb1 - atoms.positions[self.i1], force_direction1)
             for i in self.neighbors_of_1:
-                forces[i] += norm(np.cross(torque1, atoms.positions[i] - atoms.positions[self.i1])) * spring_force
+                forces[i] += normalize(np.cross(torque1, atoms.positions[i] - atoms.positions[self.i1])) * spring_force
 
             torque2 = np.cross(self.orb2 - atoms.positions[self.i2], force_direction2)
             for i in self.neighbors_of_2:
-                forces[i] += norm(np.cross(torque2, atoms.positions[i] - atoms.positions[self.i2])) * spring_force
+                forces[i] += normalize(np.cross(torque2, atoms.positions[i] - atoms.positions[self.i2])) * spring_force
 
 def PreventScramblingConstraint(graph, atoms, double_bond_protection=False, fix_angles=False):
     '''
@@ -687,7 +650,7 @@ def PreventScramblingConstraint(graph, atoms, double_bond_protection=False, fix_
         allpaths = []
 
         for node in graph:
-            allpaths.extend(findPaths(graph, node, 2))
+            allpaths.extend(find_paths(graph, node, 2))
 
         allpaths = {tuple(sorted(path)) for path in allpaths}
 
@@ -705,10 +668,10 @@ def PreventScramblingConstraint(graph, atoms, double_bond_protection=False, fix_
         if double_bonds != []:
             dihedrals_deg = []
             for a, b in double_bonds:
-                n_a = neighbors(graph, a)
+                n_a = graph.neighbors(a)
                 n_a.remove(b)
 
-                n_b = neighbors(graph, b)
+                n_b = graph.neighbors(b)
                 n_b.remove(a)
 
                 d = [n_a[0], a, b, n_b[0]]
@@ -718,8 +681,8 @@ def PreventScramblingConstraint(graph, atoms, double_bond_protection=False, fix_
 
 def ase_popt(
                 embedder,
+                atoms,
                 coords,
-                atomnos,
 
                 constrained_indices=None,
                 constrained_distances=None,
@@ -730,25 +693,29 @@ def ase_popt(
                 constrained_dihedrals_indices=None,
                 constrained_dihedrals_values=None,
 
+                ase_constraints=None,
+
                 steps=500,
                 safe=False,
                 safe_mask=None,
                 traj=None,
                 logfunction=None,
                 title='temp',
+
+                **kwargs,
         ):
     '''
     embedder: firecode embedder object
     coords: 
-    atomnos: 
+    atoms: 
     constrained_indices:
     safe: if True, adds a potential that prevents atoms from scrambling
     safe_mask: bool array, with False for atoms to be excluded when calculating bonds to preserve
     traj: if set to a string, traj is used as a filename for the bending trajectory.
     not only the atoms will be printed, but also all the orbitals and the active pivot.
     '''
-    atoms = Atoms(atomnos, positions=coords)
-    atoms.calc = get_ase_calc(embedder)
+    atoms = Atoms(atoms, positions=coords)
+    atoms.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
     constraints = []
 
     if constrained_indices is not None:
@@ -772,8 +739,11 @@ def ase_popt(
             tgt_angle = constrained_dihedrals_values[i] or dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
             constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
 
+    if ase_constraints is not None:
+        constraints.extend(ase_constraints)
+
     if safe:
-        constraints.append(PreventScramblingConstraint(graphize(coords, atomnos, safe_mask),
+        constraints.append(PreventScramblingConstraint(graphize(atoms, coords, safe_mask),
                                                         atoms,
                                                         double_bond_protection=embedder.options.double_bond_protection,
                                                         fix_angles=embedder.options.fix_angles_in_deformation))
@@ -792,9 +762,120 @@ def ase_popt(
         exit_str = 'REFINED' if success else 'MAX ITER'
         logfunction(f'    - {title} {exit_str} ({iterations} iterations, {time_to_string(time.perf_counter()-t_start_opt)})')
 
-    energy = atoms.get_total_energy() * 23.06054194532933 #eV to kcal/mol
+    if embedder.option.final_sp_level is None:
+        energy = atoms.get_total_energy() * EV_TO_KCAL
+
+    else:
+        atoms.calc = embedder.dispatcher.get_ase_calc(embedder.options.final_sp_level, embedder.options.solvent)
+        energy = atoms.get_total_energy() * EV_TO_KCAL
 
     return new_structure, energy, success
+
+def ase_popt_lite(
+                atoms,
+                coords,
+                ase_calc,
+
+                constrained_indices=None,
+                constrained_distances=None,
+
+                constrained_angles_indices=None,
+                constrained_angles_values=None,
+
+                constrained_dihedrals_indices=None,
+                constrained_dihedrals_values=None,
+
+                ase_constraints=None,
+                new_bond_preventer=None,
+
+                steps=500,
+                traj=None,
+                logfunction=None,
+                title='temp',
+
+                dummy_first=False,
+
+                **kwargs,
+        ):
+    '''
+    embedder: firecode embedder object
+    coords: 
+    atoms: 
+    constrained_indices:
+ 
+    dummy_first: run a cycle with a fast, empty optimizer first, still enforcing constraints
+
+    '''
+    atoms = Atoms(atoms, positions=coords)
+
+    if dummy_first:
+        atoms.calc = DummyCalculator()
+        new_bond_preventer = new_bond_preventer or []
+    else:
+        atoms.calc = ase_calc
+
+    constraints = []
+
+    if constrained_indices is not None:
+        constrained_distances = constrained_distances or [None for _ in constrained_indices]
+        for i, c in enumerate(constrained_indices):
+            i1, i2 = c
+            tgt_dist = constrained_distances[i] or norm_of(coords[i1]-coords[i2])
+            constraints.append(Spring(i1, i2, tgt_dist))
+
+    if constrained_angles_indices is not None:
+        constrained_angles_values = constrained_angles_values or [None for _ in constrained_angles_indices]
+        for i, c in enumerate(constrained_angles_indices):
+            i1, i2, i3 = c
+            tgt_angle = constrained_angles_values[i] or point_angle(coords[i1], coords[i2], coords[i3])
+            constraints.append(PlanarAngleSpring(i1, i2, i3, tgt_angle))
+
+    if constrained_dihedrals_indices is not None:
+        constrained_dihedrals_values = constrained_dihedrals_values or [None for _ in constrained_dihedrals_indices]
+        for i, c in enumerate(constrained_dihedrals_indices):
+            i1, i2, i3, i4 = c
+            tgt_angle = constrained_dihedrals_values[i] or dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
+            constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
+
+    if ase_constraints is not None:
+        constraints.extend(ase_constraints)
+
+    atoms.set_constraint(constraints)
+
+    t_start_opt = time.perf_counter()
+    with suppress_stdout_stderr():
+
+        if dummy_first:
+
+            # dummy with just bond distances
+            with LBFGS(atoms, maxstep=0.1, logfile=None, trajectory=traj[:-5]+"_dummy.traj") as opt:
+                opt.run(fmax=0.2, steps=50)
+
+            # add optional NewBondPreventer and do some more steps
+            atoms.set_constraint(constraints + [new_bond_preventer])
+
+            with LBFGS(atoms, maxstep=0.1, logfile=None, trajectory=traj[:-5]+"_dummy.traj") as opt:
+                opt.run(fmax=0.2, steps=30)
+
+            # remove additional NewBondPreventer constraint and set the desired calc
+            atoms.set_constraint(constraints)
+            atoms.calc = ase_calc
+
+        with LBFGS(atoms, maxstep=0.1, logfile=None, trajectory=traj) as opt:
+            opt.run(fmax=0.05, steps=steps)
+            iterations = opt.nsteps
+
+    new_structure = atoms.get_positions()
+    success = (iterations < 499)
+
+    if logfunction is not None:
+        exit_str = 'REFINED' if success else 'MAX ITER'
+        logfunction(f'    - {title} {exit_str} ({iterations} iterations, {time_to_string(time.perf_counter()-t_start_opt)})')
+
+    energy = atoms.get_total_energy() * EV_TO_KCAL
+
+    return new_structure, energy, success
+
 
 def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=None, check=True):
     '''
@@ -810,7 +891,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
     If it did, returns the initial molecule.
     '''
 
-    identifier = np.sum(original_mol.atomcoords[conf])
+    identifier = np.sum(original_mol.coords[conf])
 
     if hasattr(embedder, "ase_bent_mols_dict"):
         cached = embedder.ase_bent_mols_dict.get((identifier, tuple(sorted(pivot.index)), round(threshold, 3)))
@@ -843,8 +924,8 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
 
     i1, i2 = original_mol.reactive_indices
 
-    neighbors_of_1 = neighbors(original_mol.graph, i1)
-    neighbors_of_2 = neighbors(original_mol.graph, i2)
+    neighbors_of_1 = original_mol.graph.neighbors(i1)
+    neighbors_of_2 = original_mol.graph.neighbors(i2)
 
     mol = deepcopy(original_mol)
     final_mol = deepcopy(original_mol)
@@ -856,9 +937,9 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
     
     dist = norm_of(active_pivot.pivot)
 
-    atoms = Atoms(mol.atomnos, positions=mol.atomcoords[conf])
+    atoms = Atoms(mol.atoms, positions=mol.coords[conf])
 
-    atoms.calc = get_ase_calc(embedder)
+    atoms.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
     
     if traj is not None:
         traj_obj = Trajectory(traj + f'_conf{conf}.traj',
@@ -874,7 +955,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
 
     for iteration in range(500):
 
-        atoms.positions = mol.atomcoords[0]
+        atoms.positions = mol.coords[0]
 
         orb_memo = {index:norm_of(atom.center[0]-atom.coord) for index, atom in mol.reactive_atoms_classes_dict[0].items()}
 
@@ -895,7 +976,8 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
         opt = BFGS(atoms, maxstep=0.2, logfile=None, trajectory=None)
 
         try:
-            opt.run(fmax=0.5, steps=1)
+            with suppress_stdout_stderr():
+                opt.run(fmax=0.5, steps=1)
         except ValueError:
             # Shake did not converge
             break_reason = 'CRASHED'
@@ -906,7 +988,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
             traj_obj.write()
 
         # check if we are stuck
-        if np.max(np.abs(norm_of(atoms.get_positions() - mol.atomcoords[0], axis=1))) < 0.01:
+        if np.max(np.abs(np.linalg.norm(atoms.get_positions() - mol.coords[0], axis=1))) < 0.01:
             unproductive_iterations += 1
 
             if unproductive_iterations == 10:
@@ -916,7 +998,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
         else:
             unproductive_iterations = 0
 
-        mol.atomcoords[0] = atoms.get_positions()
+        mol.coords[0] = atoms.get_positions()
 
         # Update orbitals and get temp pivots
         for index, atom in mol.reactive_atoms_classes_dict[0].items():
@@ -943,15 +1025,15 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
     embedder.log(f'    {title} - conformer {conf} - {break_reason}{" "*(9-len(break_reason))} ({iteration+1}{" "*(3-len(str(iteration+1)))} iterations, {time_to_string(time.perf_counter()-t_start)})', p=False)
 
     if check:
-        if not molecule_check(original_mol.atomcoords[conf], mol.atomcoords[0], mol.atomnos, max_newbonds=1):
-            mol.atomcoords[0] = original_mol.atomcoords[conf]
+        if not molecule_check(mol.atoms, original_mol.coords[conf], mol.coords[0], max_newbonds=1):
+            mol.coords[0] = original_mol.coords[conf]
         # keep the bent structures only if no scrambling occurred between atoms
 
-    final_mol.atomcoords[conf] = mol.atomcoords[0]
+    final_mol.coords[conf] = mol.coords[0]
 
     # Now align the ensembles on the new reactive atoms positions
 
-    reference, *targets = final_mol.atomcoords
+    reference, *targets = final_mol.coords
     reference = np.array(reference)
     targets = np.array(targets)
 
@@ -964,10 +1046,10 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
         matrix = get_alignment_matrix(r, target)
         output.append([matrix @ vector for vector in target])
 
-    final_mol.atomcoords = np.array(output)
+    final_mol.coords = np.array(output)
 
     # Update orbitals and pivots
-    for conf_, _ in enumerate(final_mol.atomcoords):
+    for conf_, _ in enumerate(final_mol.coords):
         for index, atom in final_mol.reactive_atoms_classes_dict[conf_].items():
             atom.init(final_mol, index, update=True, orb_dim=orb_memo[index])
 
@@ -981,7 +1063,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title='temp', traj=
 
     return final_mol
 
-def ase_dump(filename, images, atomnos, energies=None):
+def ase_dump(filename, atoms, images, energies=None):
 
     if energies is None:
         energies = ["" for _ in images]
@@ -993,4 +1075,257 @@ def ase_dump(filename, images, atomnos, energies=None):
         for i, (image, energy) in enumerate(zip(images, energies)):
             e = f" Rel.E = {round(energy, 3)} kcal/mol" if energy != "" else ""
             coords = image.get_positions()
-            write_xyz(coords, atomnos, f, title=f'STEP {i+1} - {filename[:-4]}_image_{i+1}{e}')
+            write_xyz(atoms, coords, f, title=f'STEP {i+1} - {filename[:-4]}_image_{i+1}{e}')
+
+def ase_tblite_opt(
+                atoms,
+                coords,
+                ase_calc=None,
+                method='GFN2-xTB',
+
+                constrained_indices=None,
+                constrained_distances=None,
+
+                constrained_angles_indices=None,
+                constrained_angles_values=None,
+
+                constrained_dihedrals_indices=None,
+                constrained_dihedrals_values=None,
+
+                ase_constraints=None,
+
+                charge=0,
+                mult=1,
+                solvent=None,
+                procs=None,
+                maxiter=None,
+                conv_thr='tight',
+                traj='temp',
+                logfunction=None,
+                title='temp',
+
+                optimizer='LBFGS',
+                debug=False,
+                **kwargs,
+            ):
+    '''
+    coords: 
+    atoms: 
+    constrained_indices:
+    safe: if True, adds a potential that prevents atoms from scrambling
+    safe_mask: bool array, with False for atoms to be excluded when calculating bonds to preserve
+    traj: if set to a string, traj is used as a filename for the bending trajectory.
+    not only the atoms will be printed, but also all the orbitals and the active pivot.
+    '''
+
+    maxiter = maxiter or 500
+
+    # create working folder and cd into it
+    with NewFolderContext(title, delete_after=(not debug)):
+
+        procs = procs or len(os.sched_getaffinity(0))
+
+        if ase_calc is None:
+
+            from firecode.optimization_methods import Opt_func_dispatcher
+            ase_calc = Opt_func_dispatcher('TBLITE').get_ase_calc(method, solvent)
+
+        #intialize calculator
+        ase_calc.charge = charge
+        ase_calc.multiplicity = mult
+        ase_calc.verbosity = 0        
+
+        if solvent is not None:
+            ase_calc.solvation = ("alpb", solvent)      
+
+        atoms = Atoms(atoms, positions=coords)
+        atoms.calc = ase_calc
+        constraints = []
+
+        if constrained_indices is not None:
+            constrained_distances = constrained_distances or [None for _ in constrained_indices]
+            for i, c in enumerate(constrained_indices):
+                i1, i2 = c
+                tgt_dist = constrained_distances[i] or norm_of(coords[i1]-coords[i2])
+                constraints.append(Spring(i1, i2, tgt_dist))
+
+        if constrained_angles_indices is not None:
+            constrained_angles_values = constrained_angles_values or [None for _ in constrained_angles_indices]
+            for i, c in enumerate(constrained_angles_indices):
+                i1, i2, i3 = c
+                tgt_angle = constrained_angles_values[i] or point_angle(coords[i1], coords[i2], coords[i3])
+                constraints.append(PlanarAngleSpring(i1, i2, i3, tgt_angle))
+
+        if constrained_dihedrals_indices is not None:
+            constrained_dihedrals_values = constrained_dihedrals_values or [None for _ in constrained_dihedrals_indices]
+            for i, c in enumerate(constrained_dihedrals_indices):
+                i1, i2, i3, i4 = c
+                tgt_angle = constrained_dihedrals_values[i] or dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
+                constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
+
+        if ase_constraints is not None:
+            constraints.extend(ase_constraints)
+
+        atoms.set_constraint(constraints)
+
+        fmax = {
+            'tight' : 0.05,
+            'loose' : 0.1,
+        }[conv_thr]
+
+        t_start_opt = time.perf_counter()
+        optimizer_class = {'LBFGS':LBFGS, 'FIRE':FIRE}[optimizer]
+
+        try:
+            with HiddenPrints():
+                with optimizer_class(atoms, maxstep=0.05, logfile=None, trajectory=traj) as opt:
+                    opt.run(fmax=fmax, steps=maxiter)
+                    iterations = opt.nsteps
+
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt requested by user. Quitting.')
+            sys.exit()
+
+        except TypeError:
+            if logfunction is not None:
+                logfunction(f'{title} in aimnet2_opt CRASHED')
+            return coords, None, False 
+
+        new_structure = atoms.get_positions()
+        success = (iterations < 499)
+
+        if logfunction is not None:
+            exit_str = 'REFINED' if success else 'MAX ITER'
+            logfunction(f'    - {title} {exit_str} ({iterations} iterations, {time_to_string(time.perf_counter()-t_start_opt)})')
+
+        energy = atoms.get_total_energy() * EV_TO_KCAL
+
+        if traj is not None:
+            os.system(f"ase convert {traj} {traj}.xyz")
+
+        # try:
+        #     os.remove('temp.traj')
+            
+        # except FileNotFoundError:
+        #     pass
+
+    return new_structure, energy, success
+
+
+def most_different_structures_ids(structures, n):
+    '''
+    Returns a list containing n indices of the most
+    different structures in the set, evaluated by the
+    RMSD distance between adjacent pairs of structures.
+
+    '''
+
+    assert len(structures) >= n
+    output = list(range(len(structures)))
+
+    while True:
+
+        if len(output) == n:
+            return output
+        
+        results = []
+        for i1 in output[:-1]:
+            i2 = output[output.index(i1)+1]
+            results.append((rmsd_and_max(structures[i1], structures[i2], center=True)[0], (i1, i2)))
+
+        to_be_removed = sorted(results, key=lambda x: x[0])[0][1]
+
+        i1, i2 = to_be_removed
+        if i1 in (0, n-1):
+            output.remove(i2)
+        else:
+            output.remove(i1)
+
+def ase_get_free_energy(
+        atoms,
+        coords,
+        ase_calc,
+        energy,
+        charge,
+        mult,
+        temp_C=25,
+        title="temp",
+        write_log=True,
+
+    ) -> float:
+    """
+    atoms: (n,) array
+    coords: (n, 3) array
+    ase_calc: ASE calculator
+    energy: potential energy in kcal/mol
+
+    returns: Free energy, in kcal/mol
+    """
+
+    atoms = Atoms(atoms, positions=coords)
+    atoms.info.update({'charge':charge, 'spin':mult})
+
+    ase_calc.charge = charge
+    ase_calc.multiplicity = mult
+    ase_calc.verbosity = 0  
+    # setattr(ase_calc, "charge", charge)
+    # setattr(ase_calc, "multiplicity", mult)
+    # setattr(ase_calc, "verbosity", 0)
+    atoms.calc = ase_calc
+
+    vib = Vibrations(atoms)
+
+    with open(f'vib_{title}.out', 'w') as f:
+
+        with HiddenPrints():
+
+            f.write('--> FIRECODE ASE Frequency calculation report\n\n')
+
+            # tighten convergence
+            f.write('--> Tightening convergence to fmax=1E-4\n')
+            opt = LBFGS(atoms)
+            opt.run(fmax=1E-4)
+
+            # remove cache folder
+            if 'vib' in os.listdir():
+                rmtree(os.path.join(os.getcwd(), 'vib'))
+
+            # run vibrational analysis
+            vib.run()
+            vib_energies = vib.get_energies()
+            vib.summary(log=f)
+
+            
+            thermo = IdealGasThermo(            
+                vib_energies=vib_energies,
+                potentialenergy=energy / EV_TO_KCAL,
+                atoms=atoms,
+                spin=(mult-1)/2,
+
+                # assuming all inputs are C1 for now...
+                geometry='nonlinear',
+                symmetrynumber=1,
+                ignore_imag_modes=True,  
+            )
+
+            EE = energy / EV_TO_KCAL / EH_TO_EV
+            G = thermo.get_gibbs_energy(temperature=(temp_C + 273.15), pressure=101325.0) / EH_TO_EV
+            H = thermo.get_enthalpy(temperature=(temp_C + 273.15)) / EH_TO_EV
+            S = thermo.get_entropy(temperature=(temp_C + 273.15), pressure=101325.0) / EH_TO_EV
+            gcorr = G - EE
+
+
+            f.write('\n--> What follows is an ORCA output mock-up for scraping:\n\n')
+            f.write(f'FINAL SINGLE POINT ENERGY {EE:.8f} Eh\n')
+            f.write(f'FINAL GIBBS FREE ENERGY {G:.8f} Eh\n')
+            f.write(f'G-E(el) ... {gcorr:.8f} Eh     {gcorr*EH_TO_KCAL:.2f} kcal/mol\n')
+            f.write(f'Total enthalpy ... {H:.8f} Eh\n')
+            f.write(f'Final entropy term ... {S:.8f} Eh\n')
+
+    del vib
+    rmtree(os.path.join(os.getcwd(), 'vib'))
+
+    if not write_log:
+        rmtree(os.path.join(os.getcwd(), f'vib_{title}.out'))
+
+    return G * EH_TO_KCAL

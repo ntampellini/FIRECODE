@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -23,33 +23,33 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 import numpy as np
 
+from firecode.algebra import normalize
 from firecode.calculators._xtb import xtb_get_free_energy
+from prism_pruner.graph_manipulations import graphize
+from firecode.optimization_methods import (_refine_structures, optimize,
+                                           write_xyz)
 from firecode.torsion_module import csearch
-from firecode.optimization_methods import _refine_structures, optimize, write_xyz
-from firecode.utils import loadbar, graphize
-from firecode.graph_manipulations import neighbors
-from firecode.algebra import norm
+from firecode.utils import loadbar
 
 
 def _get_anions(
                 embedder,
+                atoms, 
                 structures, 
-                atomnos, 
                 index,
                 logfunction=print,
             ):
     '''
+    atoms: 1D array of atomic numbers
     structures: array of 3D of coordinates
-    atomnos: 1D array of atomic numbers
     index: position of hydrogen atom to be abstracted
 
-    return: anion optimized geomertries, their energies and the new atomnos array
+    return: anion optimized geomertries, their energies and the new atoms array
     '''
-    assert embedder.options.calculator == 'XTB', 'Charge calculations not yet implemented for Gau, Orca, Mopac, OB'
-    # assert atomnos[index] == 1
+    assert embedder.options.calculator == 'XTB', 'Charge calculations only implemented for XTB'
 
-    atomnos = np.delete(atomnos, index)
     # removing proton from atoms
+    atoms = np.delete(atoms, index)
 
     solvent = embedder.options.solvent
     if solvent is None:
@@ -65,8 +65,8 @@ def _get_anions(
         print(f'Optimizing anion conformer {s+1}/{len(structures)} ...', end='\r')
 
         opt_coords, energy, success = optimize(
+                                                atoms,
                                                 coords,
-                                                atomnos,
                                                 calculator=embedder.options.calculator,
                                                 procs=embedder.procs,
                                                 solvent=solvent,
@@ -74,6 +74,8 @@ def _get_anions(
                                                 title=f'temp_anion{s}',
                                                 check=True,
                                                 charge=-1,
+                                                dispatcher=embedder.dispatcher,
+                                                debug=embedder.options.debug,
                                              )
 
         if success:
@@ -82,25 +84,25 @@ def _get_anions(
 
     anions, energies = zip(*sorted(zip(anions, energies), key=lambda x: x[1]))
 
-    return anions, energies, atomnos
+    return anions, energies, atoms
 
 def _get_cations(
                 embedder,
+                atoms, 
                 structures, 
-                atomnos, 
                 index,
                 logfunction=print,
             ):
     '''
     structures: array of 3D of coordinates
-    atomnos: 1D array of atomic numbers
+    atoms: 1D array of atomic numbers
     index: position where the new hydrogen atom has to be inserted
 
-    return: cation optimized geomertries, their energies and the new atomnos array
+    return: cation optimized geomertries, their energies and the new atoms array
     '''
     assert embedder.options.calculator == 'XTB', 'Charge calculations not yet implemented for Gau, Orca, Mopac, OB'
 
-    cation_atomnos = np.append(atomnos, 1)
+    cation_atoms = np.append(atoms, 1)
     # adding proton to atoms
 
     solvent = embedder.options.solvent
@@ -111,14 +113,14 @@ def _get_cations(
 
     for s, structure in enumerate(structures):
 
-        coords = protonate(structure, atomnos, index)
+        coords = protonate(structure, atoms, index)
         # new coordinates which include an additional proton
 
         print(f'Optimizing cation conformer {s+1}/{len(structures)} ...', end='\r')
 
         opt_coords, energy, success = optimize(
+                                                cation_atoms,
                                                 coords,
-                                                cation_atomnos,
                                                 calculator=embedder.options.calculator,
                                                 procs=embedder.procs,
                                                 solvent=solvent,
@@ -126,6 +128,8 @@ def _get_cations(
                                                 title=f'temp_cation{s}',
                                                 check=True,
                                                 charge=+1,
+                                                dispatcher=embedder.dispatcher,
+                                                debug=embedder.options.debug,
                                              )
 
         if success:
@@ -134,18 +138,18 @@ def _get_cations(
 
     cations, energies = zip(*sorted(zip(cations, energies), key=lambda x: x[1]))
 
-    return cations, energies, cation_atomnos
+    return cations, energies, cation_atoms
 
-def protonate(coords, atomnos, index, length=1):
+def protonate(atoms, coords, index, length=1):
     '''
     Returns the input structure,
     protonated at the index provided,
     ready to be optimized
     '''
 
-    graph = graphize(coords, atomnos)
-    nbs = neighbors(graph, index)
-    versor = -norm(np.mean(coords[nbs]-coords[index], axis=0))
+    graph = graphize(atoms, coords)
+    nbs = graph.neighbors(index)
+    versor = -normalize(np.mean(coords[nbs]-coords[index], axis=0))
     new_proton_coords = coords[index] + length * versor
     coords = np.append(coords, [new_proton_coords], axis=0)
 
@@ -166,34 +170,42 @@ def pka_routine(filename, embedder, search=True):
     embedder.log(f'--> pKa computation protocol for {mol.filename}, index {mol.reactive_indices}')
 
     if search:
-        if len(mol.atomcoords) > 1:
+        if len(mol.coords) > 1:
             embedder.log(f'Using only the first molecule of {mol.filename} to generate conformers')
 
         conformers = csearch(
-                                mol.atomcoords[0],
-                                mol.atomnos,
+                                mol.atoms,
+                                mol.coords[0],
+                                charge=embedder.options.charge,
+                                mult=embedder.options.mult,
                                 n_out=100,
                                 mode=1,
                                 logfunction=print,
+                                dispatcher=embedder.dispatcher,
                                 interactive_print=True,
                                 write_torsions=False,
-                                title=mol.filename
+                                title=mol.filename,
+                                debug=embedder.options.debug,
                             )
     else:
-        conformers = mol.atomcoords
+        conformers = mol.coords
 
     conformers, _ =_refine_structures(
+                                        mol.atoms,
                                         conformers,
-                                        mol.atomnos, 
+                                        charge=embedder.options.charge,
+                                        mult=embedder.options.mult,
                                         calculator=embedder.options.calculator,
                                         method=embedder.options.theory_level,
                                         procs=embedder.procs,
-                                        loadstring='Optimizing conformer'
+                                        loadstring='Optimizing conformer',
+                                        dispatcher=embedder.dispatcher,
+                                        debug=embedder.options.debug,
                                     )
 
     embedder.log()
 
-    free_energies = get_free_energies(embedder, conformers, mol.atomnos, charge=0, title='Starting structure')
+    free_energies = get_free_energies(embedder, mol.atoms, conformers, charge=mol.charge, title='Starting structure')
     conformers, free_energies = zip(*sorted(zip(conformers, free_energies), key=lambda x: x[1]))
 
     with open(f'{mol.rootname}_confs_opt.xyz', 'w') as f:
@@ -201,25 +213,25 @@ def pka_routine(filename, embedder, search=True):
         solvent_string = f', {embedder.options.solvent}' if embedder.options.solvent is not None else ''
 
         for c, e in zip(conformers, free_energies):
-            write_xyz(c, mol.atomnos, f, title=f'G({embedder.options.theory_level}{solvent_string}, charge=0) = {round(e, 3)} kcal/mol')
+            write_xyz(mol.atoms, c, f, title=f'G({embedder.options.theory_level}{solvent_string}, charge={mol.charge}) = {round(e, 3)} kcal/mol')
 
-    if mol.atomnos[mol.reactive_indices[0]] == 1:
+    if mol.atoms[mol.reactive_indices[0]] == 'H':
     # we have an acid, form and optimize the anions
 
-        anions, _, anions_atomnos = _get_anions(
+        anions, _, anions_atoms = _get_anions(
                                                 embedder,
+                                                mol.atoms,
                                                 conformers,
-                                                mol.atomnos,
                                                 mol.reactive_indices[0],
                                                 logfunction=embedder.log
                                             )
 
-        anions_free_energies = get_free_energies(embedder, anions, anions_atomnos, charge=-1, title='Anion')
+        anions_free_energies = get_free_energies(embedder, anions_atoms, anions, charge=-1, title='Anion')
         anions, anions_free_energies = zip(*sorted(zip(anions, anions_free_energies), key=lambda x: x[1]))
 
         with open(f'{mol.rootname}_anions_opt.xyz', 'w') as f:
             for c, e in zip(anions, anions_free_energies):
-                write_xyz(c, anions_atomnos, f, title=f'G({embedder.options.theory_level}{solvent_string}, charge=-1) = {round(e, 3)} kcal/mol')
+                write_xyz(anions_atoms, c, f, title=f'G({embedder.options.theory_level}{solvent_string}, charge=-1) = {round(e, 3)} kcal/mol')
 
         e_HA = free_energies[0]
         e_A = anions_free_energies[0]
@@ -230,20 +242,20 @@ def pka_routine(filename, embedder, search=True):
     else:
     # we have a base, form and optimize the cations
 
-        cations, _, cations_atomnos = _get_cations(
+        cations, _, cations_atoms = _get_cations(
                                                     embedder,
+                                                    mol.atoms,
                                                     conformers,
-                                                    mol.atomnos,
                                                     mol.reactive_indices[0],
                                                     logfunction=embedder.log
                                                 )
 
-        cations_free_energies = get_free_energies(embedder, cations, cations_atomnos, charge=+1, title='Cation')
+        cations_free_energies = get_free_energies(embedder, cations, cations_atoms, charge=+1, title='Cation')
         cations, cations_free_energies = zip(*sorted(zip(cations, cations_free_energies), key=lambda x: x[1]))
 
         with open(f'{mol.rootname}_cations_opt.xyz', 'w') as f:
             for c, e in zip(cations, cations_free_energies):
-                write_xyz(c, cations_atomnos, f, title=f'G({embedder.options.theory_level}{solvent_string}, charge=+1) = {round(e, 3)} kcal/mol')
+                write_xyz(cations_atoms, c, f, title=f'G({embedder.options.theory_level}{solvent_string}, charge=+1) = {round(e, 3)} kcal/mol')
 
         e_B = free_energies[0]
         e_BH = cations_free_energies[0]
@@ -251,7 +263,7 @@ def pka_routine(filename, embedder, search=True):
 
         embedder.log()
 
-def get_free_energies(embedder, structures, atomnos, charge=0, title='Molecule'):
+def get_free_energies(embedder, atoms, structures, charge=0, title='Molecule'):
     '''
     '''
     assert embedder.options.calculator == 'XTB', 'Free energy calculations not yet implemented for Gau, Orca, Mopac, OB'
@@ -263,8 +275,8 @@ def get_free_energies(embedder, structures, atomnos, charge=0, title='Molecule')
         loadbar(s, len(structures), f'{title} Hessian {s+1}/{len(structures)} ')
         
         free_energies.append(xtb_get_free_energy(
+                                                    atoms,
                                                     structure,
-                                                    atomnos,
                                                     method=embedder.options.theory_level,
                                                     solvent=embedder.options.solvent,
                                                     charge=charge,

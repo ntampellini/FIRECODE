@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -26,22 +26,20 @@ from copy import deepcopy
 
 import numpy as np
 from networkx import (connected_components, has_path, is_isomorphic,
-                      shortest_path, subgraph)
-from sklearn.cluster import KMeans, dbscan
+                      minimum_spanning_tree, shortest_path, subgraph)
+from prism_pruner.algebra import normalize, vec_angle
+from prism_pruner.graph_manipulations import (get_phenyl_ids, get_sp_n,
+                                              is_amide_n, is_ester_o)
+from prism_pruner.utils import (flatten, get_double_bonds_indices,
+                                rotate_dihedral, time_to_string)
 
-from firecode.algebra import norm, norm_of, vec_angle
+from firecode.algebra import norm_of
 from firecode.errors import SegmentedGraphError
-from firecode.graph_manipulations import (_get_phenyl_ids, findPaths, get_sp_n,
-                                        is_amide_n, is_ester_o, is_sp_n,
-                                        neighbors)
+from firecode.graph_manipulations import is_sp_n
 from firecode.hypermolecule_class import graphize
 from firecode.numba_functions import prune_conformers_tfd, torsion_comp_check
-from firecode.pt import pt
-from firecode.rmsd import rmsd_and_max_numba
 from firecode.settings import DEFAULT_FF_LEVELS, FF_CALC
-from firecode.utils import (align_structures, cartesian_product, flatten,
-                          get_double_bonds_indices, rotate_dihedral,
-                          time_to_string, write_xyz)
+from firecode.utils import cartesian_product, write_xyz
 
 
 class Torsion:
@@ -91,10 +89,10 @@ class Torsion:
 
     def get_n_fold(self, graph) -> int:
 
-        nums = (graph.nodes[self.i2]['atomnos'],
-                graph.nodes[self.i3]['atomnos'])
+        symbols = (graph.nodes[self.i2]['atoms'],
+                graph.nodes[self.i3]['atoms'])
 
-        if 1 in nums:
+        if 'H' in symbols:
             return 6 # H-N, H-O hydrogen bonds
         
         if is_amide_n(self.i2, graph, mode=2) or (
@@ -102,7 +100,7 @@ class Torsion:
            # tertiary amides rotations are 2-fold
            return 2
 
-        if (6 in nums) or (7 in nums) or (16 in nums): # if C, N or S atoms
+        if ('C' in symbols) or ('N' in symbols) or ('S' in symbols):
 
             sp_n_i2 = get_sp_n(self.i2, graph)
             sp_n_i3 = get_sp_n(self.i3, graph)
@@ -155,9 +153,9 @@ def _is_free(index, graph):
 
     '''
     if all((
-            graph.nodes[index]['atomnos'] == 6,
+            graph.nodes[index]['atoms'] == 'C',
             is_sp_n(index, graph, 2),
-            8 in (graph.nodes[n]['atomnos'] for n in neighbors(graph, index))
+            'O' in (graph.nodes[n]['atoms'] for n in graph.neighbors(index))
           )):
         return False
 
@@ -178,18 +176,18 @@ def _is_nondummy(i, root, graph) -> bool:
     rotations should return False.
     '''
 
-    if graph.nodes[i]['atomnos'] not in (6,7):
+    if graph.nodes[i]['atoms'] not in ('C', 'N'):
         return True
     # for now, we only discard rotations around carbon
     # and nitrogen atoms, like methyl/tert-butyl/triphenyl
     # and flat symmetrical rings like phenyl, N-pyrrolyl...
 
     G = deepcopy(graph)
-    nb = neighbors(G, i)
+    nb = G.neighbors(i)
     nb.remove(root)
 
     if len(nb) == 1:
-        if len(neighbors(G, nb[0])) == 2:
+        if len(G.neighbors(nb[0])) == 2:
             return False
     # if node i has two bonds only (one with root and one with a)
     # and the other atom (a) has two bonds only (one with i)
@@ -200,7 +198,7 @@ def _is_nondummy(i, root, graph) -> bool:
     if len(nb) == 2:
 
         # get the 6 indices of the aromatic atoms (i1-i6)
-        phenyl_indices = _get_phenyl_ids(i, G)
+        phenyl_indices = get_phenyl_ids(i, G)
 
         # compare the two halves of the 6-membered ring (indices i2-i3 region with i5-i6 region)
         if phenyl_indices is not None:
@@ -215,7 +213,7 @@ def _is_nondummy(i, root, graph) -> bool:
 
             if len(subgraphs) == 2:
                 return not is_isomorphic(subgraphs[0], subgraphs[1],
-                                            node_match=lambda n1, n2: n1['atomnos'] == n2['atomnos'])
+                                            node_match=lambda n1, n2: n1['atoms'] == n2['atoms'])
             
             # We should not end up here, but if we do, rotation should not be dummy
             return True
@@ -240,7 +238,7 @@ def _is_nondummy(i, root, graph) -> bool:
     subgraphs = [subgraph(G, s) for s in subgraphs_nodes]
     for sub in subgraphs[1:]:
         if not is_isomorphic(subgraphs[0], sub,
-                                node_match=lambda n1, n2: n1['atomnos'] == n2['atomnos']):
+                                node_match=lambda n1, n2: n1['atoms'] == n2['atoms']):
             return True
     # Care should be taken because chiral centers are not taken into account: a rotation 
     # involving an index where substituents only differ by stereochemistry, and where a 
@@ -250,7 +248,7 @@ def _is_nondummy(i, root, graph) -> bool:
 
     return False
 
-def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=45, elements=None, fragments=None):
+def _get_hydrogen_bonds(atoms, coords, graph, d_min=2.5, d_max=3.3, max_angle=45, elements=None, fragments=None):
     '''
     Returns a list of tuples with the indices
     of hydrogen bonding partners.
@@ -272,8 +270,8 @@ def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=
     if elements is None:
         elements = ((7, 8), (7, 8, 9))
 
-    het_idx_from = np.array([i for i, a in enumerate(atomnos) if a in elements[0]], dtype=int)
-    het_idx_to = np.array([i for i, a in enumerate(atomnos) if a in elements[1]], dtype=int)
+    het_idx_from = np.array([i for i, a in enumerate(atoms) if a in elements[0]], dtype=int)
+    het_idx_to = np.array([i for i, a in enumerate(atoms) if a in elements[1]], dtype=int)
     # indices where N or O (or user-specified elements) atoms are present.
 
     for i1 in het_idx_from:
@@ -288,10 +286,10 @@ def _get_hydrogen_bonds(coords, atomnos, graph, d_min=2.5, d_max=3.3, max_angle=
             if d_min < norm_of(coords[i1]-coords[i2]) < d_max:
 
                 # getting the indices of all H atoms attached to them
-                Hs = [i for i in (neighbors(graph, i1)) if graph.nodes[i]['atomnos'] == 1]
+                Hs = [i for i in (graph.neighbors(i1)) if graph.nodes[i]['atoms'] == 'H']
 
                 # versor connectring the two Heteroatoms
-                versor = norm(coords[i2]-coords[i1])
+                versor = normalize(coords[i2]-coords[i1])
 
                 for iH in Hs:
 
@@ -343,41 +341,45 @@ def _get_rotation_mask(graph, torsion):
     mask = np.array([i in reachable_indices for i in graph.nodes], dtype=bool)
     # generate boolean mask
 
-    if np.count_nonzero(mask) > int(len(mask)/2):
-        mask = ~mask
+    # if np.count_nonzero(mask) > int(len(mask)/2):
+    #     mask = ~mask
     # if we want to rotate more than half of the indices,
     # invert the selection so that we do less math
 
     mask[i3] = False
-    # do not rotate i3: would not move,
-    # since it lies on rotation axis
+    # do not rotate i3: it would not move,
+    # since it lies on the rotation axis
     
     return mask
 
-def _get_quadruplets(graph):
+def get_quadruplets(graph):
     '''
     Returns list of quadruplets that indicate potential torsions
     '''
 
-    allpaths = []
-    for node in graph:
-        allpaths.extend(findPaths(graph, node, 3))
-    # get all possible continuous indices quadruplets
+    # Step 1: Find spanning tree
+    spanning_tree = minimum_spanning_tree(graph)
+        
+    # Step 2: Add dihedrals for spanning tree
+    dihedrals = []
+    
+    # For each edge in the spanning tree, we can potentially define a dihedral
+    # We need edges that have at least 2 neighbors each to form a 4-point dihedral
+    for edge in spanning_tree.edges():
+        i, j = edge
+        
+        # Find neighbors of i and j in the original graph
+        i_neighbors = [n for n in graph.neighbors(i) if n not in (i, j)]
+        j_neighbors = [n for n in graph.neighbors(j) if n not in (i, j)]
+        
+        if len(i_neighbors) > 0 and len(j_neighbors) > 0:
+            # Form dihedral: neighbor_of_i - i - j - neighbor_of_j
+            k = i_neighbors[0]  # Choose first available neighbor
+            _l = j_neighbors[0]  # Choose first available neighbor
+            dihedrals.append((k, i, j, _l))
+    
+    return np.array(dihedrals)
 
-    quadruplets, q_ids = [], []
-    for path in allpaths:
-        _, i2, i3, _ = path
-        q_id = tuple(sorted((i2, i3)))
-
-        if (q_id not in q_ids):
-
-            quadruplets.append(path)
-            q_ids.append(q_id)
-
-    # Yields non-redundant quadruplets
-    # Rejects (4,3,2,1) if (1,2,3,4) is present
-
-    return np.array(quadruplets)
 
 def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="csearch"):
     '''
@@ -385,7 +387,7 @@ def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="cs
     '''
 
     torsions = []
-    for path in _get_quadruplets(graph):
+    for path in get_quadruplets(graph):
         _, i2, i3, _ = path
         bt = tuple(sorted((i2, i3)))
 
@@ -401,35 +403,35 @@ def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="cs
 
     return torsions
 
-def _group_torsions_dbscan(coords, torsions, max_size=5):
-    '''
-    '''
-    torsions_indices = [t.torsion for t in torsions]
-    # get torsion indices
+# def _group_torsions_dbscan(coords, torsions, max_size=5):
+#     '''
+#     '''
+#     torsions_indices = [t.torsion for t in torsions]
+#     # get torsion indices
 
-    torsions_centers = np.array([np.mean((coords[i2], coords[i3]), axis=0) for _, i2, i3, _ in torsions_indices])
-    # compute spatial distance
+#     torsions_centers = np.array([np.mean((coords[i2], coords[i3]), axis=0) for _, i2, i3, _ in torsions_indices])
+#     # compute spatial distance
 
-    for eps in np.arange(10, 1.5, -0.5):
-        labels = dbscan(torsions_centers, eps=eps, min_samples=1)[1]
-        n_clusters = max(labels) + 1
-        biggest_cluster_size = max([np.count_nonzero(labels==i) for i in set(labels)])
+#     for eps in np.arange(10, 1.5, -0.5):
+#         labels = dbscan(torsions_centers, eps=eps, min_samples=1)[1]
+#         n_clusters = max(labels) + 1
+#         biggest_cluster_size = max([np.count_nonzero(labels==i) for i in set(labels)])
 
-        if biggest_cluster_size <= max_size:
-            break
+#         if biggest_cluster_size <= max_size:
+#             break
 
-    output = [[] for _ in range(n_clusters)]
-    for torsion, cluster in zip(torsions, labels):
-        output[cluster].append(torsion)
+#     output = [[] for _ in range(n_clusters)]
+#     for torsion, cluster in zip(torsions, labels):
+#         output[cluster].append(torsion)
 
-    output = sorted(output, key=len)
-    # largest groups last
+#     output = sorted(output, key=len)
+#     # largest groups last
     
-    return output
+#     return output
 
 def random_csearch(
+                    atoms,
                     coords,
-                    atomnos,
                     torsions,
                     graph,
                     constrained_indices=None,
@@ -458,17 +460,17 @@ def random_csearch(
         logfunction(' {:2s} - {:21s} : {}{}{}{} : {}-fold'.format(
                                                                str(i),
                                                                str(t.torsion),
-                                                               pt[atomnos[t.torsion[0]]].symbol,
-                                                               pt[atomnos[t.torsion[1]]].symbol,
-                                                               pt[atomnos[t.torsion[2]]].symbol,
-                                                               pt[atomnos[t.torsion[3]]].symbol,
+                                                               atoms[t.torsion[0]],
+                                                               atoms[t.torsion[1]],
+                                                               atoms[t.torsion[2]],
+                                                               atoms[t.torsion[3]],
                                                                t.n_fold))
 
     central_ids = set(flatten([t.torsion[1:3] for t in torsions], int))
     logfunction(f'\n> Rotable bonds ids: {" ".join([str(i) for i in sorted(central_ids)])}')
 
     if write_torsions:
-        _write_torsion_vmd(coords, atomnos, constrained_indices, [torsions], title=title)
+        _write_torsion_vmd(atoms, coords, constrained_indices, [torsions], title=title)
         # logging torsions to file
 
         torsions_indices = [t.torsion for t in torsions]
@@ -552,8 +554,10 @@ def random_csearch(
     return new_structures
 
 def csearch(
+            atoms,
             coords,
-            atomnos,
+            charge=0,
+            mult=1,
             constrained_indices=None,
             keep_hb=False,
             ff_opt=False,
@@ -564,6 +568,8 @@ def csearch(
             method=None,
             title='test',
             logfunction=print,
+            dispatcher=None,
+            debug=False,
             interactive_print=True,
             write_torsions=False):
     '''
@@ -587,7 +593,7 @@ def csearch(
         logfunction('Free conformational search: no constraints provided.')
         constrained_indices = np.array([])
 
-    graph = graphize(coords, atomnos)
+    graph = graphize(atoms, coords)
     for i1, i2 in constrained_indices:
         graph.add_edge(i1, i2)
     # build a molecular graph of the TS
@@ -595,7 +601,7 @@ def csearch(
     
     # ... and hydrogen bonding, if requested
     if keep_hb:
-        hydrogen_bonds = _get_hydrogen_bonds(coords, atomnos, graph)
+        hydrogen_bonds = _get_hydrogen_bonds(atoms, coords, graph)
         for hb in hydrogen_bonds:
             graph.add_edge(*hb)
 
@@ -621,7 +627,7 @@ def csearch(
             raise SegmentedGraphError(s)
         # if we already looked for HBs, raise the error
 
-        hydrogen_bonds.extend(_get_hydrogen_bonds(coords, atomnos, graph, fragments=fragments))
+        hydrogen_bonds.extend(_get_hydrogen_bonds(atoms, coords, graph, fragments=fragments))
         # otherwise, look for INTERFRAGMENT HBs only
 
         if not hydrogen_bonds:
@@ -636,7 +642,7 @@ def csearch(
         # otherwise, add the new HBs linking the pieces
         # and make sure that now we only have one connected component
 
-    double_bonds = get_double_bonds_indices(coords, atomnos)
+    double_bonds = get_double_bonds_indices(atoms, coords)
     # get all double bonds - do not rotate these
     
     torsions = _get_torsions(graph, hydrogen_bonds, double_bonds)
@@ -653,10 +659,12 @@ def csearch(
 
     if mode in (0,1):
         return clustered_csearch(
+                                    atoms,
                                     coords,
-                                    atomnos,
                                     torsions,
                                     graph,
+                                    charge=charge,
+                                    mult=mult,
                                     constrained_indices=constrained_indices,
                                     ff_opt=ff_opt,
                                     n=n,
@@ -666,13 +674,15 @@ def csearch(
                                     method=method,
                                     title=title,
                                     logfunction=logfunction,
+                                    dispatcher=dispatcher,
                                     interactive_print=interactive_print,
-                                    write_torsions=write_torsions
+                                    write_torsions=write_torsions,
+                                    debug=debug,
                                 )
 
     return random_csearch(
+                                    atoms,
                                     coords,
-                                    atomnos,
                                     torsions,
                                     graph,
                                     constrained_indices=constrained_indices,
@@ -684,10 +694,12 @@ def csearch(
                                 )
 
 def clustered_csearch(
+                        atoms,
                         coords,
-                        atomnos,
                         torsions,
                         graph,
+                        charge=0,
+                        mult=1,
                         constrained_indices=None,
                         ff_opt=False,
                         n=100,
@@ -697,8 +709,10 @@ def clustered_csearch(
                         method=None,
                         title='test',
                         logfunction=print,
+                        dispatcher=None,
                         interactive_print=True,
-                        write_torsions=False):
+                        write_torsions=False,
+                        debug=False):
     '''
     n: number of structures to keep from each torsion cluster
     mode: 0 - torsion clustered - keep the n lowest energy conformers
@@ -717,13 +731,13 @@ def clustered_csearch(
     tag = ('stable', 'diverse')[mode]
     # criteria to choose the best structure of each torsional cluster
 
-    if len(torsions) < 9:
-        grouped_torsions = [torsions]
+    # if len(torsions) < 9:
+    grouped_torsions = [torsions]
 
-    else:
-        grouped_torsions = _group_torsions_dbscan(coords,
-                                              torsions,
-                                              max_size=3 if ff_opt else 5)
+    # else:
+    #     grouped_torsions = _group_torsions_dbscan(coords,
+    #                                           torsions,
+    #                                           max_size=3 if ff_opt else 5)
 
     ############################################## LOG TORSIONS
 
@@ -735,7 +749,7 @@ def clustered_csearch(
     logfunction(f'\n> Rotable bonds ids: {" ".join([str(i) for i in sorted(central_ids)])}')
 
     if write_torsions:
-        _write_torsion_vmd(coords, atomnos, constrained_indices, grouped_torsions, title=title)
+        _write_torsion_vmd(atoms, coords, constrained_indices, grouped_torsions, title=title)
         # logging torsions to file
 
         torsions_indices = [t.torsion for t in torsions]
@@ -823,11 +837,17 @@ def clustered_csearch(
             for c, new_coords in enumerate(np.copy(new_structures)):
 
                 from firecode.optimization_methods import optimize
-                opt_coords, energy, success = optimize(new_coords,
-                                                        atomnos,
-                                                        calc,
-                                                        method=method,
-                                                        constrained_indices=constrained_indices)
+                opt_coords, energy, success = optimize(
+                                                    atoms,
+                                                    new_coords,
+                                                    calc,
+                                                    method=method,
+                                                    constrained_indices=constrained_indices,
+                                                    charge=charge,
+                                                    mult=mult,
+                                                    dispatcher=dispatcher,
+                                                    debug=debug,
+                                                )
 
                 if success:
                     new_structures[c] = opt_coords
@@ -892,78 +912,80 @@ def most_diverse_conformers(n, structures, torsion_array, energies=None, interac
         return structures
     # if we already pruned enough structures to meet the requirement, return them
 
-    if n > 300:
-        indices = np.sort(np.random.choice(len(structures), size=n))
-        return structures[indices]
+    # if n > 300:
+    indices = np.sort(np.random.choice(len(structures), size=n))
+    return structures[indices]
     # For now, the algorithm scales badly with number of clusters.
     # If there are too many to compute, just choose randomly
 
-    if interactive_print:
-        print(f'Removing similar structures...{" "*10}', end='\r')
+    ### AVOID SKLEARN?
 
-    structures, _ = prune_conformers_tfd(structures, torsion_array)
-    # remove structrures with too similar TFPs
+    # if interactive_print:
+    #     print(f'Removing similar structures...{" "*10}', end='\r')
 
-    if len(structures) <= n:
-        return structures
-    # if we already pruned enough structures to meet the requirement, return them
+    # structures, _ = prune_conformers_tfd(structures, torsion_array)
+    # # remove structrures with too similar TFPs
 
-    if interactive_print:
-        print(f'Aligning structures...{" "*10}', end='\r')
+    # if len(structures) <= n:
+    #     return structures
+    # # if we already pruned enough structures to meet the requirement, return them
 
-    structures = align_structures(structures)
-    features = structures.reshape((structures.shape[0], structures.shape[1]*structures.shape[2]))
-    # reduce the dimensionality of the rest of the structure array to cluster them with KMeans
+    # if interactive_print:
+    #     print(f'Aligning structures...{" "*10}', end='\r')
 
-    if interactive_print:
-        print(f'Performing KMeans clustering...{" "*10}', end='\r')
+    # structures = align_structures(structures)
+    # features = structures.reshape((structures.shape[0], structures.shape[1]*structures.shape[2]))
+    # # reduce the dimensionality of the rest of the structure array to cluster them with KMeans
 
-    kmeans = KMeans(n_clusters=n)
-    kmeans.fit(features)
-    # Generate and train the model
+    # if interactive_print:
+    #     print(f'Performing KMeans clustering...{" "*10}', end='\r')
 
-    # if energies are given, pick the lowest energy structure from each cluster
-    if energies is not None:
-        clusters = [[] for _ in range(n)]
-        for coords, energy, c in zip(structures, energies, kmeans.labels_):
-            clusters[c].append((coords, energy))
+    # kmeans = KMeans(n_clusters=n)
+    # kmeans.fit(features)
+    # # Generate and train the model
 
-        output = []
-        for group in clusters:
-            sorted_s, _ = zip(*sorted(group, key=lambda x: x[1]))
-            output.append(sorted_s[0])
+    # # if energies are given, pick the lowest energy structure from each cluster
+    # if energies is not None:
+    #     clusters = [[] for _ in range(n)]
+    #     for coords, energy, c in zip(structures, energies, kmeans.labels_):
+    #         clusters[c].append((coords, energy))
 
-    # if not, from each non-empty cluster yield the structure that is more distant from the other clusters
-    else:
-        centers = kmeans.cluster_centers_.reshape((n, *structures.shape[1:3]))
+    #     output = []
+    #     for group in clusters:
+    #         sorted_s, _ = zip(*sorted(group, key=lambda x: x[1]))
+    #         output.append(sorted_s[0])
 
-        clusters = [[] for _ in range(n)]
-        for coords, c in zip(structures, kmeans.labels_):
-            clusters[c].append(coords)
+    # # if not, from each non-empty cluster yield the structure that is more distant from the other clusters
+    # else:
+    #     centers = kmeans.cluster_centers_.reshape((n, *structures.shape[1:3]))
 
-        r = np.arange(len(clusters))
-        output = []
+    #     clusters = [[] for _ in range(n)]
+    #     for coords, c in zip(structures, kmeans.labels_):
+    #         clusters[c].append(coords)
 
-        # take one from each non-empty cluster
-        for cluster in clusters:
+    #     r = np.arange(len(clusters))
+    #     output = []
 
-            if cluster:
-                cumdists = [np.sum(np.linalg.norm(centers[r!=c]-ref, axis=2)) for c, ref in enumerate(cluster)]
+    #     # take one from each non-empty cluster
+    #     for cluster in clusters:
 
-                furthest = cluster[cumdists.index(max(cumdists))]
-                output.append(furthest)
+    #         if cluster:
+    #             cumdists = [np.sum(np.centers[r!=c]-ref, axis=2)) for c, ref in enumerate(cluster)]
 
-    return np.array(output)
+    #             furthest = cluster[cumdists.index(max(cumdists))]
+    #             output.append(furthest)
 
-def _write_torsion_vmd(coords, atomnos, constrained_indices, grouped_torsions, title='test'):
+    # return np.array(output)
+
+def _write_torsion_vmd(atoms, coords, constrained_indices, grouped_torsions, title='test'):
 
     with open(f'{title}.xyz', 'w') as f:
-        write_xyz(coords, atomnos, f)
+        write_xyz(atoms, coords, f)
 
     path = os.path.join(os.getcwd(), f'{title}_torsional_clusters.vmd')
     with open(path, 'w') as f:
         s = ('display resetview\n' +
-            'mol new {%s}\n' % (os.path.join(os.getcwd() + f'\{title}.xyz')) +
+            'mol new {%s}\n' % (os.path.join(os.getcwd(), f'{title}.xyz')) +
             'mol representation Lines 2\n' +
             'mol color ColorID 16\n'
             )
@@ -981,60 +1003,3 @@ def _write_torsion_vmd(coords, atomnos, constrained_indices, grouped_torsions, t
 
 
         f.write(s)
-
-def rotationally_corrected_rmsd_and_max(ref, coord, atomnos, torsions, graph, angles, debugfunction=None):
-
-    torsion_corrections = [0 for _ in torsions]
-
-    # Now rotate every dummy torsion by the appropriate increment until we minimize local RMSD 
-    for i, torsion in enumerate(torsions):
-       
-        best_rmsd = 1E10
-
-        # for angle_set in combinations
-        # Look for the rotational angle set that minimizes the torsion RMSD and save it for later
-        for angle in angles[i]:
-
-            coord = rotate_dihedral(coord,
-                                    torsion, 
-                                    angle,
-                                    indices_to_be_moved=[torsion[3]])
-            
-            locally_corrected_rmsd, _ = rmsd_and_max_numba(ref[torsion], coord[torsion])
-
-            if locally_corrected_rmsd < best_rmsd:
-                best_rmsd = locally_corrected_rmsd
-                torsion_corrections[i] = angle
-
-            # it is faster to undo the rotation rather than working with a copy of coords
-            coord = rotate_dihedral(coord,
-                                    torsion, 
-                                    -angle,
-                                    indices_to_be_moved=[torsion[3]])
-            
-        # now rotate that angle to the desired orientation before going to the next angle
-        if torsion_corrections[i] != 0:
-            coord = rotate_dihedral(coord,
-                                    torsion, 
-                                    torsion_corrections[i],
-                                    mask=_get_rotation_mask(graph, torsion))
-
-        if debugfunction is not None:
-            debugfunction(f"Torsion {i+1} - {torsion}: best corr = {torsion_corrections[i]}°, 4-atom RMSD: " +
-                          f"{best_rmsd:.3f} A, global RMSD: {rmsd_and_max_numba(ref[(atomnos != 1)], coord[(atomnos != 1)])[0]:.3f}")
-
-    # we should have the optimal orientation on all torsions now:
-    # calculate the RMSD (only on heavy atoms)
-    rmsd, maxdev = rmsd_and_max_numba(ref[(atomnos != 1)], coord[(atomnos != 1)])
-
-    # since we could have segmented graphs, and therefore potentially only rotate
-    # subsets of the graph where the torsion last two indices are,
-    # we have to undo the final rotation too (would not be needed for connected graphs)
-    for torsion, optimal_angle in zip(reversed(torsions), reversed(torsion_corrections)):
-        coord = rotate_dihedral(coord,
-                                torsion, 
-                                -optimal_angle,
-                                mask=_get_rotation_mask(graph, torsion))
-        
-
-    return rmsd, maxdev

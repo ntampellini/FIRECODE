@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.abspath('..'), 'firecode'))
 # -- Project information -----------------------------------------------------
 
 project = 'firecode'
-copyright = '2021-2024, Nicolò Tampellini'
+copyright = '2021-2026, Nicolò Tampellini'
 author = 'Nicolò Tampellini'
 
 # The full version, including alpha/beta/rc tags

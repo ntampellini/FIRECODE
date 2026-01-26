@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -21,6 +21,11 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 '''
 
+from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
+import os
+from firecode.settings import DEFAULT_LEVELS, DEFAULT_FF_LEVELS, COMMANDS
+
 def run_setup():
     '''
     Invoked by the command
@@ -30,9 +35,7 @@ def run_setup():
     contained in the settings.py file.
     '''
 
-    import os
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
-    from firecode.settings import DEFAULT_LEVELS, DEFAULT_FF_LEVELS, COMMANDS
 
     properties = {
         'FF_OPT_BOOL':False,
@@ -41,90 +44,68 @@ def run_setup():
         'CALCULATOR':None,
         'NEW_DEFAULT':None,
         'NEW_COMMAND':None,
-        'PROCS':1,
-        'MEM_GB':1,
-    }
-
-    def ask(text, accepted=('y','n'), default='n'):
-        text = '--> ' + text
-        if accepted is None:
-            answer = input(text)
-            print()
-            return answer
-        answer = None
-        while answer not in accepted:
-            answer = input(text)
-            answer = answer if answer != '' else default
-        print()
-        return answer
-
-    tag_dict = {
-        'mop':'MOPAC',
-        'orca':'ORCA',
-        'gau':'GAUSSIAN',
-        'xtb':'XTB',
+        'PROCS':4,
+        'MEM_GB':4,
     }
 
     print('\FIRECODE setup:\n')
 
     #########################################################################################
 
-    answer = ask('What Force Field calculator would you like to use?\n- XTB -> xtb\n- Gaussian -> gau\n'
-                 '- None -> none\n\nAnswer [xtb]/gau/none: ', accepted=('xtb', 'gau', 'none'), default='xtb')
+    properties['FF_CALC'] = inquirer.select(
+        message='What Force Field calculator would you like to use?',
+        choices=(
+            Choice(value='XTB', name='XTB'),
+            Choice(value=None, name='None'),
+        ),
+        default="XTB",
+        ).execute()
 
-    if answer == 'xtb':
-        properties['FF_OPT_BOOL'] = True
-        properties['FF_CALC'] = 'XTB'
+    properties['FF_OPT_BOOL'] = properties['FF_CALC'] is not None
 
-    elif answer != 'none':
-        properties['FF_OPT_BOOL'] = True
-        properties['FF_CALC'] = tag_dict[answer]
-
-        answer = ask((f'The default level for {properties["FF_CALC"]} force field calculations is \'{DEFAULT_FF_LEVELS[properties["FF_CALC"]]}\'. ' +
-                       'If you would like to change it, type it here, otherwise press enter : '), accepted=None)
-        if answer != '':
-            properties['NEW_FF_DEFAULT'] = answer
-
-    #########################################################################################
-
-    answer = ask('What main calculator would you like to use?\n- MOPAC -> mop\n- ORCA -> orca\n- Gaussian -> gau\n- XTB -> xtb\n\nAnswer mop/orca/gau/[xtb]: ',
-                accepted=('mop','orca','gau','xtb'), default='xtb')
-
-    properties['CALCULATOR'] = tag_dict[answer]
-
-    #########################################################################################
-
-    answer = ask((f'The default level for {properties["CALCULATOR"]} calculations is \'{DEFAULT_LEVELS[properties["CALCULATOR"]]}\'. ' +
-                'If you would like to change it, type it here, otherwise press enter : '), accepted=None)
-    if answer != '':
-        properties['NEW_DEFAULT'] = answer
+    properties['CALCULATOR'] = inquirer.select(
+        message='What main calculator would you like to use?',
+        choices=(
+            Choice(value='AIMNET2', name='AIMNET2'),
+            Choice(value='XTB', name='XTB'),
+            Choice(value='TBLITE', name='TBLITE'),
+            Choice(value='ORCA', name='ORCA'),
+            Choice(value='UMA', name='UMA'),
+        ),
+        default='XTB',
+    ).execute()
 
     #########################################################################################
 
-    if properties['CALCULATOR'] != 'XTB':
-        answer = ask((f'Current command to call {properties["CALCULATOR"]} is {COMMANDS[properties["CALCULATOR"]]}. ' +
-                    'If you would like to change it, type it here, otherwise press enter : '), accepted=None)
-        if answer != '':
-            properties['NEW_COMMAND'] = answer
+    properties['NEW_DEFAULT'] = inquirer.text(
+        message=f'The default level for {properties["CALCULATOR"]} calculations is \'{DEFAULT_LEVELS[properties["CALCULATOR"]]}\'.\n' +
+                'If you would like to change it, type it here, otherwise press enter:',
+            default=DEFAULT_LEVELS[properties["CALCULATOR"]],
+    ).execute()
 
     #########################################################################################
     
-    properties['PROCS'] = ask(f'How many cores should {properties['CALCULATOR']} jobs run on? [4] : ',
-                                accepted=[str(n) for n in range(1,100)], default=4)
+    properties['PROCS'] = inquirer.text(
+        message=f'How many cores should {properties['CALCULATOR']} jobs run on?:',
+        default=str(properties['PROCS']),
+        validate=lambda inp: inp.isdigit(),
+        filter=int,
+    ).execute()
 
-    #########################################################################################
-
-    # if properties['CALCULATOR'] in ('GAUSSIAN', 'ORCA'):
-    properties['MEM_GB'] = int(ask('How much memory per core should a GAUSSIAN/ORCA job have, in GBs? [4] : ',
-                                accepted=[str(n) for n in range(1,1000)], default='4'))
+    if properties['CALCULATOR'] == 'ORCA':
+        properties['MEM_GB'] = inquirer.text(
+            message='How much memory per core should a ORCA job have, in GBs?:',
+            default=str(properties['MEM_GB']),
+            validate=lambda inp: inp.isdigit(),
+            filter=int,
+        ).execute()
 
     #########################################################################################
 
     rank = {
         'MOPAC':1,
         'ORCA':2,
-        'GAUSSIAN':3,
-        'XTB':4,
+        'XTB':3,
     }
 
     q = "\'"

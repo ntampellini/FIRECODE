@@ -1,7 +1,7 @@
 # coding=utf-8
 '''
 FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
-Copyright (C) 2021-2024 Nicolò Tampellini
+Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -25,46 +25,131 @@ import time
 from copy import deepcopy
 
 import numpy as np
+from prism_pruner.pruner import prune_by_rmsd
+from prism_pruner.utils import time_to_string
 from scipy.spatial.transform import Rotation as R
 
-from firecode.algebra import norm, norm_of
-from firecode.ase_manipulations import ase_neb, ase_popt
-from firecode.calculators._gaussian import gaussian_opt
-from firecode.calculators._mopac import mopac_opt
+from firecode.algebra import norm_of, normalize
+from firecode.ase_manipulations import ase_neb, ase_popt, ase_tblite_opt
+from firecode.calculators._ase_uma import uma_opt
 from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
-from firecode.pruning import prune_by_rmsd
 from firecode.settings import DEFAULT_LEVELS
 from firecode.utils import (loadbar, molecule_check, pt, scramble_check,
-                          time_to_string, write_xyz)
+                            write_xyz)
 
 
 class Opt_func_dispatcher:
 
-    def __init__(self):
+    def __init__(self, calculator):
 
-        self.opt_funcs_dict = {
-            'MOPAC':mopac_opt,
+        # the AIMNET2 function is in a separate
+        # librarty that might not be installed:
+        # delay setting the self.opt_func attribute
+        # to when we load the model
+        self.opt_func = {
             'ORCA':orca_opt,
-            'GAUSSIAN':gaussian_opt,
             'XTB':xtb_opt,
-        }
+            'TBLITE':ase_tblite_opt,
+            'UMA':uma_opt,
+        }.get(calculator, None)
+
+        self.ase_calc = None
+        self.calculator = calculator
+
+    def get_ase_calc(self, method, solvent=None, force_reload=False, raise_err=False):
+        
+        if hasattr(self, 'ase_calc') and self.ase_calc is not None and not force_reload:
+            pass
+
+        elif self.calculator == 'AIMNET2':
+            self.ase_calc = self.load_aimnet2_calc(method)
+        
+        elif self.calculator == 'TBLITE':
+            self.ase_calc = self.load_tblite_calc(method, solvent)
+
+        elif self.calculator == 'XTB':
+            self.ase_calc = self.load_xtb_calc(method, solvent)
+        
+        elif self.calculator == 'UMA':
+            self.ase_calc = self.load_uma_calc(method)
+        
+        elif raise_err:
+            raise NotImplementedError(f'Calculator {self.calculator} not known.')
+        else:
+            self.ase_calc = None
+
+        return self.ase_calc
 
     def load_aimnet2_calc(self, theory_level, logfunction=print):
         
         try:
-            from aimnet2_firecode.interface import aimnet2_opt, get_aimnet2_calc
+            from aimnet2_firecode.interface import (aimnet2_opt,
+                                                    get_aimnet2_calc)
 
         except ImportError:
             raise Exception(('Cannot import AIMNet2 python bindings for FIRECODE. Install them with:\n'
                             '>>> pip install aimnet2_firecode'))
             
-        self.opt_funcs_dict['AIMNET2'] = aimnet2_opt
+        self.opt_func = aimnet2_opt
         self.aimnet2_calc = get_aimnet2_calc(theory_level, logfunction=logfunction)
+        self.ase_calc = self.aimnet2_calc
+
+    def load_tblite_calc(self, method, solvent):
+        
+        try:
+            from tblite.ase import TBLite
+
+        except ImportError:
+            raise Exception(('Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n'
+                            '>>> conda install -c conda-forge mamba\n'
+                            '>>> mamba install -c conda-forge tblite tblite-python\n'))
+            
+
+        solvation = None if solvent is None else ('alpb', solvent)
+
+        # tblite is picky with names
+        synonyms = {
+            "GFN1-XTB" : "GFN1-xTB",
+            "GFN2-XTB" : "GFN2-xTB",
+            "G-XTB" : "g-xTB",
+        }
+
+        method = synonyms.get(method, method)
+        self.ase_calc =TBLite(method=method, solvation=solvation)
+        
+        return self.ase_calc
+
+    def load_xtb_calc(self, method, solvent):
+        try:
+            from xtb.ase.calculator import XTB
+        except ImportError:
+            raise Exception(('Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n'
+                            '>>> conda install -c conda-forge mamba\n'
+                            '>>> mamba install -c conda-forge xtb xtb-python\n'))
+            
+        synonyms = {
+            "GFN1-XTB" : "GFN1-xTB",
+            "GFN2-XTB" : "GFN2-xTB",
+            "G-XTB" : "g-xTB",
+        }
+
+        method = synonyms.get(method.upper(), method)
+        self.ase_calc =XTB(method=method, solvation=solvent)
+        
+        return self.ase_calc
+
+    def load_uma_calc(self, method, logfunction=print):
+
+        from firecode.calculators._ase_uma import get_uma_calc
+            
+        self.uma_calc = get_uma_calc(method, logfunction=logfunction)
+        self.ase_calc = self.uma_calc
+        return self.uma_calc
 
 def optimize(
+            atoms,
             coords,
-            atomnos,
             calculator,
             method=None,
             maxiter=None,
@@ -83,22 +168,23 @@ def optimize(
             procs=1,
             solvent=None,
             charge=0,
+            mult=1,
             max_newbonds=0,
             title='temp',
             check=True, 
             logfunction=None,
-
+            debug=False,
             dispatcher=None,
             **kwargs,
             ):
     '''
-    Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA, Gaussian or XTB at $method level, 
+    Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA or XTB at $method level, 
     constraining the distance between the specified atom pairs, if any. Moreover, if $check, performs a check on atomic
     pairs distances to ensure that the optimization has preserved molecular identities and no atom scrambling occurred.
 
-    :params calculator: Calculator to be used. ('MOPAC', 'ORCA', 'GAUSSIAN', 'XTB', 'AIMNET2')
+    :params calculator: Calculator to be used. ('MOPAC', 'ORCA', 'XTB', 'AIMNET2')
     :params coords: list of coordinates for each atom in the TS
-    :params atomnos: list of atomic numbers for each atom in the TS
+    :params atoms: list of atomic symbols for each atom in the TS
     :params mols_graphs: list of molecule.graph objects, containing connectivity information for each molecule
     :params constrained_indices: indices of constrained atoms in the TS geometry, if this is one
     :params method: Level of theory to be used in geometry optimization. Default if UFF.
@@ -109,10 +195,9 @@ def optimize(
     '''
 
     if dispatcher is None:
-        dispatcher = Opt_func_dispatcher()
+        dispatcher = Opt_func_dispatcher(calculator)
 
-        if calculator == 'AIMNET2':
-            dispatcher.load_aimnet2_calc(method)
+    ase_calc = dispatcher.get_ase_calc(method, solvent=solvent)
 
     if mols_graphs is not None:
         _l = [len(graph.nodes) for graph in mols_graphs]
@@ -126,14 +211,13 @@ def optimize(
 
     constrained_indices = np.array(()) if constrained_indices is None else constrained_indices
 
-    # opt_func = opt_funcs_dict[calculator]
-    opt_func = dispatcher.opt_funcs_dict[calculator]
-
+    opt_func = dispatcher.opt_func
     t_start = time.perf_counter()
 
     # success checks that calculation had a normal termination
-    opt_coords, energy, success = opt_func(coords,
-                                            atomnos,
+    opt_coords, energy, success = opt_func(
+                                            atoms,
+                                            coords,
 
                                             constrained_indices=constrained_indices,
                                             constrained_distances=constrained_distances,
@@ -151,19 +235,23 @@ def optimize(
                                             conv_thr=conv_thr,
                                             title=title,
                                             charge=charge,
+                                            mult=mult,
+                                            debug=debug,
+                                            traj=title+'.traj',
+                                            ase_calc=ase_calc,
 
-                                            ase_calc = dispatcher.aimnet2_calc if calculator == 'AIMNET2' else None,
-                                            **kwargs)
-    
+                                            # **kwargs,
+                                        )
+
     elapsed = time.perf_counter() - t_start
 
     if success:
         if check:
         # check boolean ensures that no scrambling occurred during the optimization
             if mols_graphs is not None:
-                success = scramble_check(opt_coords, atomnos, constrained_indices, mols_graphs, max_newbonds=max_newbonds)
+                success = scramble_check(atoms, opt_coords, constrained_indices, mols_graphs, max_newbonds=max_newbonds)
             else:
-                success = molecule_check(coords, opt_coords, atomnos, max_newbonds=max_newbonds)
+                success = molecule_check(atoms, coords, opt_coords, max_newbonds=max_newbonds)
 
         if logfunction is not None:
             if success:
@@ -178,14 +266,14 @@ def optimize(
 
     return coords, energy, False
 
-def hyperNEB(embedder, coords, atomnos, ids, constrained_indices, title='temp'):
+def hyperNEB(embedder, atoms, coords, ids, constrained_indices, title='temp'):
     '''
     Turn a geometry close to TS to a proper TS by getting
     reagents and products and running a climbing image NEB calculation through ASE.
     '''
 
-    reagents = get_reagent(embedder, coords, atomnos, ids, constrained_indices, method=embedder.options.theory_level)
-    products = get_product(embedder, coords, atomnos, ids, constrained_indices, method=embedder.options.theory_level)
+    reagents = get_reagent(embedder, atoms, coords, ids, constrained_indices, method=embedder.options.theory_level)
+    products = get_product(embedder, atoms, coords, ids, constrained_indices, method=embedder.options.theory_level)
     # get reagents and products for this reaction
 
     reagents -= np.mean(reagents, axis=0)
@@ -197,19 +285,25 @@ def hyperNEB(embedder, coords, atomnos, ids, constrained_indices, title='temp'):
     products = (aligment_rotation @ products.T).T
     # rotating the two structures to minimize differences
 
-    ts_coords, ts_energy, energies, success = ase_neb(embedder, reagents, products, atomnos, title=title)
+    ts_coords, ts_energy, energies, success = ase_neb(embedder,
+                                                      atoms, 
+                                                      reagents,
+                                                      products,
+                                                      charge=embedder.options.charge,
+                                                      mult=embedder.options.mult,
+                                                      title=title)
     # Use these structures plus the TS guess to run a NEB calculation through ASE
 
     return ts_coords, ts_energy, energies, success
 
-def get_product(embedder, coords, atomnos, ids, constrained_indices, method='PM7'):
+def get_product(embedder, atoms, coords, ids, constrained_indices, method='PM7'):
     '''
     Part of the automatic NEB implementation.
     Returns a structure that presumably is the association reaction product
     ([cyclo]additions reactions in mind)
     '''
 
-    opt_func = embedder.dispatcher.opt_funcs_dict[embedder.options.calculator]
+    opt_func = embedder.dispatcher.opt_func
 
     bond_factor = 1.2
     # multiple of sum of covalent radii for two atoms.
@@ -224,12 +318,12 @@ def get_product(embedder, coords, atomnos, ids, constrained_indices, method='PM7
 
         mol1_center = np.mean([coords[a] for a, _ in constrained_indices], axis=0)
         mol2_center = np.mean([coords[b] for _, b in constrained_indices], axis=0)
-        motion = norm(mol2_center - mol1_center)
+        motion = normalize(mol2_center - mol1_center)
         # norm of the motion that, when applied to mol1,
         # superimposes its reactive atoms to the ones of mol2
 
-        threshold_dists = [bond_factor*(pt[atomnos[a]].covalent_radius +
-                                        pt[atomnos[b]].covalent_radius) for a, b in constrained_indices]
+        threshold_dists = [bond_factor*(pt.covalent_radius(atoms[a]) +
+                                        pt.covalent_radius(atoms[b])) for a, b in constrained_indices]
 
         reactive_dists = [norm_of(coords[a] - coords[b]) for a, b in constrained_indices]
         # distances between reactive atoms
@@ -239,11 +333,11 @@ def get_product(embedder, coords, atomnos, ids, constrained_indices, method='PM7
 
             coords[:ids[0]] += motion*step_size
 
-            coords, _, _ = opt_func(coords, atomnos, constrained_indices, method=method)
+            coords, _, _ = opt_func(atoms, coords, constrained_indices, method=method)
 
             reactive_dists = [norm_of(coords[a] - coords[b]) for a, b in constrained_indices]
 
-        newcoords, _, _ = opt_func(coords, atomnos, method=method)
+        newcoords, _, _ = opt_func(atoms, coords, method=method)
         # finally, when structures are close enough, do a free optimization to get the reaction product
 
         new_reactive_dists = [norm_of(newcoords[a] - newcoords[b]) for a, b in constrained_indices]
@@ -263,8 +357,8 @@ def get_product(embedder, coords, atomnos, ids, constrained_indices, method='PM7
     moving_molecule_index = next(i for i,n in enumerate(np.cumsum(ids)) if index_to_be_moved < n)
     bounds = [0] + [n+1 for n in np.cumsum(ids)]
     moving_molecule_slice = slice(bounds[moving_molecule_index], bounds[moving_molecule_index+1])
-    threshold_dist = bond_factor*(pt[atomnos[constrained_indices[0,0]]].covalent_radius +
-                                    pt[atomnos[constrained_indices[0,1]]].covalent_radius)
+    threshold_dist = bond_factor*(pt.covalent_radius(atoms[constrained_indices[0,0]]) +
+                                    pt.covalent_radius(atoms[constrained_indices[0,1]]))
 
     motion = (coords[reference] - coords[index_to_be_moved])
     # vector from the atom to be moved to the target reactive atom
@@ -277,16 +371,16 @@ def get_product(embedder, coords, atomnos, ids, constrained_indices, method='PM7
             # for any atom in the molecule, distance from the reactive atom
 
             atom_step = step_size*np.exp(-0.5*dist)
-            coords[moving_molecule_slice][i] += norm(motion)*atom_step
+            coords[moving_molecule_slice][i] += normalize(motion)*atom_step
             # the more they are close, the more they are moved
 
         # print('Reactive dist -', norm_of(motion))
-        coords, _, _ = opt_func(coords, atomnos, constrained_indices, method=method)
+        coords, _, _ = opt_func(atoms, coords, constrained_indices, method=method)
         # when all atoms are moved, optimize the geometry with the previous constraints
 
         motion = (coords[reference] - coords[index_to_be_moved])
 
-    newcoords, _, _ = opt_func(coords, atomnos, method=method)
+    newcoords, _, _ = opt_func(atoms, coords, method=method)
     # finally, when structures are close enough, do a free optimization to get the reaction product
 
     new_reactive_dist = norm_of(newcoords[constrained_indices[0,0]] - newcoords[constrained_indices[0,0]])
@@ -298,14 +392,14 @@ def get_product(embedder, coords, atomnos, ids, constrained_indices, method='PM7
 
     return coords
 
-def get_reagent(embedder, coords, atomnos, ids, constrained_indices, method='PM7'):
+def get_reagent(embedder, atoms, coords, ids, constrained_indices, method='PM7'):
     '''
     Part of the automatic NEB implementation.
     Returns a structure that presumably is the association reaction reagent.
     ([cyclo]additions reactions in mind)
     '''
 
-    opt_func = embedder.dispatcher.opt_funcs_dict[embedder.options.calculator]
+    opt_func = embedder.dispatcher.opt_func
 
     bond_factor = 1.5
     # multiple of sum of covalent radii for two atoms.
@@ -317,19 +411,20 @@ def get_reagent(embedder, coords, atomnos, ids, constrained_indices, method='PM7
 
         mol1_center = np.mean([coords[a] for a, _ in constrained_indices], axis=0)
         mol2_center = np.mean([coords[b] for _, b in constrained_indices], axis=0)
-        motion = norm(mol2_center - mol1_center)
+        motion = normalize(mol2_center - mol1_center)
         # norm of the motion that, when applied to mol1,
         # superimposes its reactive centers to the ones of mol2
 
-        threshold_dists = [bond_factor*(pt[atomnos[a]].covalent_radius + pt[atomnos[b]].covalent_radius) for a, b in constrained_indices]
+        threshold_dists = [bond_factor*(pt.covalent_radius(atoms[a]) + 
+                                        pt.covalent_radius(atoms[b])) for a, b in constrained_indices]
 
         reactive_dists = [norm_of(coords[a] - coords[b]) for a, b in constrained_indices]
         # distances between reactive atoms
 
-        coords[:ids[0]] -= norm(motion)*(np.mean(threshold_dists) - np.mean(reactive_dists))
+        coords[:ids[0]] -= normalize(motion)*(np.mean(threshold_dists) - np.mean(reactive_dists))
         # move reactive atoms away from each other just enough
 
-        coords, _, _ = opt_func(coords, atomnos, constrained_indices=constrained_indices, method=method)
+        coords, _, _ = opt_func(atoms, coords, constrained_indices=constrained_indices, method=method)
         # optimize the structure but keeping the reactive atoms distanced
 
         return coords
@@ -342,13 +437,13 @@ def get_reagent(embedder, coords, atomnos, ids, constrained_indices, method='PM7
     moving_molecule_index = next(i for i,n in enumerate(np.cumsum(ids)) if index_to_be_moved < n)
     bounds = [0] + [n+1 for n in np.cumsum(ids)]
     moving_molecule_slice = slice(bounds[moving_molecule_index], bounds[moving_molecule_index+1])
-    threshold_dist = bond_factor*(pt[atomnos[constrained_indices[0,0]]].covalent_radius +
-                                    pt[atomnos[constrained_indices[0,1]]].covalent_radius)
+    threshold_dist = bond_factor*(pt.covalent_radius(atoms[constrained_indices[0,0]]) +
+                                    pt.covalent_radius(atoms[constrained_indices[0,1]]))
 
     motion = (coords[reference] - coords[index_to_be_moved])
     # vector from the atom to be moved to the target reactive atom
 
-    displacement = norm(motion)*(threshold_dist-norm_of(motion))
+    displacement = normalize(motion)*(threshold_dist-norm_of(motion))
     # vector to be applied to the reactive atom to push it far just enough
 
     for i, atom in enumerate(coords[moving_molecule_slice]):
@@ -358,10 +453,10 @@ def get_reagent(embedder, coords, atomnos, ids, constrained_indices, method='PM7
         coords[moving_molecule_slice][i] -= displacement*np.exp(-0.5*dist)
         # the closer they are to the reactive atom, the further they are moved
 
-    coords, _, _ = opt_func(coords, atomnos, constrained_indices=np.array([constrained_indices[0]]), method=method)
+    coords, _, _ = opt_func(atoms, coords, constrained_indices=np.array([constrained_indices[0]]), method=method)
     # when all atoms are moved, optimize the geometry with only the first of the previous constraints
 
-    newcoords, _, _ = opt_func(coords, atomnos, method=method)
+    newcoords, _, _ = opt_func(atoms, coords, method=method)
     # finally, when structures are close enough, do a free optimization to get the reaction product
 
     new_reactive_dist = norm_of(newcoords[constrained_indices[0,0]] - newcoords[constrained_indices[0,0]])
@@ -373,14 +468,25 @@ def get_reagent(embedder, coords, atomnos, ids, constrained_indices, method='PM7
     
     return coords
 
-def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices, step_size=0.02, safe=False, title='temp', logfile=None, xyztraj=None):
+def opt_linear_scan(
+        embedder,
+        atoms,
+        coords,
+        scan_indices,
+        constrained_indices,
+        step_size=0.02,
+        safe=False,
+        title='temp',
+        logfile=None,
+        xyztraj=None,
+    ):
     '''
     Runs a linear scan along the specified linear coordinate.
     The highest energy structure that passes sanity checks is returned.
 
     embedder
+    atoms
     coords
-    atomnos
     scan_indices
     constrained_indices
     step_size
@@ -392,18 +498,24 @@ def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices
     assert [i in constrained_indices.ravel() for i in scan_indices]
 
     i1, i2 = scan_indices
-    far_thr = 2 * sum([pt[atomnos[i]].covalent_radius for i in scan_indices])
+    far_thr = 2 * sum([pt.covalent_radius(atoms[i]) for i in scan_indices])
     t_start = time.perf_counter()
     total_iter = 0
 
-    _, energy, _ = optimize(coords,
-                            atomnos,
+    _, energy, _ = optimize(
+                            atoms,
+                            coords,
                             embedder.options.calculator,
                             embedder.options.theory_level,
                             constrained_indices=constrained_indices,
                             mols_graphs=embedder.graphs,
                             procs=embedder.procs,
                             max_newbonds=embedder.options.max_newbonds,
+                            solvent=embedder.options.solvent,
+                            charge=embedder.options.charge,
+                            mult=embedder.options.mult,
+                            dispatcher=embedder.dispatcher,
+                            debug=embedder.options.debug,
                             )
 
     direction = coords[i1] - coords[i2]
@@ -428,25 +540,31 @@ def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices
                            for a, b in constrained_indices]
 
                 active_coords, energy, success = ase_popt(embedder,
+                                                            atoms,
                                                             active_coords,
-                                                            atomnos,
                                                             constrained_indices,
                                                             targets=targets,
                                                             safe=True,
-                                                            )
+                                                        )
 
             else: # use faster raw optimization function, might scramble more often than the ASE one
 
-                active_coords[i2] += sign * norm(direction) * step_size
-                active_coords, energy, success = optimize(active_coords,
-                                                            atomnos,
+                active_coords[i2] += sign * normalize(direction) * step_size
+                active_coords, energy, success = optimize(
+                                                            atoms,
+                                                            active_coords,
                                                             embedder.options.calculator,
                                                             embedder.options.theory_level,
                                                             constrained_indices=constrained_indices,
                                                             mols_graphs=embedder.graphs,
                                                             procs=embedder.procs,
                                                             max_newbonds=embedder.options.max_newbonds,
-                                                            )
+                                                            solvent=embedder.options.solvent,
+                                                            charge=embedder.options.charge,
+                                                            mult=embedder.options.mult,
+                                                            dispatcher=embedder.dispatcher,
+                                                            debug=embedder.options.debug,
+                                                        )
 
             if not success:
                 if logfile is not None and iterations == 0:
@@ -454,7 +572,7 @@ def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices
 
                 if embedder.options.debug:
                     with open(title+'_SCRAMBLED.xyz', 'a') as f:
-                        write_xyz(active_coords, atomnos, f, title=title+(
+                        write_xyz(atoms, active_coords, f, title=title+(
                             f' d({i1}-{i2}) = {round(dist, 3)} A, Rel. E = {round(energy-energies[0], 3)} kcal/mol'))
 
                 break
@@ -468,7 +586,7 @@ def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices
 
             if xyztraj is not None:
                 with open(xyztraj, 'a') as f:
-                    write_xyz(active_coords, atomnos, f, title=title+(
+                    write_xyz(atoms, active_coords, f, title=title+(
                         f' d({i1}-{i2}) = {round(dist, 3)} A, Rel. E = {round(energy-energies[0], 3)} kcal/mol'))
 
             if (dist < 1.2 and sign == 1) or (
@@ -485,10 +603,11 @@ def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices
     closest_dist = distances[distances_delta.index(min(distances_delta))]
 
     direction = closest_geom[i1] - closest_geom[i2]
-    closest_geom[i1] += norm(direction) * (best_distance-closest_dist)
+    closest_geom[i1] += normalize(direction) * (best_distance-closest_dist)
 
-    final_geom, final_energy, _ = optimize(closest_geom,
-                                            atomnos,
+    final_geom, final_energy, _ = optimize(
+                                            atoms,
+                                            closest_geom,
                                             embedder.options.calculator,
                                             embedder.options.theory_level,
                                             constrained_indices=constrained_indices,
@@ -496,13 +615,18 @@ def opt_linear_scan(embedder, coords, atomnos, scan_indices, constrained_indices
                                             procs=embedder.procs,
                                             max_newbonds=embedder.options.max_newbonds,
                                             check=False,
+                                            solvent=embedder.options.solvent,
+                                            charge=embedder.options.charge,
+                                            mult=embedder.options.mult,
+                                            dispatcher=embedder.dispatcher,
+                                            debug=embedder.options.debug,
                                             )
 
     if embedder.options.debug:
 
         if embedder.options.debug:
             with open(xyztraj, 'a') as f:
-                write_xyz(active_coords, atomnos, f, title=title+(
+                write_xyz(atoms, active_coords, f, title=title+(
                     f' FINAL - d({i1}-{i2}) = {round(norm_of(final_geom[i1]-final_geom[i2]), 3)} A,'
                     f' Rel. E = {round(final_energy-energies[0], 3)} kcal/mol'))
 
@@ -572,16 +696,28 @@ def fitness_check(coords, constraints, targets, threshold) -> bool:
                     
     return error < threshold
 
-def _refine_structures(structures,
-                       atomnos,
+def _refine_structures(
+                       atoms,
+                       structures,
                        calculator,
                        method,
                        procs,
+                       charge=0,
+                       mult=1,
                        constrained_indices=None,
                        constrained_distances=None,
+
+                       constrained_angles_indices=None,
+                       constrained_angles_values=None,
+
+                       constrained_dihedrals_indices=None,
+                       constrained_dihedrals_values=None,
+
                        solvent=None,
                        loadstring='',
-                       logfunction=None):
+                       logfunction=None,
+                       dispatcher=None,
+                       debug=False):
     '''
     Refine a set of structures - optimize them and remove similar
     ones and high energy ones (>20 kcal/mol above lowest)
@@ -592,17 +728,29 @@ def _refine_structures(structures,
         loadbar(i, len(structures), f'{loadstring} {i+1}/{len(structures)} ')
 
         opt_coords, energy, success = optimize(
+                                                atoms,
                                                 conformer,
-                                                atomnos,
                                                 calculator,
+
                                                 constrained_indices=constrained_indices,
                                                 constrained_distances=constrained_distances,
+                                                
+                                                constrained_dihedrals_indices=constrained_dihedrals_indices,
+                                                constrained_dihedrals_values=constrained_dihedrals_values,
+
+                                                constrained_angles_indices=constrained_angles_indices,
+                                                constrained_angles_values=constrained_angles_values,
+            
                                                 method=method,
                                                 procs=procs,
                                                 solvent=solvent,
                                                 title=f'Structure_{i+1}',
                                                 logfunction=logfunction,
+                                                charge=charge,
+                                                mult=mult,
+                                                dispatcher=dispatcher,
                                                 check=False, # a change in bonding topology is possible and should not be prevented
+                                                debug=debug,
                                             )
 
         if success:
@@ -615,7 +763,7 @@ def _refine_structures(structures,
     energies = np.array(energies)
 
     # remove similar ones
-    structures, mask = prune_by_rmsd(structures, atomnos)
+    structures, mask = prune_by_rmsd(structures, atoms)
     energies = energies[mask]
 
     # remove high energy ones

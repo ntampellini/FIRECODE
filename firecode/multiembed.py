@@ -5,10 +5,11 @@ from itertools import permutations
 from shutil import copy, rmtree
 
 import numpy as np
+from prism_pruner.utils import time_to_string
 
 from firecode.errors import InputError, ZeroCandidatesError
 from firecode.utils import (cartesian_product, suppress_stdout_stderr,
-                          time_to_string, timing_wrapper)
+                            timing_wrapper)
 
 
 def multiembed_dispatcher(embedder):
