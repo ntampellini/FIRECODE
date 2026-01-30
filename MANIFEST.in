@@ -5,3 +5,4 @@ include firecode/*
 include firecode/tests/*
 include firecode/calculators/*
 include docs/*
+exclude firecode/calculators/*.pt

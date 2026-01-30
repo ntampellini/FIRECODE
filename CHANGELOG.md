@@ -3,13 +3,12 @@
 
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
-## FIRECODE 1.4.0 🔥 (January 25 2026)
+## FIRECODE 1.4.0 🔥 (January 25 2026) - Big cleanup and reorganization!
 - Similarity pruning is now done via the standalone [PRISM](https://github.com/ntampellini/prism_pruner) library.
 - Removed dependencies: numba, cclib, periodictable.
 - Removed MOPAC, GAUSSIAN and OPENBABEL calculator interfaces completely.
 - Removed SADDLE, CSEARCH and NCI keywords, as well as the saddle> operator.
 - Bumped minimum Python version from 3.8 to 3.12.
-
 
 ## FIRECODE 1.3.0 🔥 (December 15 2025)
 - Added [UMA](https://fair-chem.github.io/core/uma.html) as a calculator with Meta MLIPs, via ASE and the fairchem-core library. The model path needs to be specified in the settings.py file.

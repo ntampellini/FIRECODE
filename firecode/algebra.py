@@ -15,7 +15,7 @@ GNU General Public License for more details.
 
 '''
 import numpy as np
-from prism_pruner.algebra import (normalize)
+from prism_pruner.algebra import normalize
 
 norm_of = np.linalg.norm
 
