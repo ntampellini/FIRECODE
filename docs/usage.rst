@@ -18,15 +18,13 @@ instruction in a string after the ``-cl``/``--command_line`` argument:
 ::
 
     firecode -cl "csearch> molecule.xyz"
-    firecode --command_line "csearch> molecule.xyz"
 
 In this case, an input file will be written for you by the program.
 
 Input formatting
 ----------------
 
-The input can be any text file. The extension is arbitrary but I suggest
-sticking with ``.txt``.
+The input can be any text file, but sticking with ``.txt`` or ``.inp`` is recommended.
 
 -  Any blank line will be ignored
 -  Any line starting with ``#`` will be ignored
@@ -41,11 +39,8 @@ Then, molecule files are specified. A molecule line is made up of these elements
 
 An example with all four is ``refine> rsearch> butadiene.xyz 6a 8b charge=1``.
 
-FIRECODE can work with all molecular formats read by
-`cclib <https://github.com/cclib/cclib>`__, but best practice is using
-only the ``.xyz`` file format, particularly for multimolecular files
-containing different conformers of the same molecule. **Molecule indices
-are counted starting from zero!**
+FIRECODE works with ``.xyz`` files. **Molecule indices
+are zero-based! (counted starting from zero!)**
 
 Operators
 +++++++++
