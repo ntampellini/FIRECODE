@@ -11,13 +11,13 @@ For detailed descriptions of the operators and keywords present in the inputs, s
 
 Work is in progress to expand this section with more examples.
 
-1. Generation of a 3D structure from SMILES, conformational search and refinement
-+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+1. Conformational search and refinement
++++++++++++++++++++++++++++++++++++++++
 
 ::
 
    LEVEL=GFN-FF
-   refine> rsearch> opt> O=C(O)[C@H](NC([C@H](NC([C@@H](C)N)=O)C)=O)C
+   refine> rsearch> opt> tris_ala.xyz
 
    # This is a comment line!
 
@@ -25,11 +25,9 @@ Work is in progress to expand this section with more examples.
    # If XTB is not set as the default calculator, you can specify it
    # here adding CALC=XTB in the keyword line.
 
-   # First, the SMILES string is converted into a 3D structure
-   # (H2N-Ala-Ala-Ala-OH), then operators are applied starting
-   # from the inside out:
+   # The operators are applied starting from the inside out:
 
-   # opt> - the generated 3D structure will be optimized
+   # opt> - the structure will be optimized
 
    # rsearch> - a knowledge-based, torsion-based conformational search
    # is carried out. The number of conformers generated can be adjusted
@@ -75,7 +73,7 @@ Work is in progress to expand this section with more examples.
 
 ::
 
-    SADDLE KCAL=10
+    KCAL=10
     scan> atropisomer.xyz 1 2 9 10
 
     # scan> : (four indices specified) performs two dihedral
@@ -84,12 +82,7 @@ Work is in progress to expand this section with more examples.
     # 10 kcal/mol (KCAL keyword) form the lowest energy
     # structure are re-scanned at increased accuracy (1°
     # increments).
-
-    # SADDLE: Each maxima is then optimized to a saddle point.
-    
-    # It is also possible to replace SADDLE with NEB to use scan
-    # points to run a NEB in an automated way.
-
+   
 .. figure:: /images/atropo.png
    :alt: Example output structure
    :width: 75%
