@@ -7,7 +7,7 @@ The program can be run from terminal, with the command:
 
 ::
 
-    python -m firecode myinput.txt -n [custom_title]
+    firecode myinput.txt -n [custom_title]
 
 A custom name for the run can be optionally provided with the -n flag, otherwise a time
 stamp will be used to name the output files.
@@ -17,8 +17,8 @@ instruction in a string after the ``-cl``/``--command_line`` argument:
 
 ::
 
-    python -m firecode -cl "csearch> molecule.xyz"
-    python -m firecode --command_line "csearch> molecule.xyz"
+    firecode -cl "csearch> molecule.xyz"
+    firecode --command_line "csearch> molecule.xyz"
 
 In this case, an input file will be written for you by the program.
 
@@ -34,11 +34,12 @@ sticking with ``.txt``.
 
 Then, molecule files are specified. A molecule line is made up of these elements, in this order:
 
--  An operator (optional)
+-  Zero or more operators (*i.e.* ``csearch>``, ``opt>``, etc.) separated by spaces
 -  The molecule file name (required)
--  Indices (numbers) and pairings (letters) for the molecule (optional)
+-  Optional indices (numbers) and pairings (letters) for the molecule
+-  Optional properties of the molecule (*i.e.* ``charge=1``, ``property=value``)
 
-An example with all three is ``opt> butadiene.xyz 6a 8b``.
+An example with all four is ``refine> rsearch> butadiene.xyz 6a 8b charge=1``.
 
 FIRECODE can work with all molecular formats read by
 `cclib <https://github.com/cclib/cclib>`__, but best practice is using
