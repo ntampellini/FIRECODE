@@ -12,10 +12,6 @@ This program is written in Python (currently >=3.12). The recommended way to ins
     conda activate firecode
     uv pip install firecode
 
-    # install optional external dependencies with mamba: xtb and/or tblite
-    conda install -c conda-forge mamba
-    mamba install -c conda-forge crest==2.12
-
 After installation, run the guided utility to finalize the setup:
 
 ::
