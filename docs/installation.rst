@@ -3,54 +3,33 @@
 Installation
 ============
 
-This program is written in pure Python and it is intended to use with
-Python version 3.8.10. The use of a dedicated conda virtual environment
-is highly enocouraged. Installation is possible via pip:
+This program is written in Python (currently >=3.12). The recommended way to install it is through conda/mamba and uv. 
+
+::
+    # create a new conda environment and install firecode with uv
+    conda create --name firecode python=3.12 uv
+    conda activate firecode
+    uv pip install firecode
+
+    # install optional external dependencies with mamba: xtb and/or tblite
+    conda install -c conda-forge mamba
+    mamba install -c conda-forge xtb xtb-python tblite tblite-python crest==2.12
+
+After installation, run the guided utility to finalize the setup:
 
 ::
 
-    pip install firecode
+    firecode --setup
 
-After installation, run the guided utility to finalize set up:
 
-::
+Additional dependencies (WIP)
+=============================
 
-    python -m firecode --setup
+The software can be interfaced with AIMNET2 and UMA models. Work is in progress to port AIMNET2 models to the new codebase.
+An interface to the UMA models is available provided that the models are present on the system at the location specified in
+the settings.py file (change with ``firecode --settings``). The UMA models can be obtained from HuggingFace at https://huggingface.co/facebook/UMA. 
 
-Defaults:
 
--  Force Field optimization is turned ON.
--  Force Field Calculator is XTB
-
-Additional dependencies
-=======================
-
-External dependencies: Openbabel (see below) and at least one calculator if geometry optimization is desired.
-At the moment, FIRECODE supports:
-
--  XTB (>=6.3) - recommended
--  AIMNET2 (via ASE) - recommended
--  ORCA (>=4.2)
--  Gaussian (>=9) - (deprecated)
--  MOPAC2016 - (deprecated)
-
-An additional installation of Openbabel is required, as it provides i/o capabilities via cclib.
-Read below on how to install these.
-
-Openbabel (required)
---------------------
-
-Openbabel is required, as it provides i/o capabilities via cclib. This is free software and it is available through conda:
-
-::
-
-    conda install -c conda-forge openbabel
-
-Alternatively, you can download it from `the official
-website <http://openbabel.org/wiki/Category:Installation>`__. If you
-install the software from the website, make sure to install its Python bindings as well.
-You can manually compile these by following the `website
-guidelines <https://openbabel.org/docs/dev/Installation/install.html#compile-bindings>`__.
 
 XTB (recommended for Force Field and semiempirical calculations)
 ----------------------------------------------------------------
@@ -81,16 +60,3 @@ Gaussian (deprecated)
 
 This is commercial software available at `the official
 website <https://gaussian.com/>`__.
-
-
-MOPAC2016 (deprecated)
-----------------------
-
-This software is closed-source but free for academic use. If you qualify
-for this usage, you should `request a licence for
-MOPAC2016 <http://openmopac.net/form.php>`__. After installation, be
-sure to add the MOPAC folder to your system PATH, to access the program
-through command line with the "MOPAC2016.exe" command. To test this, the
-command ``MOPAC2016.exe`` should return
-`this <https://gist.github.com/ntampellini/82224abb9db1c1880e91ad7e0682e34d>`__
-message.
