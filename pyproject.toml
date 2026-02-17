@@ -1,3 +1,77 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firecode"
+license = "LGPL-3.0-or-later"
+version = "1.5.1"
+readme = "README.md"
+description = "FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles"
+keywords = []
+authors = [{name = "Nicolò Tampellini", email = "nicolo.tampellini@yale.edu"}]
+requires-python = ">=3.10, <3.13"
+dependencies = [
+    "rdkit>=2025.9.3",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "networkx",
+    "ase",
+    "prettytable",
+    "psutil",
+    "rich",
+    "inquirerpy",
+    "prism_pruner",
+]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+# Conda packages that aren't in [project.dependencies]
+xtb = ">=6.6.0"
+xtb-python = "*"
+tblite = ">=0.3.0"
+tblite-python = "*"
+pkginfo = ">=1.10"
+twine = ">=6.2.0,<7"
+pre-commit = ">=4.4.0,<5"
+
+[tool.pixi.pypi-dependencies]
+firecode = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default"}
+
+[tool.pixi.feature.dev.dependencies]
+pytest = ">=8.3"
+pytest-cov = ">=7.0"
+ruff = ">=0.11"
+mypy = ">=1.18.2,<2"
+pre-commit = ">=4.2"
+
+[tool.pixi.feature.dev.tasks]
+fmt = { cmd="ruff format ." }
+lint = { cmd="ruff check . --fix" }
+types = { cmd="mypy" }
+test = { cmd="pytest" }
+all = { depends-on = ["fmt", "lint", "types", "test"] }
+
+[project.scripts]
+firecode = "firecode.__main__:main"
+
+[project.optional-dependencies]
+# Optional calculator-specific dependencies
+uma = [
+    "fairchem-core",
+]
+aimnet2 = [
+    "aimnet[ase]",
+]
+full = [
+    "fairchem-core",
+    "aimnet[ase]",
+]

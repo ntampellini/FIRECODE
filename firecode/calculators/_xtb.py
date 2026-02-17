@@ -30,6 +30,7 @@ import numpy as np
 from firecode.algebra import norm_of, normalize
 from firecode.calculators.__init__ import NewFolderContext
 from firecode.graph_manipulations import get_sum_graph
+from firecode.units import EH_TO_KCAL
 from firecode.utils import clean_directory, read_xyz, write_xyz
 
 
@@ -377,7 +378,7 @@ def read_from_xtbtraj(filename):
     xyzblock = lines[first_coord_line:]
 
     coords = np.array([line.split()[1:] for line in xyzblock], dtype=float)
-    energy = float(lines[first_coord_line-1].split()[1]) * 627.5096080305927 # Eh to kcal/mol
+    energy = float(lines[first_coord_line-1].split()[1]) * EH_TO_KCAL
 
     return coords, energy
 
@@ -390,7 +391,7 @@ def energy_grepper(filename, signal_string, position):
         while True:
             line = f.readline()
             if signal_string in line:
-                return float(line.split()[position]) * 627.5096080305927 # Eh to kcal/mol
+                return float(line.split()[position]) * EH_TO_KCAL
             if not line:
                 raise Exception(f'Could not find \'{signal_string}\' in file ({filename}).')
 
@@ -552,7 +553,7 @@ def crest_mtd_search(
 
     '''
 
-    with NewFolderContext(title):
+    with NewFolderContext(title, delete_after=False):
 
         if constrained_indices is not None:
             if len(constrained_indices) == 0:

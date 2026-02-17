@@ -22,21 +22,23 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 '''
 
 import os as op_sys
-from subprocess import getoutput
 from time import perf_counter
 
 import numpy as np
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
+from prism_pruner.algebra import dihedral
+from prism_pruner.utils import time_to_string
 
-from firecode.algebra import dihedral, norm_of, point_angle
+from firecode.algebra import point_angle
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.pt import pt
+from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.settings import CALCULATOR
 from firecode.solvents import epsilon_dict
 from firecode.units import EH_TO_KCAL
-from firecode.utils import Constraint, read_xyz, time_to_string, write_xyz
+from firecode.utils import Constraint, read_xyz, write_xyz
 
 
 class Optimizer:
@@ -275,12 +277,12 @@ def main(filenames):
 
                         a, b = constraint.indices
                         if constraint.value is None:
-                            constraint.value = norm_of(coords[a]-coords[b])
+                            constraint.value = np.linalg.norm(coords[a]-coords[b])
 
                         constrained_indices.append(constraint.indices)
                         constrained_distances.append(constraint.value)
 
-                        print(f"CONSTRAIN -> d({a}-{b}) = {round(norm_of(coords[a]-coords[b]), 3)} A at start of optimization (target is {round(constraint.value, 3)} A)")
+                        print(f"CONSTRAIN -> d({a}-{b}) = {round(np.linalg.norm(coords[a]-coords[b]), 3)} A at start of optimization (target is {round(constraint.value, 3)} A)")
 
                     elif constraint.type == 'A':
 
@@ -316,8 +318,8 @@ def main(filenames):
 
                 coords, energy, _ = optimizer.dispatcher.opt_func(
 
+                    data.atoms,
                     coords,
-                    data.atomnos,
                     method=optimizer.method,
 
                     constrained_indices=constrained_indices,
@@ -348,7 +350,7 @@ def main(filenames):
 
                 elif optimizer.opt:
                     with open(outname, write_type) as f:
-                        write_xyz(coords, data.atomnos, f, title=f'Energy = {energy} kcal/mol')
+                        write_xyz(data.atoms, coords, f, title=f'Energy = {energy} kcal/mol')
                     print(f"{'Appended' if write_type == 'a' else 'Wrote'} optimized structure at {outname} - {time_to_string(elapsed)}\n")
 
                 if optimizer.free_energy:
@@ -362,8 +364,8 @@ def main(filenames):
                     t_start = perf_counter()
                     
                     energy = ase_get_free_energy(
+                        data.atoms,
                         coords,
-                        data.atomnos,
                         ase_calc=optimizer.dispatcher.ase_calc,
                         energy=energy,
                         charge=charge,
@@ -388,7 +390,7 @@ def main(filenames):
             for constraint in optimizer.constraints:
                 if constraint.type == 'B':
                     a, b = constraint.indices
-                    final_value = norm_of(coords[a]-coords[b])
+                    final_value = np.linalg.norm(coords[a]-coords[b])
                     uom = ' Å'
                 
                 elif constraint.type == 'A':

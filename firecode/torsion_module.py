@@ -183,8 +183,8 @@ def _is_nondummy(i, root, graph) -> bool:
     # and flat symmetrical rings like phenyl, N-pyrrolyl...
 
     G = deepcopy(graph)
-    nb = G.neighbors(i)
-    nb.remove(root)
+    nb = list(G.neighbors(i))
+    # nb.remove(root)
 
     if len(nb) == 1:
         if len(G.neighbors(nb[0])) == 2:

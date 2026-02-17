@@ -99,6 +99,7 @@ solvent_synonyms = {
     'ch3oh':'methanol',
     'meoh':'methanol',
     'h2o':'water',
+    'etoac':'ethylacetate',
 }
 
 new_theory_level = {

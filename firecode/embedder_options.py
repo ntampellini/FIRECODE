@@ -126,6 +126,8 @@ keywords_dict = {
                                 # range to be explored around the structure pivot.
                                 # Default is 120. Syntax: `ROTRANGE=120`
 
+            'SCRAMBLECHECK' : 1,   # After optimization, check that the structure did not scramble.
+
             'SHRINK' : 1,         # Exaggerate orbital dimensions during embed, scaling them by a factor
                                 # of one and a half. This makes it easier to perform the embed without
                                 # having molecules clashing one another. Then, the correct distance between
@@ -210,6 +212,7 @@ class Options:
         self.theory_level = None        # set later in _calculator_setup()
         self.final_sp_level = None
         self.solvent = None
+        self.scramble_check = False
         self.charge = 0
         self.mult = 1
         self.ff_opt = FF_OPT_BOOL
@@ -279,6 +282,7 @@ class Options:
             'dryrun',
             'shrink',
             'rigid',
+            'scramble_check',
             'suprafacial',
             'simpleorbitals',
             'fix_angles_in_deformation',
@@ -560,6 +564,9 @@ class OptionSetter:
     def crestlevel(self, options, *args):
         kw = self.keywords_simple[self.keywords.index('CRESTLEVEL')]
         options.crestlevel = kw.split('=')[1]
+
+    def scramblecheck(self, options, *args):
+        options.scramble_check = True
 
     def set_options(self):
 

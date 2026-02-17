@@ -53,7 +53,6 @@ UMA_MODEL_PATH = "./uma-s-1p1.pt"
 DEFAULT_LEVELS = {
     'ORCA':'PM3',
     'XTB':'GFN2-xTB',
-    'XTB':'GFN2-xTB',
     'AIMNET2':'wB97M-D3',
     'UMA':'OMOL',
 }

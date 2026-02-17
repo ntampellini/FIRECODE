@@ -13,6 +13,7 @@ from firecode.ase_manipulations import (DihedralSpring, PlanarAngleSpring,
 from firecode.calculators.__init__ import NewFolderContext
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import UMA_MODEL_PATH
+from firecode.units import EV_TO_KCAL
 
 
 def uma_opt(
@@ -62,9 +63,9 @@ def uma_opt(
         # ase_calc.do_reset()
         # ase_calc.set_charge(charge)
 
-        atoms = Atoms(atoms, positions=coords)
-        atoms.info.update({'charge':charge, 'spin':mult})
-        atoms.calc = ase_calc
+        ase_atoms = Atoms(atoms, positions=coords)
+        ase_atoms.info.update({'charge':charge, 'spin':mult})
+        ase_atoms.calc = ase_calc
         constraints = []
 
         if constrained_indices is not None:
@@ -88,7 +89,7 @@ def uma_opt(
                 tgt_angle = constrained_dihedrals_values[i] or dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
                 constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
 
-        atoms.set_constraint(constraints)
+        ase_atoms.set_constraint(constraints)
 
         fmax = {
             'tight' : 0.05,
@@ -99,7 +100,7 @@ def uma_opt(
         optimizer_class = {'LBFGS':LBFGS, 'FIRE':FIRE}[optimizer]
 
         try:
-            with optimizer_class(atoms, maxstep=0.05, logfile=None, trajectory=traj) as opt:
+            with optimizer_class(ase_atoms, maxstep=0.05, logfile=None, trajectory=traj) as opt:
                 opt.run(fmax=fmax, steps=maxiter)
                 iterations = opt.nsteps
 
@@ -113,14 +114,14 @@ def uma_opt(
                 logfunction(e)
             return coords, None, False 
 
-        new_structure = atoms.get_positions()
+        new_structure = ase_atoms.get_positions()
         success = (iterations < 499)
 
         if logfunction is not None:
             exit_str = 'REFINED' if success else 'MAX ITER'
             logfunction(f'    - {title} {exit_str} ({iterations} iterations, {time_to_string(time.perf_counter()-t_start_opt)})')
 
-        energy = atoms.get_total_energy() * 23.06054194532933 #eV to kcal/mol
+        energy = ase_atoms.get_total_energy() * EV_TO_KCAL
 
         if traj is not None:
             os.system(f"ase convert {traj} {title}_trj.xyz")
@@ -158,7 +159,10 @@ def get_uma_calc(method="omol", logfunction=None):
 
     except ImportError as err:
         print(err)
-        raise ImportError('To run the UMA models, please install fairchem:\n    >>> pip install fairchem-core')
+        raise ImportError('To run the UMA models, please install fairchem:\n'
+        '    >>> uv pip install fairchem-core\n' \
+        'or alternatively, install the "uma" version of firecode:\n'
+        '    >>> uv pip install firecode[uma]\n')
 
     gpu_bool = cuda.is_available()
 

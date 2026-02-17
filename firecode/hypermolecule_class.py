@@ -32,7 +32,7 @@ from firecode.errors import CCReadError, NoOrbitalError
 from firecode.graph_manipulations import is_sigmatropic, is_vicinal
 from firecode.pt import pt
 from firecode.reactive_atoms_classes import get_atom_type
-from firecode.utils import read_xyz, smi_to_3d
+from firecode.utils import read_xyz
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -93,7 +93,7 @@ class Hypermolecule:
             r += f' {[str(atom) for atom in self.reactive_atoms_classes_dict[0].values()]}'
         return r
 
-    def __init__(self, filename, reactive_indices=None, debug_logfunction=None):
+    def __init__(self, filename, charge=0, mult=1, reactive_indices=None, debug_logfunction=None):
         '''
         Initializing class properties: reading conformational ensemble file, aligning
         conformers to first and centering them in origin.
@@ -107,18 +107,12 @@ class Hypermolecule:
             if '.' in filename:
                 raise SyntaxError((f'Molecule {filename} cannot be read. Please check your syntax.'))
 
-            try:
-                filename = smi_to_3d(filename, "generated_3D_coords")
-                print(f"--> Embedded SMILES string to 3D structure, saved as {filename}")
-                
-            except Exception:
-                raise SyntaxError((f'The program is trying to read something that is not a valid molecule input ({filename}). ' +
-                            'If this looks like a keyword, it is probably faulted by a syntax error.'))
-
         self.rootname = filename.split('.')[0]
         self.filename = filename
         self.debug_logfunction = debug_logfunction
         self.constraints = []
+        self.charge = 0
+        self.mult = 1
 
         if isinstance(reactive_indices, np.ndarray):
             self.reactive_indices = reactive_indices

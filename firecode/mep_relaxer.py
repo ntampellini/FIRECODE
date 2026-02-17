@@ -1,5 +1,6 @@
 import time
 import warnings
+from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +10,9 @@ from ase.mep import DyNEB
 from ase.optimize import LBFGS
 from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.ase_manipulations import PreventScramblingConstraint, ase_dump
+from firecode.ase_manipulations import (PreventScramblingConstraint, ase_dump,
+                                        set_charge_and_mult_on_ase_atoms)
+from firecode.units import EV_TO_KCAL
 
 
 def ase_mep_relax(
@@ -52,6 +55,9 @@ def ase_mep_relax(
 
     else:
         images = [Atoms(atoms, positions=coords) for coords in align_structures(structures)]
+
+    for i, image in enumerate(deepcopy(images)):
+        images[i] = set_charge_and_mult_on_ase_atoms(image)
 
     ase_dump('interpolated_MEP_guess.xyz', atoms, images)
 
@@ -96,7 +102,7 @@ def ase_mep_relax(
                     if logfunction is not None:
                         logfunction(f'--> Ran {maxiter//10*ss} steps, wrote partially optimized traj to {title}_MEP.xyz')
 
-                    ase_dump(f'{title}_MEP.xyz', atoms, images, [image.get_total_energy() * 23.06054194532933 for image in images])
+                    ase_dump(f'{title}_MEP.xyz', atoms, images, [image.get_total_energy() * EV_TO_KCAL for image in images])
 
                 iterations = opt.nsteps
                 exit_status = 'CONVERGED' if iterations < maxiter-1 else 'MAX ITER'
@@ -116,7 +122,7 @@ def ase_mep_relax(
     if logfunction is not None:
         logfunction(f'    - NEB for {title} {exit_status} ({time_to_string(time.perf_counter()-t_start)})\n')
   
-    energies = [image.get_total_energy() * 23.06054194532933 for image in images] # eV to kcal/mol
+    energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
     
     ase_dump(f'{title}_MEP.xyz', atoms, images, energies)
     # Save the converged MEP (minimum energy path) to an .xyz file

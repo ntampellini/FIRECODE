@@ -23,6 +23,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 import time
 from copy import deepcopy
+from functools import partial
 
 import numpy as np
 from prism_pruner.pruner import prune_by_rmsd
@@ -30,28 +31,29 @@ from prism_pruner.utils import time_to_string
 from scipy.spatial.transform import Rotation as R
 
 from firecode.algebra import norm_of, normalize
-from firecode.ase_manipulations import ase_neb, ase_popt, ase_tblite_opt
+from firecode.ase_manipulations import ase_neb, ase_popt, ase_tblite_opt, ase_popt_with_alpb
 from firecode.calculators._ase_uma import uma_opt
 from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
 from firecode.settings import DEFAULT_LEVELS
 from firecode.utils import (loadbar, molecule_check, pt, scramble_check,
                             write_xyz)
-
-
+    
 class Opt_func_dispatcher:
 
     def __init__(self, calculator):
 
-        # the AIMNET2 function is in a separate
-        # librarty that might not be installed:
-        # delay setting the self.opt_func attribute
-        # to when we load the model
         self.opt_func = {
+
             'ORCA':orca_opt,
             'XTB':xtb_opt,
             'TBLITE':ase_tblite_opt,
             'UMA':uma_opt,
+
+            # AIMNet2 does not have a custom optimization
+            # function, but uses the ASE one
+            'AIMNET2':ase_popt_with_alpb,
+
         }.get(calculator, None)
 
         self.ase_calc = None
@@ -84,23 +86,30 @@ class Opt_func_dispatcher:
     def load_aimnet2_calc(self, theory_level, logfunction=print):
         
         try:
-            from aimnet2_firecode.interface import (aimnet2_opt,
-                                                    get_aimnet2_calc)
+            import torch
+            from aimnet.calculators import AIMNet2ASE
 
         except ImportError:
             raise Exception(('Cannot import AIMNet2 python bindings for FIRECODE. Install them with:\n'
-                            '>>> pip install aimnet2_firecode'))
+                            '    >>> uv pip install aimnet[ase]\n'
+                            'or alternatively, install the "aimnet2" version of firecode:\n'
+                            '    >>> uv pip install firecode[aimnet2]\n'))
             
-        self.opt_func = aimnet2_opt
-        self.aimnet2_calc = get_aimnet2_calc(theory_level, logfunction=logfunction)
+
+        gpu_bool = torch.cuda.is_available()
+        self.aimnet2_calc = AIMNet2ASE("aimnet2")
         self.ase_calc = self.aimnet2_calc
+
+        logfunction(f'--> AIMNet2 calculator loaded on {"GPU" if gpu_bool else "CPU"}.')
+        
 
     def load_tblite_calc(self, method, solvent):
         
         try:
             from tblite.ase import TBLite
 
-        except ImportError:
+        except ImportError as e:
+            print(e)
             raise Exception(('Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n'
                             '>>> conda install -c conda-forge mamba\n'
                             '>>> mamba install -c conda-forge tblite tblite-python\n'))

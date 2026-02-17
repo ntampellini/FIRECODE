@@ -57,11 +57,10 @@ from firecode.numba_functions import (compenetration_check, count_clashes,
 from firecode.operators import operate
 from firecode.optimization_methods import Opt_func_dispatcher, fitness_check
 from firecode.parameters import orb_dim_dict
-from firecode.pt import pt
 from firecode.references import references
 from firecode.settings import DEFAULT_LEVELS, PROCS
 from firecode.torsion_module import get_quadruplets
-from firecode.utils import (Constraint, _saturation_check, ase_view,
+from firecode.utils import (Constraint, saturation_check, ase_view,
                             auto_newline, cartesian_product, clean_directory,
                             loadbar, scramble_check, timing_wrapper, write_xyz)
 
@@ -399,7 +398,7 @@ class Embedder:
         for mol in self.objects:
             charge = int(mol.charge) if hasattr(mol, "charge") else self.options.charge
             
-            if _saturation_check(mol.atoms, charge):
+            if saturation_check(mol.atoms, charge):
                 self.log(f"--> {mol.filename}: saturation check passed (even saturation index with CHG={charge}, MULT={self.options.mult})")
 
             # this may be a radical (and we would expect an even multiplicity) or something is wrong
@@ -1783,7 +1782,7 @@ class RunEmbedding(Embedder):
                 ) = process.result()
                 
                 # assert that the structure did not scramble during optimization
-                if self.exit_status[i]:
+                if self.options.scramble_check and self.exit_status[i]:
                     constraints = (np.concatenate([self.constrained_indices[i], self.internal_constraints])
                                    if len(self.internal_constraints) > 0
                                    else self.constrained_indices[i])
@@ -2057,7 +2056,7 @@ class RunEmbedding(Embedder):
                 ) = process.result()
 
                 # assert that the structure did not scramble during optimization
-                if self.exit_status[i]:
+                if self.options.scramble_check and self.exit_status[i]:
                     constraints = (np.concatenate([self.constrained_indices[i], self.internal_constraints])
                                    if len(self.internal_constraints) > 0
                                    else self.constrained_indices[i])
@@ -2223,6 +2222,7 @@ class RunEmbedding(Embedder):
                                             ase_calc=self.dispatcher.ase_calc,
                                             solvent=self.options.solvent,
                                             charge=self.options.charge,
+                                            mult=self.options.mult,
                                             maxiter=maxiter,
                                             conv_thr=conv_thr,
 
@@ -2266,7 +2266,7 @@ class RunEmbedding(Embedder):
             ) = result
 
             # assert that the structure did not scramble during optimization
-            if self.exit_status[i]:
+            if self.options.scramble_check and self.exit_status[i]:
                 constraints = (np.concatenate([self.constrained_indices[i], self.internal_constraints])
                                 if len(self.internal_constraints) > 0
                                 else self.constrained_indices[i])
@@ -2291,8 +2291,8 @@ class RunEmbedding(Embedder):
             else:
                 self.energies[i] = 1E10
 
-            ### Update checkpoint every (20*max_workers) optimized structures, and give an estimate of the remaining time
-            chk_freq = int(self.avail_cpus//4) * self.options.checkpoint_frequency
+            ### Update checkpoint every 50 optimized structures, and give an estimate of the remaining time
+            chk_freq = self.options.checkpoint_frequency
             if i % chk_freq == chk_freq-1:
 
                 with open(self.outname, 'w') as f:        
@@ -2553,7 +2553,7 @@ class RunEmbedding(Embedder):
         self.write_mol_info()
 
         if self.embed is None:
-            self.log('--> No embed requested, exiting.\n')
+            self.log('--> No embed or refinement requested, exiting.\n')
             self.normal_termination()
 
         if self.embed == 'error':

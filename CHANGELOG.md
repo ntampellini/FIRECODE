@@ -3,11 +3,24 @@
 
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
+<!-- FINALSPLEVEL keyword? -->
+ <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>-->
+
+## FIRECODE 1.5.1 🔥 (February 17 2026)
+- Imports bugfixes.
+- Restructured setup to use [Pixi](https://pixi.prefix.dev/latest/).
+- Removed openbabel dependency.
+- Removed SMILES to 3D conversion with Openbabel.
+- Implemented an interface to [ML-FSM](https://github.com/thegomeslab/ML-FSM/tree/main) with the "fsm>" operator.
+- Added the "rdkit_search>" operator (ETKDGv3).
+- Updated the AIMNET2 interface, which now relies exclusively on the "aimnet[ase]" library (see [repository](https://github.com/isayevlab/aimnetcentral)).
+
 ## FIRECODE 1.4.0 🔥 (January 25 2026) - Big cleanup and reorganization!
 - Similarity pruning is now done via the standalone [PRISM](https://github.com/ntampellini/prism_pruner) library.
 - Removed dependencies: numba, cclib, periodictable.
 - Removed MOPAC, GAUSSIAN and OPENBABEL calculator interfaces completely.
 - Removed SADDLE, CSEARCH and NCI keywords, as well as the saddle> operator.
+- Restructured most functions taking coordinates and atomic numbers to atomic symbols and coordinates (ASE style). [coords, atomnos] -> [atoms, coords]
 - Bumped minimum Python version from 3.8 to 3.12.
 
 ## FIRECODE 1.3.0 🔥 (December 15 2025)

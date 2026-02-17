@@ -25,9 +25,9 @@ import sys
 from rich.traceback import install
 install(show_locals=True)
 
-__version__ = '1.4.0'
+__version__ = '1.5.0'
 
-if __name__ == '__main__':
+def main():
 
 
     usage = '''\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
@@ -106,3 +106,6 @@ if __name__ == '__main__':
 
     embedder.run()
     # run the program
+
+if __name__ == "__main__":
+    main()

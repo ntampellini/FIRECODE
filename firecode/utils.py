@@ -22,18 +22,15 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 '''
 
 import os
+import re
 import sys
 import time
-from collections import defaultdict
-from itertools import permutations, product
 from shutil import rmtree
-from subprocess import DEVNULL, STDOUT, CalledProcessError, check_call, run
-from typing import List, Tuple, Union
+from subprocess import CalledProcessError, getoutput, run
 
 import numpy as np
 from networkx import shortest_path
-from openbabel import pybel
-from prism_pruner.algebra import dihedral, normalize, rot_mat_from_pointer
+from prism_pruner.algebra import normalize, rot_mat_from_pointer
 from prism_pruner.conformer_ensemble import ConformerEnsemble
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import rmsd_and_max
@@ -41,6 +38,7 @@ from prism_pruner.rmsd import rmsd_and_max
 from firecode.algebra import norm_of, point_angle
 from firecode.errors import TriangleError
 from firecode.pt import pt
+from firecode.units import EH_TO_KCAL
 
 
 class Constraint:
@@ -59,42 +57,6 @@ class Constraint:
         }[len(indices)]
 
         self.value = value
-
-    def convert_constraint_with_smarts(self, coords, atomnos, smarts):
-        '''
-        Converts self.indices from being relative to a SMARTS
-        pattern to being the effective molecular indices.
-        Since more matches could be present, the one that is
-        the closest to satisfying the desired constraint value
-        is chosen.
-
-        '''
-
-        match_indices_list = match_smarts_pattern((coords, atomnos), smarts)
-        
-        if self.type == 'B':
-            a, b = self.indices
-            deltas = [abs(norm_of(coords[match[a]]-coords[match[b]])-self.value) for match in match_indices_list]
-            best_match_indices = match_indices_list[deltas.index(min(deltas))]
-
-        if self.type == 'A':
-            a, b, c = self.indices
-            deltas = [abs(point_angle(coords[match[a]], 
-                                      coords[match[b]],
-                                      coords[match[c]])-self.value) for match in match_indices_list]
-            best_match_indices = match_indices_list[deltas.index(min(deltas))]
-
-        if self.type == 'D':
-            a, b, c, d = self.indices
-            deltas = [abs(dihedral((coords[match[a]],
-                                    coords[match[b]],
-                                    coords[match[c]],
-                                    coords[match[d]]))-self.value) for match in match_indices_list]
-            best_match_indices = match_indices_list[deltas.index(min(deltas))]
-
-        old_indices = self.indices[:]
-        for i, index in enumerate(old_indices):
-            self.indices[i] = best_match_indices[index]
 
 class suppress_stdout_stderr(object):
     '''
@@ -201,6 +163,55 @@ def read_xyz(filename):
     
     assert mol is not None, f'Reading molecule {filename} failed - check its integrity.'
     return mol
+
+def read_xyz_energies(filename, verbose=True):
+    '''
+    Read energies from a .xyz file. Returns None or an array of floats (in Hartrees).
+    '''
+    energies = None
+
+    # get lines right after the number of atom, which should contain the energy
+    comment_lines = getoutput(f'grep -A1 "^[[:space:]]*[0-9]\\+$" {filename} | grep -v "^[[:space:]]*[0-9]\\+$" | grep -v "^--$"').split("\n")
+
+    if len(comment_lines[0].split()) == 1:
+        if set(comment_lines[0].split()[0]).issubset('0123456789.-'):
+            # only one energy found with no UOM, assume it's in Eh
+            energies = [float(e.split()[0].strip()) for e in comment_lines]
+
+            if verbose:
+                print(f'--> Read {len(energies)} energies from {filename} (single number, no UOM: assuming Eh units).')
+
+        else:
+            if verbose:
+                print(f'--> Could not parse energies for {filename} - skipping.')
+
+    else:
+        # multiple energies found, parse units
+        hartree_matches = re.findall(r'-*\d+.\d+\sEH', comment_lines[0].upper())
+        kcal_matches = re.findall(r'-*\d+.\d+\sKCAL/MOL', comment_lines[0].upper())
+        number_matches = re.findall(r'-*\d+.\d+', comment_lines[0])
+
+        if hartree_matches:
+            energies = [float(re.findall(r'-*\d+.\d+\sEH', e.upper())[0].split()[0].strip()) for e in comment_lines]
+            if verbose:
+                print(f'--> Read {len(comment_lines)} energies from {filename} (first number followed by Eh units).')
+
+        elif kcal_matches:
+            energies = [float(re.findall(r'-*\d+.\d+\sKCAL/MOL', e.upper())[0].split()[0].strip())/EH_TO_KCAL for e in comment_lines]
+            if verbose:
+                print(f'--> Read {len(comment_lines)} energies from {filename} (first number followed by kcal/mol units).')
+    
+        # last resort, parse the first thing that looks like an energy and assume it's in Eh
+        elif number_matches:
+            energies = [float(re.findall(r'-*\d+.\d+', e)[0].strip()) for e in comment_lines]
+            if verbose:
+                print(f'--> Read {len(comment_lines)} energies from {filename} (first number, no UOM: assuming Eh units).')
+
+        else:
+            if verbose:
+                print(f'--> Could not parse energies for {filename} - skipping.')
+
+    return energies
 
 def pretty_num(n):
     if n < 1e3:
@@ -486,16 +497,6 @@ def auto_newline(string, max_line_len=50, padding=2):
 
     return ' '.join(out)
 
-def smi_to_3d(smi, new_filename):
-    with open("temp_smi.txt", "w") as f:
-        f.write(smi)
-
-    check_call(f'obabel -i smi temp_smi.txt -o xyz -O {new_filename}.xyz -h --gen3d'.split(), stdout=DEVNULL, stderr=STDOUT)
-    # data = read_xyz(f"{new_filename}.xyz")
-    clean_directory(["temp_smi.txt"])
-
-    return new_filename + ".xyz"
-
 def timing_wrapper(function, *args, payload=None, **kwargs):
     '''
     Generic function wrapper that appends the
@@ -513,7 +514,7 @@ def timing_wrapper(function, *args, payload=None, **kwargs):
     
     return func_return, payload, elapsed
 
-def _saturation_check(atoms, charge=0):
+def saturation_check(atoms, charge=0):
 
     transition_metals = [
                     "Sc", "Ti", "V", "Cr", "Mn", "Fe",
@@ -544,258 +545,6 @@ def _saturation_check(atoms, charge=0):
     looks_ok = ((n_odd_valent + charge) / 2) % 1 < 0.001 if not organometallic else True
 
     return looks_ok
-
-def get_atom_environment(mol: pybel.Molecule, atom_idx: int, depth: int = 4) -> str:
-    """
-    Generate a string representation of an atom's local environment.
-    
-    Parameters
-    ----------
-    mol : pybel.Molecule
-        Molecule containing the atom
-    atom_idx : int
-        Index of the atom (0-based)
-    depth : int
-        Number of bonds to traverse in characterizing the environment
-        
-    Returns
-    -------
-    str
-        A string encoding the local chemical environment
-    """
-    obmol = mol.OBMol
-    atom = obmol.GetAtom(atom_idx + 1)  # Convert to 1-based indexing
-    
-    # Get initial atom properties
-    env = [
-        atom.GetAtomicNum(),
-        atom.GetFormalCharge(),
-        atom.GetTotalDegree(),
-        atom.GetHvyDegree(),
-        atom.GetImplicitHCount(),
-        atom.GetHyb()
-    ]
-    
-    # Traverse bonds up to specified depth
-    visited = {atom_idx}
-    current_layer = {atom_idx}
-    environment = []
-    
-    for _ in range(depth):
-        next_layer = set()
-        layer_info = []
-        
-        for current_idx in current_layer:
-            current_atom = obmol.GetAtom(current_idx + 1)
-            
-            # Collect neighbor information
-            neighbors = []
-            for bond in pybel.ob.OBAtomBondIter(current_atom):
-                neighbor_idx = bond.GetNbrAtomIdx(current_atom) - 1
-                if neighbor_idx not in visited:
-                    neighbor = obmol.GetAtom(neighbor_idx + 1)
-                    neighbors.append((
-                        neighbor.GetAtomicNum(),
-                        # bond.GetBondOrder(),
-                        neighbor.GetTotalDegree()
-                    ))
-                    next_layer.add(neighbor_idx)
-                    visited.add(neighbor_idx)
-            
-            if neighbors:
-                # Sort neighbors for consistent ordering
-                neighbors.sort()
-                layer_info.extend(neighbors)
-        
-        if layer_info:
-            environment.extend(layer_info)
-        current_layer = next_layer
-        
-        if not current_layer:
-            break
-    
-    return str(env + environment)
-
-def find_symmetric_atoms(mol: pybel.Molecule, match: Tuple[int, ...]) -> List[List[int]]:
-    """
-    Find groups of symmetric atoms within a match.
-    
-    Parameters
-    ----------
-    mol : pybel.Molecule
-        Molecule containing the matched atoms
-    match : Tuple[int, ...]
-        Tuple of atom indices (0-based) in the match
-        
-    Returns
-    -------
-    List[List[int]]
-        List of lists, where each inner list contains indices (positions in the match)
-        of symmetric atoms
-    """
-    # Group atoms by their atomic number first
-    atoms_by_element = defaultdict(list)
-    for pos, atom_idx in enumerate(match):
-        atomic_num = mol.OBMol.GetAtom(atom_idx + 1).GetAtomicNum()
-        atoms_by_element[atomic_num].append((pos, atom_idx))
-    
-    symmetric_groups = []
-    
-    # For each element type, check for symmetry
-    for element_atoms in atoms_by_element.values():
-        if len(element_atoms) < 2:
-            continue
-        
-        # Group by environment
-        env_groups = defaultdict(list)
-        for pos, atom_idx in element_atoms:
-            env = get_atom_environment(mol, atom_idx)
-            env_groups[env].append(pos)
-        
-        # Add groups of symmetric atoms
-        for positions in env_groups.values():
-            if len(positions) > 1:
-                symmetric_groups.append(positions)
-    
-    return symmetric_groups
-
-def match_smarts_pattern(
-    molecule_input: Union[str, Tuple[np.ndarray, np.ndarray]], 
-    smarts_pattern: str,
-    symmetric_atoms: List[List[int]] | None = None,
-    auto_symmetry: bool = True,
-    input_format: str = 'xyz',
-    single_match_expected: bool = False,
-) -> List[List[Tuple[int, ...]]]:
-    """
-    Match a SMARTS pattern against a molecule using Pybel.
-    Returns all possible symmetric permutations of the matches.
-    
-    Parameters
-    ----------
-    molecule_input : Union[str, Tuple[np.ndarray, np.ndarray]]
-        Either:
-        - Path to the molecule file (str)
-        - Tuple of (coordinates, atomic_numbers) where:
-          * coordinates is a numpy array of shape (n_atoms, 3)
-          * atomic_numbers is a numpy array of shape (n_atoms,)
-    smarts_pattern : str
-        The SMARTS pattern to match. Can include multiple fragments separated by dots
-    symmetric_atoms : List[List[int]], optional
-        Manual specification of symmetric atoms. Each inner list contains indices
-        within the SMARTS pattern that are symmetric
-    auto_symmetry : bool, optional
-        Whether to automatically detect symmetric atoms. If True and symmetric_atoms
-        is provided, will combine both manual and automatic symmetries
-    input_format : str, optional
-        File format if molecule_input is a file path. Default is 'xyz'
-    single_match_expected : if True, will error out if more than one is found
-        
-    Returns
-    -------
-    List[List[Tuple[int, ...]]]
-        List where each element contains all symmetric versions of a match.
-        Each match is a tuple of atom indices (0-based).
-    
-    Examples
-    --------
-    >>> # Automatic symmetry detection
-    >>> matches = match_smarts_pattern(mol, "[CX3](=[OX1])[OX1-]")
-    
-    >>> # Combined manual and automatic symmetry detection
-    >>> matches = match_smarts_pattern(
-    ...     mol, 
-    ...     "[NH2].[OH].[OH]",
-    ...     symmetric_atoms=[[3, 5]],  # Manual specification for OH groups
-    ...     auto_symmetry=True  # Will also detect NH2 hydrogens
-    ... )
-    """
-    try:
-        # Create Pybel molecule object based on input type
-        if isinstance(molecule_input, str):
-            mol = next(pybel.readfile(input_format, molecule_input))
-        else:
-            coords, atomic_nums = molecule_input
-            obmol = pybel.ob.OBMol()
-            
-            for atom_num, pos in zip(atomic_nums, coords):
-                atom = obmol.NewAtom()
-                atom.SetAtomicNum(int(atom_num))
-                atom.SetVector(*pos)
-            
-            obmol.ConnectTheDots()
-            obmol.PerceiveBondOrders()
-            
-            mol = pybel.Molecule(obmol)
-
-        # Split pattern into fragments
-        fragment_patterns = [p.strip() for p in smarts_pattern.split('.')]
-        
-        # Find matches for each fragment
-        fragment_matches = []
-        for pattern in fragment_patterns:
-            smarts = pybel.Smarts(pattern)
-            matches = smarts.findall(mol)
-            if not matches:
-                raise Exception('Found no SMARTS matches!')
-            matches = [tuple(idx - 1 for idx in match) for match in matches]
-            fragment_matches.append(matches)
-        
-        # Generate initial combinations of fragment matches
-        base_matches = []
-        for match_combination in product(*fragment_matches):
-            flat_match = sum(match_combination, ())
-            if len(set(flat_match)) == len(flat_match):
-                base_matches.append(flat_match)
-        
-        if not base_matches:
-            raise Exception('Found no SMARTS matches!')
-            
-        # Combine manual and automatic symmetry detection
-        all_symmetric_groups = []
-        if symmetric_atoms:
-            all_symmetric_groups.extend(symmetric_atoms)
-        
-        if auto_symmetry:
-            for match in base_matches:
-                auto_groups = find_symmetric_atoms(mol, match)
-                # print(auto_groups)
-                # Merge with existing groups, avoiding duplicates
-                for group in auto_groups:
-                    if group not in all_symmetric_groups:
-                        all_symmetric_groups.append(group)
-        
-        if not matches or single_match_expected:
-            assert len(base_matches) == 1, f'Found {len(matches)} matches instead of 1'
-        
-        if not all_symmetric_groups:
-            return base_matches
-
-        for base_match in base_matches:
-            # Generate all symmetric permutations
-            all_symmetric_matches = []
-            symmetric_versions = set()
-            symmetric_versions.add(base_match)
-            
-            for sym_group in all_symmetric_groups:
-                new_versions = set()
-                for match in symmetric_versions:
-                    match_list = list(match)
-                    sym_atoms = [match_list[i] for i in sym_group]
-                    for perm in permutations(sym_atoms):
-                        new_match = match_list.copy()
-                        for idx, atom in zip(sym_group, perm):
-                            new_match[idx] = atom
-                        new_versions.add(tuple(new_match))
-                symmetric_versions.update(new_versions)
-                
-                all_symmetric_matches.extend(list(symmetric_versions))
-
-        return all_symmetric_matches
-    
-    except Exception as e:
-        raise RuntimeError(f"Error matching SMARTS pattern: {str(e)}")
-
 
 def rmsd_similarity(ref, structures, rmsd_thr=0.5) -> bool:
     '''

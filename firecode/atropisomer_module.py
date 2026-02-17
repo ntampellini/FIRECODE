@@ -37,6 +37,7 @@ from prism_pruner.utils import align_structures, time_to_string
 from firecode.ase_manipulations import ase_neb
 from firecode.errors import ZeroCandidatesError
 from firecode.optimization_methods import optimize
+from firecode.units import EV_TO_KCAL
 from firecode.utils import clean_directory, loadbar, molecule_check, write_xyz
 
 
@@ -357,7 +358,7 @@ def ase_dih_scan(embedder,
 
                 iterations = opt.nsteps
 
-            energies.append(atoms.get_total_energy() * 23.06054194532933) # eV to kcal/mol
+            energies.append(atoms.get_total_energy() * EV_TO_KCAL)
 
         if logfile is not None:
             elapsed = time() - t_start_step
