@@ -22,11 +22,11 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 '''
 
 import numpy as np
+from prism_pruner.graph_manipulations import graphize
 
 from firecode.algebra import normalize
 from firecode.calculators._xtb import xtb_get_free_energy
-from prism_pruner.graph_manipulations import graphize
-from firecode.optimization_methods import (_refine_structures, optimize,
+from firecode.optimization_methods import (optimize, refine_structures,
                                            write_xyz)
 from firecode.torsion_module import csearch
 from firecode.utils import loadbar
@@ -190,7 +190,7 @@ def pka_routine(filename, embedder, search=True):
     else:
         conformers = mol.coords
 
-    conformers, _ =_refine_structures(
+    conformers, _ = refine_structures(
                                         mol.atoms,
                                         conformers,
                                         charge=embedder.options.charge,

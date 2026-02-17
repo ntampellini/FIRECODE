@@ -34,7 +34,6 @@ from prism_pruner.utils import time_to_string
 from firecode.algebra import point_angle
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.pt import pt
-from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.settings import CALCULATOR
 from firecode.solvents import epsilon_dict
 from firecode.units import EH_TO_KCAL

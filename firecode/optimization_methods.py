@@ -23,7 +23,6 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 import time
 from copy import deepcopy
-from functools import partial
 
 import numpy as np
 from prism_pruner.pruner import prune_by_rmsd
@@ -705,7 +704,7 @@ def fitness_check(coords, constraints, targets, threshold) -> bool:
                     
     return error < threshold
 
-def _refine_structures(
+def refine_structures(
                        atoms,
                        structures,
                        calculator,

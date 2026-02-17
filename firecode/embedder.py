@@ -677,8 +677,8 @@ class Embedder:
                 if isinstance(ids, tuple):
                     if letter.isupper() and letter not in self.pairing_dists:
                         coords = self.objects[mol_id].coords[0]
-                        dist = norm_of(coords[i1]-coords[i2])
                         i1, i2 = ids
+                        dist = norm_of(coords[i1]-coords[i2])
                         self.pairing_dists[letter] = dist
 
     def _set_pivots(self, mol):

@@ -38,17 +38,6 @@ class TriangleError(Exception):
     a triangle with the given side lengths.
     '''
 
-class CCReadError(Exception):
-    '''
-    Raised when CCRead cannot read
-    the provided filename.
-    '''
-
-class MopacReadError(Exception):
-    '''
-    Thrown when reading MOPAC output files fails for some reason.
-    '''
-
 class SegmentedGraphError(Exception):
     '''
     Thrown by Clustered CSearch when graph has more than one connected component.

@@ -40,7 +40,7 @@ from ase.optimize import BFGS, FIRE, LBFGS
 from ase.thermochemistry import IdealGasThermo
 from ase.vibrations import Vibrations
 from prism_pruner.algebra import dihedral, get_alignment_matrix, normalize
-from prism_pruner.graph_manipulations import d_min_bond, find_paths, graphize
+from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import (align_structures, get_double_bonds_indices,
                                 time_to_string)
@@ -48,7 +48,7 @@ from prism_pruner.utils import (align_structures, get_double_bonds_indices,
 from firecode.algebra import norm_of, point_angle
 from firecode.calculators.__init__ import NewFolderContext
 from firecode.calculators._xtb import xtb_gsolv
-from firecode.units import EH_TO_EV, EH_TO_KCAL, EV_TO_KCAL
+from firecode.units import EH_TO_EV, EH_TO_KCAL, EV_TO_KCAL, EV_TO_WAVENUMS
 from firecode.utils import (HiddenPrints, cartesian_product, clean_directory,
                             molecule_check, read_xyz, suppress_stdout_stderr,
                             write_xyz)
@@ -353,21 +353,14 @@ class NewBondPreventer:
 
 def ase_vib(embedder, atoms, coords, logfunction=None, title='temp'):
     '''
-    Calculate frequencies through ASE - returns frequencies and number of negatives (not in use)
+    Calculate frequencies through ASE - returns frequencies and number of negatives (orphaned for now)
     '''
     atoms = Atoms(atoms, positions=coords)
     atoms.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
     vib = Vibrations(atoms, name=title)
 
-    if os.path.isdir(title):
-        os.chdir(title)
-        for f in os.listdir():
-            os.remove(f)
-        os.chdir(os.path.dirname(os.getcwd()))
-    else:
-        os.mkdir(title)
-
-    os.chdir(title)
+    rmtree(title, ignore_errors=True)
+    os.mkdir(title)
 
     t_start = time.perf_counter()
 
@@ -375,7 +368,7 @@ def ase_vib(embedder, atoms, coords, logfunction=None, title='temp'):
         vib.run()
 
     # freqs = vib.get_frequencies()
-    freqs = vib.get_energies() * 8065.544 # from eV to cm-1 
+    freqs = vib.get_energies() * EV_TO_WAVENUMS
 
     if logfunction is not None:
         elapsed = time.perf_counter() - t_start
@@ -1270,14 +1263,14 @@ def fsm_operator(embedder, optimize_endpoints=True):
     Connect two structures using the Freezing String Method and return the resulting list of coordinates.
 
     '''
-    assert len(embedder.objects) == 1, f'FSM requires a single input structure.'
+    assert len(embedder.objects) == 1, 'FSM requires a single input structure.'
 
     mol = embedder.objects[0]
     assert len(mol.coords) == 2, f'FSM requires a single input structure with two geometries. {mol.filename} has {len(mol.coords)}.'
     assert len(mol.constraints) == 0, NotImplementedError
 
     from mlfsm.cos import FreezingString
-    from mlfsm.opt import CartesianOptimizer, InternalsOptimizer, Optimizer
+    from mlfsm.opt import CartesianOptimizer, InternalsOptimizer
 
     # interp = 'ric'
     interp = 'cart'
@@ -1296,7 +1289,7 @@ def fsm_operator(embedder, optimize_endpoints=True):
 
     if optimize_endpoints:
 
-        embedder.log(f'--> Optimizing endpoints at the same level...')
+        embedder.log('--> Optimizing endpoints at the same level...')
 
         reactant, _, _ = ase_popt(
             embedder=embedder,
@@ -1341,7 +1334,7 @@ def fsm_operator(embedder, optimize_endpoints=True):
         t_start = time.perf_counter()
 
         # Run FSM
-        embedder.log(f'--> Running FSM...')
+        embedder.log('--> Running FSM...')
         with HiddenPrints():
             while string.growing:
                 string.grow()
@@ -1357,7 +1350,7 @@ def fsm_operator(embedder, optimize_endpoints=True):
     embedder.energies = np.array(string.r_energy + string.p_energy[::-1]) * EV_TO_KCAL
     ts_guess_e = max(embedder.energies)
 
-    embedder.log(f'--> String energetics:')
+    embedder.log('--> String energetics:')
     embedder.log(f'    E(TS_guess) - E(Reag) = {ts_guess_e-embedder.energies[0]:.2f} kcal/mol')
     embedder.log(f'    E(TS_guess) - E(Prod) = {ts_guess_e-embedder.energies[-1]:.2f} kcal/mol\n')
 

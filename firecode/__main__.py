@@ -25,10 +25,7 @@ import sys
 from rich.traceback import install
 install(show_locals=True)
 
-__version__ = '1.5.0'
-
 def main():
-
 
     usage = '''\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
     🔥 python -m firecode -cl "refine> mtd> mol.xyz"

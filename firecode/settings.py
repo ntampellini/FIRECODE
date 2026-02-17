@@ -24,7 +24,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 # IF YOU MANUALLY EDIT THIS FILE, BE SURE NOT TO
 # CHANGE IDENTATION/WHITESPACES/NEWLINES!
 
-FF_OPT_BOOL = True
+FF_OPT_BOOL = False
 # Whether to run Force Field optimization
 # prior to the final one.
 

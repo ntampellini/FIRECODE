@@ -24,7 +24,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 import os
-from firecode.settings import DEFAULT_LEVELS, DEFAULT_FF_LEVELS, COMMANDS
+from firecode.settings import DEFAULT_LEVELS, DEFAULT_FF_LEVELS
 
 def run_setup():
     '''
@@ -48,7 +48,7 @@ def run_setup():
         'MEM_GB':4,
     }
 
-    print('\FIRECODE setup:\n')
+    print('\nFIRECODE setup:\n')
 
     #########################################################################################
 
@@ -86,7 +86,7 @@ def run_setup():
     #########################################################################################
     
     properties['PROCS'] = inquirer.text(
-        message=f'How many cores should {properties['CALCULATOR']} jobs run on?:',
+        message=f'How many cores should {properties["CALCULATOR"]} jobs run on?:',
         default=str(properties['PROCS']),
         validate=lambda inp: inp.isdigit(),
         filter=int,
@@ -155,7 +155,7 @@ def run_setup():
     with open('settings.py', 'w') as f:
         f.write(''.join(lines))
 
-    print('\nfirecode setup performed correctly.')
+    print('\FIRECODE setup performed correctly.')
 
     ff = f'{FF_CALC}/{DEFAULT_FF_LEVELS[FF_CALC]}' if FF_OPT_BOOL else 'Turned off'
     opt = f'{CALCULATOR}/{DEFAULT_LEVELS[CALCULATOR]}'

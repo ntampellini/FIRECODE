@@ -39,7 +39,7 @@ from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
 from firecode.mep_relaxer import ase_mep_relax
 from firecode.numba_functions import prune_conformers_tfd
-from firecode.optimization_methods import _refine_structures, optimize
+from firecode.optimization_methods import refine_structures, optimize
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
@@ -244,7 +244,7 @@ def opt_operator(filename, embedder, logfunction=None):
 
     t_start = time.perf_counter()
 
-    conformers, energies = _refine_structures(
+    conformers, energies = refine_structures(
                                               mol.atoms,
                                               mol.coords,
                                               calculator=embedder.options.calculator,

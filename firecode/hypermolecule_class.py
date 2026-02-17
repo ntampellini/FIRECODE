@@ -28,7 +28,7 @@ from prism_pruner.rmsd import get_alignment_matrix
 from prism_pruner.utils import flatten
 
 from firecode.algebra import norm_of
-from firecode.errors import CCReadError, NoOrbitalError
+from firecode.errors import NoOrbitalError
 from firecode.graph_manipulations import is_sigmatropic, is_vicinal
 from firecode.pt import pt
 from firecode.reactive_atoms_classes import get_atom_type
@@ -120,9 +120,6 @@ class Hypermolecule:
             self.reactive_indices = np.array(reactive_indices) if isinstance(reactive_indices, (tuple, list)) else ()
 
         conf_ensemble_object = read_xyz(filename)
-
-        if conf_ensemble_object is None:
-            raise CCReadError(f'Cannot read file {filename}')
 
         coordinates = np.array(conf_ensemble_object.coords)
         
