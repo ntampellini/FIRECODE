@@ -25,10 +25,26 @@
 
 </p>
 
-*FIRECODE is the expanded successor of [TSCoDe](https://github.com/ntampellini/TSCoDe).* 
+FIRECODE is a computational chemistry workflow driver for the generation, optimization and refinement of conformational ensembles, also implementing some transition state ultilities.
 
-FIRECODE is a computational chemistry toolbox for the generation, optimization and refinement of conformational ensembles. It features many flexible and highly customizable workflow utilities including conformer generation (via [CREST](https://github.com/crest-lab/crest) or FIRECODE), constrained ensemble optimization through popular calculators like [XTB](https://github.com/grimme-lab/xtb), [ORCA](https://www.orcasoftware.de/tutorials_orca/), [GAUSSIAN](https://gaussian.com/) and Pytorch Neural Network models via [ASE](https://github.com/rosswhitfield/ase) ([AIMNET2](https://github.com/isayevlab/AIMNet2)). It implements a series of conformational pruning routines based on inertia tensors, RMSD, symmetry-corrected RMSD, and more. It can also assemble non-covalent adducts from conformational ensembles (embedding) for fast and automated generation and evaluation of ground and transtition state-like structures. CPU and GPU multithreading is implemented throughout the codebase and linear algebra-intensive modules are compiled at runtime via [Numba](https://github.com/numba/numba).
+It implements flexible and customizable workflows for conformer generation (via [CREST](https://github.com/crest-lab/crest), [RDKit](https://github.com/rdkit/rdkit)), double-ended TS search ([NEB](https://ase-lib.org/ase/neb.html) via [ASE](https://github.com/rosswhitfield/ase), [ML-FSM](https://github.com/thegomeslab/ML-FSM)), and (constrained) ensemble optimization through popular calculators like [XTB](https://github.com/grimme-lab/xtb), [TBLITE](https://github.com/tblite/tblite), [ORCA](https://www.orcasoftware.de/tutorials_orca/), and Pytorch Neural Network models ([AIMNET2](https://github.com/isayevlab/AIMNet2), [UMA](https://huggingface.co/facebook/UMA)) via [ASE](https://github.com/rosswhitfield/ase).
 
+Conformational pruning is performed with the now standalone [PRISM Pruner](https://github.com/ntampellini/prism_pruner).
+
+As a legacy feature from [TSCoDe](https://github.com/ntampellini/TSCoDe), FIRECODE can also assemble non-covalent adducts from conformational ensembles (embedding) programmatically.
+
+## Installation
+
+The package is distributed via `pip`, and the use of [`uv`](https://docs.astral.sh/uv/) is highly recommended. The default installation is minimalistic, and torch/GPU support requires dedicated installs:
+
+```python
+uv pip install firecode           # XTB, TBLITE, ORCA
+uv pip install firecode[aimnet2]  # + AIMNET2
+uv pip install firecode[uma]      # + UMA/OMOL
+uv pip install firecode[full]     # + AIMNET2, UMA/OMOL
+```
+
+More installation details in the documentation.
 
 ## Documentation
-Documentation on how to install and use the program can be found on [readthedocs](https://firecode.readthedocs.io/en/latest/index.html).
+Additional documentation on how to install and use the program can be found on [readthedocs](https://firecode.readthedocs.io/en/latest/index.html).
