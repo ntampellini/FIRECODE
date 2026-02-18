@@ -28,7 +28,6 @@ jobs:
           cache: true
           environments: dev
 
-      - run: pixi lock --no-cache  # Force regeneration
       - run: pixi install -e dev --locked
       # - run: pixi run fmt
       # - run: pixi run lint
