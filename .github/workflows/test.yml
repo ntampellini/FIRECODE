@@ -33,9 +33,11 @@ jobs:
       # - run: pixi run fmt
       # - run: pixi run lint
       # - run: pixi run types
-      - run: pixi run test -m codecov --cov --cov-report=xml
+      - run: pixi run test -m codecov --cov --cov-report=xml:coverage.xml
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
