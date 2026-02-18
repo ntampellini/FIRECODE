@@ -32,24 +32,28 @@ def run_firecode_input(name) -> None:
 
 
 @pytest.mark.embed
+@pytest.mark.codecov
 def test_string() -> None:
     """Tests a simple string embed."""
     run_firecode_input("embed_string")
 
 
 @pytest.mark.embed
+@pytest.mark.codecov
 def test_cyclical() -> None:
     """Tests a simple cyclical embed."""
     run_firecode_input("embed_cyclical")
 
 
 @pytest.mark.embed
+@pytest.mark.codecov
 def test_trimolecular() -> None:
     """Tests a simple trimolecular embed."""
     run_firecode_input("embed_trimolecular")
 
 
 @pytest.mark.embed
+@pytest.mark.codecov
 def test_dihedral() -> None:
     """Tests a simple dihedral scan."""
     run_firecode_input("scan_dihedral")
@@ -69,18 +73,21 @@ def run_calculator_test(calculator) -> None:
 
 
 @pytest.mark.calc
+@pytest.mark.codecov
 def test_calc_xtb() -> None:
     """Tests the FIRECODE XTB calculator."""
     run_calculator_test("XTB")
 
 
 @pytest.mark.calc
+@pytest.mark.codecov
 def test_calc_tblite() -> None:
     """Tests the ASE TBLITE calculator."""
     run_calculator_test("TBLITE")
 
 
 @pytest.mark.calc
+@pytest.mark.codecov
 def test_calc_aimnet2() -> None:
     """Tests the ASE AIMNET2 calculator."""
     run_calculator_test("AIMNET2")
