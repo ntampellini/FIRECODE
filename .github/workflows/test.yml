@@ -27,6 +27,7 @@ jobs:
           pixi-version: v0.63.2
           cache: true
           environments: dev
+          locked: false
 
       - run: pixi install -e dev --locked
       # - run: pixi run fmt
