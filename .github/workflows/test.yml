@@ -36,7 +36,6 @@ jobs:
       # - run: pixi run lint
       # - run: pixi run types
       - run: pixi run test_cov --cov --cov-report=xml:coverage.xml
-      - run: head -3 coverage.xml
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4

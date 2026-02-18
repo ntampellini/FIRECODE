@@ -61,7 +61,7 @@ aimnet = { version = "*", extras = ["ase"] }
 fmt = { cmd="ruff format ." }
 lint = { cmd="ruff check . --fix" }
 types = { cmd="mypy" }
-test = { cmd="pytest -s" }
+test = { cmd="pytest -s --cov=firecode" }
 test_calc = { cmd="pytest -s -m calc" }
 test_cov = { cmd="pytest -s -m codecov" }
 all = { depends-on = ["fmt", "lint", "types", "test"] }
@@ -122,3 +122,10 @@ full = [
 [tool.pytest.ini_options]
 testpaths = ["firecode/tests"]
 addopts = "--cov=firecode"
+
+[tool.coverage.run]
+source = ["firecode"]
+omit = [".pixi/*", "*/site-packages/*"]
+
+[tool.coverage.report]
+omit = [".pixi/*", "*/site-packages/*"]
