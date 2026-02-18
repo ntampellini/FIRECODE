@@ -35,7 +35,7 @@ jobs:
       # - run: pixi run fmt
       # - run: pixi run lint
       # - run: pixi run types
-      - run: pixi run test -m codecov --cov --cov-report=xml:coverage.xml
+      - run: pixi run test_cov --cov --cov-report=xml:coverage.xml
       - run: head -3 coverage.xml
 
       - name: Upload Coverage to Codecov

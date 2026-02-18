@@ -63,6 +63,7 @@ lint = { cmd="ruff check . --fix" }
 types = { cmd="mypy" }
 test = { cmd="pytest -s" }
 test_calc = { cmd="pytest -s -m calc" }
+test_cov = { cmd="pytest -s -m codecov" }
 all = { depends-on = ["fmt", "lint", "types", "test"] }
 
 [tool.ruff]
@@ -117,3 +118,7 @@ full = [
     "fairchem-core",
     "aimnet[ase]",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["firecode/tests"]
+addopts = "--cov=firecode"
