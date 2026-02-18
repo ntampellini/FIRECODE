@@ -8,6 +8,7 @@
 ![Size](https://img.shields.io/github/languages/code-size/ntampellini/firecode)
 ![Lines](https://sloc.xyz/github/ntampellini/firecode/)
 [![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/ntampellini/firecode)](https://www.codefactor.io/repository/github/ntampellini/firecode)
+[![codecov](https://codecov.io/gh/ntampellini/FIRECODE/graph/badge.svg?token=D9TM6S33D8)](https://codecov.io/gh/ntampellini/FIRECODE)
 
 [![PyPI](https://img.shields.io/pypi/v/firecode)](https://pypi.org/project/firecode/)
 [![Wheel](https://img.shields.io/pypi/wheel/firecode)](https://pypi.org/project/firecode/)
