@@ -10,7 +10,7 @@ readme = "README.md"
 description = "FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles"
 keywords = []
 authors = [{name = "Nicolò Tampellini", email = "nicolo.tampellini@yale.edu"}]
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.12, <3.13"
 dependencies = [
     "rdkit>=2025.9.3",
     "numpy",
