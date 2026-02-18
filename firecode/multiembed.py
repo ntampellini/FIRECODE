@@ -8,29 +8,24 @@ import numpy as np
 from prism_pruner.utils import time_to_string
 
 from firecode.errors import InputError, ZeroCandidatesError
-from firecode.utils import (cartesian_product, suppress_stdout_stderr,
-                            timing_wrapper)
+from firecode.utils import cartesian_product, suppress_stdout_stderr, timing_wrapper
 
 
 def multiembed_dispatcher(embedder):
-    '''
-    Calls the appropriate multiembed subfunction
+    """Calls the appropriate multiembed subfunction
     based on embedder attributes.
-    '''
-    
+    """
     if len(embedder.objects) == 2:
         return multiembed_bifunctional(embedder)
-    
+
     raise InputError('The multiembed requested is currently unavailable.')
 
 
 def multiembed_bifunctional(embedder):
-    '''
-    Run multiple concurrent bifunctional cyclical embeds
+    """Run multiple concurrent bifunctional cyclical embeds
     exploring all relative arrangement of each pair of
     reactive_indices between the two molecules.
-    '''
-    
+    """
     mol1, mol2 = embedder.objects
 
     # get every possible combination of indices in the two molecules
@@ -49,7 +44,7 @@ def multiembed_bifunctional(embedder):
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
 
-        # for each arrangement, perform a dedicated embed 
+        # for each arrangement, perform a dedicated embed
         for i, arrangement in enumerate(arrangements):
 
             process = executor.submit(
@@ -61,7 +56,7 @@ def multiembed_bifunctional(embedder):
                                         i=i,
                                         options=embedder.options,
                                     )
-            processes.append(process)  
+            processes.append(process)
 
         for i, process in enumerate(as_completed(processes)):
 
@@ -77,7 +72,7 @@ def multiembed_bifunctional(embedder):
     structures_out = np.concatenate(structures_out)
 
     embedder.log(f'\n--> Multiembed completed: generated {len(structures_out)} candidates in {time_to_string(time.perf_counter() - embedder.t_start_run, verbose=True)}.')
-    
+
     # only get interaction constraints, as the internal will be added later during refinement
     embedder.constrained_indices = np.concatenate(constr_ids)
 

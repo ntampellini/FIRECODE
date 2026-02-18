@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import time
 from copy import deepcopy
@@ -30,14 +29,14 @@ from prism_pruner.utils import time_to_string
 from scipy.spatial.transform import Rotation as R
 
 from firecode.algebra import norm_of, normalize
-from firecode.ase_manipulations import ase_neb, ase_popt, ase_tblite_opt, ase_popt_with_alpb
+from firecode.ase_manipulations import ase_neb, ase_popt, ase_popt_with_alpb, ase_tblite_opt
 from firecode.calculators._ase_uma import uma_opt
 from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
 from firecode.settings import DEFAULT_LEVELS
-from firecode.utils import (loadbar, molecule_check, pt, scramble_check,
-                            write_xyz)
-    
+from firecode.utils import loadbar, molecule_check, pt, scramble_check, write_xyz
+
+
 class Opt_func_dispatcher:
 
     def __init__(self, calculator):
@@ -59,22 +58,22 @@ class Opt_func_dispatcher:
         self.calculator = calculator
 
     def get_ase_calc(self, method, solvent=None, force_reload=False, raise_err=False):
-        
+
         if hasattr(self, 'ase_calc') and self.ase_calc is not None and not force_reload:
             pass
 
         elif self.calculator == 'AIMNET2':
             self.ase_calc = self.load_aimnet2_calc(method)
-        
+
         elif self.calculator == 'TBLITE':
             self.ase_calc = self.load_tblite_calc(method, solvent)
 
         elif self.calculator == 'XTB':
             self.ase_calc = self.load_xtb_calc(method, solvent)
-        
+
         elif self.calculator == 'UMA':
             self.ase_calc = self.load_uma_calc(method)
-        
+
         elif raise_err:
             raise NotImplementedError(f'Calculator {self.calculator} not known.')
         else:
@@ -83,7 +82,7 @@ class Opt_func_dispatcher:
         return self.ase_calc
 
     def load_aimnet2_calc(self, theory_level, logfunction=print):
-        
+
         try:
             import torch
             from aimnet.calculators import AIMNet2ASE
@@ -93,17 +92,17 @@ class Opt_func_dispatcher:
                             '    >>> uv pip install aimnet[ase]\n'
                             'or alternatively, install the "aimnet2" version of firecode:\n'
                             '    >>> uv pip install firecode[aimnet2]\n'))
-            
+
 
         gpu_bool = torch.cuda.is_available()
         self.aimnet2_calc = AIMNet2ASE("aimnet2")
         self.ase_calc = self.aimnet2_calc
 
         logfunction(f'--> AIMNet2 calculator loaded on {"GPU" if gpu_bool else "CPU"}.')
-        
+
 
     def load_tblite_calc(self, method, solvent):
-        
+
         try:
             from tblite.ase import TBLite
 
@@ -112,7 +111,7 @@ class Opt_func_dispatcher:
             raise Exception(('Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n'
                             '>>> conda install -c conda-forge mamba\n'
                             '>>> mamba install -c conda-forge tblite tblite-python\n'))
-            
+
 
         solvation = None if solvent is None else ('alpb', solvent)
 
@@ -125,7 +124,7 @@ class Opt_func_dispatcher:
 
         method = synonyms.get(method, method)
         self.ase_calc =TBLite(method=method, solvation=solvation)
-        
+
         return self.ase_calc
 
     def load_xtb_calc(self, method, solvent):
@@ -135,7 +134,7 @@ class Opt_func_dispatcher:
             raise Exception(('Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n'
                             '>>> conda install -c conda-forge mamba\n'
                             '>>> mamba install -c conda-forge xtb xtb-python\n'))
-            
+
         synonyms = {
             "GFN1-XTB" : "GFN1-xTB",
             "GFN2-XTB" : "GFN2-xTB",
@@ -144,13 +143,13 @@ class Opt_func_dispatcher:
 
         method = synonyms.get(method.upper(), method)
         self.ase_calc =XTB(method=method, solvation=solvent)
-        
+
         return self.ase_calc
 
     def load_uma_calc(self, method, logfunction=print):
 
         from firecode.calculators._ase_uma import get_uma_calc
-            
+
         self.uma_calc = get_uma_calc(method, logfunction=logfunction)
         self.ase_calc = self.uma_calc
         return self.uma_calc
@@ -165,7 +164,7 @@ def optimize(
 
             constrained_indices=None,
             constrained_distances=None,
-                  
+
             constrained_dihedrals_indices=None,
             constrained_dihedrals_values=None,
 
@@ -179,14 +178,13 @@ def optimize(
             mult=1,
             max_newbonds=0,
             title='temp',
-            check=True, 
+            check=True,
             logfunction=None,
             debug=False,
             dispatcher=None,
             **kwargs,
             ):
-    '''
-    Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA or XTB at $method level, 
+    """Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA or XTB at $method level,
     constraining the distance between the specified atom pairs, if any. Moreover, if $check, performs a check on atomic
     pairs distances to ensure that the optimization has preserved molecular identities and no atom scrambling occurred.
 
@@ -200,8 +198,7 @@ def optimize(
     :return opt_coords: optimized structure
     :return energy: absolute energy of structure, in kcal/mol
     :return not_scrambled: bool, indicating if the optimization shifted up some bonds (except the constrained ones)
-    '''
-
+    """
     if dispatcher is None:
         dispatcher = Opt_func_dispatcher(calculator)
 
@@ -229,7 +226,7 @@ def optimize(
 
                                             constrained_indices=constrained_indices,
                                             constrained_distances=constrained_distances,
-                                            
+
                                             constrained_dihedrals_indices=constrained_dihedrals_indices,
                                             constrained_dihedrals_values=constrained_dihedrals_values,
 
@@ -265,7 +262,7 @@ def optimize(
             if success:
                 logfunction(f'    - {title} - REFINED {time_to_string(elapsed)}')
             else:
-                logfunction(f'    - {title} - SCRAMBLED {time_to_string(elapsed)}')             
+                logfunction(f'    - {title} - SCRAMBLED {time_to_string(elapsed)}')
 
         return opt_coords, energy, success
 
@@ -275,11 +272,9 @@ def optimize(
     return coords, energy, False
 
 def hyperNEB(embedder, atoms, coords, ids, constrained_indices, title='temp'):
-    '''
-    Turn a geometry close to TS to a proper TS by getting
+    """Turn a geometry close to TS to a proper TS by getting
     reagents and products and running a climbing image NEB calculation through ASE.
-    '''
-
+    """
     reagents = get_reagent(embedder, atoms, coords, ids, constrained_indices, method=embedder.options.theory_level)
     products = get_product(embedder, atoms, coords, ids, constrained_indices, method=embedder.options.theory_level)
     # get reagents and products for this reaction
@@ -294,7 +289,7 @@ def hyperNEB(embedder, atoms, coords, ids, constrained_indices, title='temp'):
     # rotating the two structures to minimize differences
 
     ts_coords, ts_energy, energies, success = ase_neb(embedder,
-                                                      atoms, 
+                                                      atoms,
                                                       reagents,
                                                       products,
                                                       charge=embedder.options.charge,
@@ -305,19 +300,17 @@ def hyperNEB(embedder, atoms, coords, ids, constrained_indices, title='temp'):
     return ts_coords, ts_energy, energies, success
 
 def get_product(embedder, atoms, coords, ids, constrained_indices, method='PM7'):
-    '''
-    Part of the automatic NEB implementation.
+    """Part of the automatic NEB implementation.
     Returns a structure that presumably is the association reaction product
     ([cyclo]additions reactions in mind)
-    '''
-
+    """
     opt_func = embedder.dispatcher.opt_func
 
     bond_factor = 1.2
     # multiple of sum of covalent radii for two atoms.
     # If two atoms are closer than this times their sum
     # of c_radii, they are considered to converge to
-    # products when their geometry is optimized. 
+    # products when their geometry is optimized.
 
     step_size = 0.1
     # in Angstroms
@@ -401,19 +394,17 @@ def get_product(embedder, atoms, coords, ids, constrained_indices, method='PM7')
     return coords
 
 def get_reagent(embedder, atoms, coords, ids, constrained_indices, method='PM7'):
-    '''
-    Part of the automatic NEB implementation.
+    """Part of the automatic NEB implementation.
     Returns a structure that presumably is the association reaction reagent.
     ([cyclo]additions reactions in mind)
-    '''
-
+    """
     opt_func = embedder.dispatcher.opt_func
 
     bond_factor = 1.5
     # multiple of sum of covalent radii for two atoms.
     # Putting reactive atoms at this times their bonding
     # distance and performing a constrained optimization
-    # is the way to get a good guess for reagents structure. 
+    # is the way to get a good guess for reagents structure.
 
     if len(ids) == 2:
 
@@ -423,7 +414,7 @@ def get_reagent(embedder, atoms, coords, ids, constrained_indices, method='PM7')
         # norm of the motion that, when applied to mol1,
         # superimposes its reactive centers to the ones of mol2
 
-        threshold_dists = [bond_factor*(pt.covalent_radius(atoms[a]) + 
+        threshold_dists = [bond_factor*(pt.covalent_radius(atoms[a]) +
                                         pt.covalent_radius(atoms[b])) for a, b in constrained_indices]
 
         reactive_dists = [norm_of(coords[a] - coords[b]) for a, b in constrained_indices]
@@ -473,7 +464,7 @@ def get_reagent(embedder, atoms, coords, ids, constrained_indices, method='PM7')
     # return the freely optimized structure only if the reagents did not approached back each other
     # during the optimization, otherwise return the last coords, where partners were further away
         return newcoords
-    
+
     return coords
 
 def opt_linear_scan(
@@ -488,8 +479,7 @@ def opt_linear_scan(
         logfile=None,
         xyztraj=None,
     ):
-    '''
-    Runs a linear scan along the specified linear coordinate.
+    """Runs a linear scan along the specified linear coordinate.
     The highest energy structure that passes sanity checks is returned.
 
     embedder
@@ -502,7 +492,7 @@ def opt_linear_scan(
     title
     logfile
     xyztraj
-    '''
+    """
     assert [i in constrained_indices.ravel() for i in scan_indices]
 
     i1, i2 = scan_indices
@@ -539,7 +529,7 @@ def opt_linear_scan(
             break
 
         for iterations in range(75):
-            
+
             if safe: # use ASE optimization function - more reliable, but locks all interatomic dists
 
                 targets = [norm_of(active_coords[a]-active_coords[b]) - step_size
@@ -584,7 +574,7 @@ def opt_linear_scan(
                             f' d({i1}-{i2}) = {round(dist, 3)} A, Rel. E = {round(energy-energies[0], 3)} kcal/mol'))
 
                 break
-            
+
             direction = active_coords[i1] - active_coords[i2]
             dist = norm_of(direction)
 
@@ -602,7 +592,7 @@ def opt_linear_scan(
                 scan_peak_present(energies)
                 ):
                 break
-            
+
     distances = [norm_of(g[i1]-g[i2]) for g in geometries]
     best_distance = distances[energies.index(max(energies))]
 
@@ -680,28 +670,26 @@ def opt_linear_scan(
     return final_geom, final_energy, True
 
 def scan_peak_present(energies) -> bool:
-    '''
-    Returns True if the maximum value of the list
+    """Returns True if the maximum value of the list
     occurs in the middle of it, that is not in first,
     second, second to last or last positions
-    '''
+    """
     if energies.index(max(energies)) in range(2,len(energies)-1):
         return True
     return False
 
 def fitness_check(coords, constraints, targets, threshold) -> bool:
-    '''
-    Returns True if the strucure respects
+    """Returns True if the strucure respects
     the imposed pairings specified in constraints.
     targets: target distances for each constraint
     threshold: cumulative threshold to reject a structure (A)
 
-    '''
+    """
     error = 0
     for (a, b), target in zip(constraints, targets):
         if target is not None:
             error += (norm_of(coords[a]-coords[b]) - target)
-                    
+
     return error < threshold
 
 def refine_structures(
@@ -726,10 +714,9 @@ def refine_structures(
                        logfunction=None,
                        dispatcher=None,
                        debug=False):
-    '''
-    Refine a set of structures - optimize them and remove similar
+    """Refine a set of structures - optimize them and remove similar
     ones and high energy ones (>20 kcal/mol above lowest)
-    '''
+    """
     energies = []
     for i, conformer in enumerate(deepcopy(structures)):
 
@@ -742,13 +729,13 @@ def refine_structures(
 
                                                 constrained_indices=constrained_indices,
                                                 constrained_distances=constrained_distances,
-                                                
+
                                                 constrained_dihedrals_indices=constrained_dihedrals_indices,
                                                 constrained_dihedrals_values=constrained_dihedrals_values,
 
                                                 constrained_angles_indices=constrained_angles_indices,
                                                 constrained_angles_values=constrained_angles_values,
-            
+
                                                 method=method,
                                                 procs=procs,
                                                 solvent=solvent,

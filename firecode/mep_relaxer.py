@@ -10,8 +10,11 @@ from ase.mep import DyNEB
 from ase.optimize import LBFGS
 from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.ase_manipulations import (PreventScramblingConstraint, ase_dump,
-                                        set_charge_and_mult_on_ase_atoms)
+from firecode.ase_manipulations import (
+    PreventScramblingConstraint,
+    ase_dump,
+    set_charge_and_mult_on_ase_atoms,
+)
 from firecode.units import EV_TO_KCAL
 
 
@@ -28,8 +31,7 @@ def ase_mep_relax(
         verbose_print=False,
         safe=False,
     ):
-    '''
-    embedder: firecode embedder object
+    """embedder: firecode embedder object
     structures: array of coordinates to be used as starting points
     atoms: 1-d array of atomic strings
     n_images: total number of optimized images connecting reag/prods
@@ -41,8 +43,7 @@ def ase_mep_relax(
 
     return: 3- element tuple with coodinates of the MEP, energy of the structures in
     kcal/mol and a boolean value indicating success.
-    '''
-
+    """
     if n_images is None:
         n_images = 10
 
@@ -71,7 +72,7 @@ def ase_mep_relax(
                 scale_fmax=1,
                 allow_shared_calculator=True,
                 )
-  
+
     # Set calculators for all images
     for _, image in enumerate(images):
         image.calc = embedder.dispatcher.get_ase_calc(embedder.options.theory_level, embedder.options.solvent)
@@ -85,7 +86,7 @@ def ase_mep_relax(
 
     # Set the optimizer and optimize
     try:
-        
+
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             # ignore runtime warnings from the NEB module:
@@ -121,9 +122,9 @@ def ase_mep_relax(
 
     if logfunction is not None:
         logfunction(f'    - NEB for {title} {exit_status} ({time_to_string(time.perf_counter()-t_start)})\n')
-  
+
     energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
-    
+
     ase_dump(f'{title}_MEP.xyz', atoms, images, energies)
     # Save the converged MEP (minimum energy path) to an .xyz file
 
@@ -149,12 +150,11 @@ def ase_mep_relax(
     return mep, energies, exit_status
 
 def interpolate_structures(atoms, structures, n, method='idpp'):
-    '''
-    Return n interpolated structures from the
+    """Return n interpolated structures from the
     first to the last present in structures
     as a list of ASE image objects.
     
-    '''
+    """
     if len(structures) == 2:
         images = [None for _ in range(n)]
         images[0] = Atoms(atoms, positions=structures[0])

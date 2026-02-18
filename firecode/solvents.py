@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import sys
 
@@ -121,6 +120,6 @@ def get_solvent_line(solvent, calculator, theory_level):
         for s in epsilon_dict:
             print('    '+s)
         print('Please note that not all solvents will work with all calculators.')
-        sys.exit()
+        sys.exit(1)
 
     return new_theory_level[calculator](theory_level, solvent)

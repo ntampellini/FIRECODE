@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import os
 import sys
@@ -28,10 +27,9 @@ from subprocess import STDOUT, CalledProcessError, check_call
 import numpy as np
 
 from firecode.algebra import norm_of, normalize
-from firecode.calculators.__init__ import NewFolderContext
 from firecode.graph_manipulations import get_sum_graph
 from firecode.units import EH_TO_KCAL
-from firecode.utils import clean_directory, read_xyz, write_xyz
+from firecode.utils import NewFolderContext, clean_directory, read_xyz, write_xyz
 
 
 def xtb_opt(
@@ -57,7 +55,7 @@ def xtb_opt(
         procs=4,
         opt=True,
         conv_thr="tight",
-        assert_convergence=False, 
+        assert_convergence=False,
         constrain_string=None,
         recursive_stepsize=0.3,
         spring_constant=1,
@@ -65,8 +63,7 @@ def xtb_opt(
         debug=False,
         **kwargs,
         ):
-    '''
-    This function writes an XTB .inp file, runs it with the subprocess
+    """This function writes an XTB .inp file, runs it with the subprocess
     module and reads its output.
 
     coords: array of shape (n,3) with cartesian coordinates for atoms.
@@ -112,7 +109,7 @@ def xtb_opt(
 
     spring_constant: stiffness of harmonic distance constraint (Hartrees/Bohrs^2)
 
-    '''
+    """
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
 
@@ -124,7 +121,7 @@ def xtb_opt(
             if len(constrained_distances) == 0:
                 constrained_distances = None
 
-        # recursive 
+        # recursive
         if constrained_distances is not None:
 
             try:
@@ -170,7 +167,7 @@ def xtb_opt(
                                                 constrained_angles_values=constrained_angles_values,
 
                                             )
-                    
+
                     d = norm_of(coords[b] - coords[a])
                     delta = d - target_d
                     coords[b] -= normalize(coords[b] - coords[a]) * delta
@@ -180,7 +177,7 @@ def xtb_opt(
                 with open(f'{title}_crashed.xyz', 'w') as f:
                     write_xyz(atoms, coords, f, title=title)
                 print("Recursion limit reached in constrained optimization - Crashed.")
-                sys.exit()
+                sys.exit(1)
 
         with open(f'{title}.xyz', 'w') as f:
             write_xyz(atoms, coords, f, title=title)
@@ -190,14 +187,14 @@ def xtb_opt(
         trajname = f'{title}_opt_log.xyz'
         maxiter = maxiter if maxiter is not None else 0
         s = f'$opt\n   logfile={trajname}\n   output={outname}\n   maxcycle={maxiter}\n'
-            
+
         if constrained_indices is not None:
             s += f'\n$constrain\n   force constant={spring_constant}\n'
 
             for (a, b), distance in zip(constrained_indices, constrained_distances):
 
                 distance = distance or 'auto'
-                s += f"   distance: {a+1}, {b+1}, {distance}\n"  
+                s += f"   distance: {a+1}, {b+1}, {distance}\n"
 
         if constrained_angles_indices is not None:
 
@@ -207,7 +204,7 @@ def xtb_opt(
                 s += '\n$constrain\n'
 
             for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
-                s += f"   angle: {a+1}, {b+1}, {c+1}, {angle}\n"  
+                s += f"   angle: {a+1}, {b+1}, {c+1}, {angle}\n"
 
         if constrained_dihedrals_indices is not None:
 
@@ -217,7 +214,7 @@ def xtb_opt(
                 s += '\n$constrain\n'
 
             for (a, b, c, d), angle in zip(constrained_dihedrals_indices, constrained_dihedrals_values):
-                s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"  
+                s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"
 
         if constrain_string is not None:
             s += '\n$constrain\n'
@@ -228,19 +225,19 @@ def xtb_opt(
 
         elif method.upper() in ('GFN2-XTB', 'GFN2XTB'):
             s += '\n$gfn\n   method=2\n'
-        
+
         s += '\n$end'
 
         s = ''.join(s)
         with open(f'{title}.inp', 'w') as f:
             f.write(s)
-        
+
         flags = '--norestart'
-        
+
         if opt:
             flags += f' --opt {conv_thr}'
             # specify convergence tightness
-        
+
         if method in ('GFN-FF', 'GFNFF'):
 
             flags += ' --gfnff'
@@ -279,16 +276,16 @@ def xtb_opt(
         except CalledProcessError:
             if assert_convergence:
                 raise CalledProcessError
-        
+
         except KeyboardInterrupt:
             print('KeyboardInterrupt requested by user. Quitting.')
-            sys.exit()
+            sys.exit(1)
 
         if spring_constant > 0.25:
             print()
-            
+
         if read_output:
-            
+
             if opt:
 
                 if trajname in os.listdir():
@@ -298,8 +295,8 @@ def xtb_opt(
                     energy = None
 
                 clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out", trajname, outname))
-            
-            else:    
+
+            else:
                 energy = energy_grepper(f"{title}.out", 'TOTAL ENERGY', 3)
                 # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out", trajname, outname))
 
@@ -307,7 +304,7 @@ def xtb_opt(
                             'charges',
                             'wbo',
                             'xtbrestart',
-                            'xtbtopo.mol', 
+                            'xtbtopo.mol',
                             '.xtboptok',
                             'gfnff_adjacency',
                             'gfnff_charges',
@@ -316,23 +313,22 @@ def xtb_opt(
                     os.remove(filename)
                 except FileNotFoundError:
                     pass
-           
+
             return coords, energy, True
-        
+
 def xtb_pre_opt(
-                atoms, 
+                atoms,
                 coords,
                 graphs,
                 constrained_indices=None,
-                constrained_distances=None, 
+                constrained_distances=None,
                 **kwargs,
                 ):
-    '''
-    Wrapper for xtb_opt that preserves the distance of every bond present in each subgraph provided
+    """Wrapper for xtb_opt that preserves the distance of every bond present in each subgraph provided
 
     graphs: list of subgraphs that make up coords, in order
 
-    '''
+    """
     sum_graph = get_sum_graph(graphs, extra_edges=constrained_indices)
 
     # we have to check through a list this way, as I have not found
@@ -365,10 +361,9 @@ def xtb_pre_opt(
                 )
 
 def read_from_xtbtraj(filename):
-    '''
-    Read coordinates from a .xyz trajfile.
+    """Read coordinates from a .xyz trajfile.
 
-    '''
+    """
     with open(filename, 'r') as f:
         lines = f.readlines()
 
@@ -383,9 +378,8 @@ def read_from_xtbtraj(filename):
     return coords, energy
 
 def energy_grepper(filename, signal_string, position):
-    '''
-    returns a kcal/mol energy from a Eh energy in a textfile.
-    '''
+    """Returns a kcal/mol energy from a Eh energy in a textfile.
+    """
     with open(filename, 'r', encoding='utf-8') as f:
         line = f.readline()
         while True:
@@ -407,13 +401,12 @@ def xtb_get_free_energy(
                         debug=False,
                         **kwargs,
                     ):
-    '''
-    Calculates free energy with XTB,
+    """Calculates free energy with XTB,
     without optimizing the provided structure.
     grep: returns either "G" or "Gcorr" in kcal/mol
     sph: whether to run as single point hessian or not
     
-    '''
+    """
     with NewFolderContext(title, delete_after=not debug):
 
         with open(f'{title}.xyz', 'w') as f:
@@ -423,24 +416,24 @@ def xtb_get_free_energy(
         trajname = f'{title}_opt_log.xyz'
         s = f'$opt\n   logfile={trajname}\n   output={outname}\n   maxcycle=1\n'
 
-            
+
         if method.upper() in ('GFN-XTB', 'GFNXTB'):
             s += '\n$gfn\n   method=1\n'
 
         elif method.upper() in ('GFN2-XTB', 'GFN2XTB'):
             s += '\n$gfn\n   method=2\n'
-        
+
         s += '\n$end'
 
         s = ''.join(s)
         with open(f'{title}.inp', 'w') as f:
             f.write(s)
-        
+
         if sph:
             flags = '--bhess'
         else:
             flags = '--ohess'
-        
+
         if method in ('GFN-FF', 'GFNFF'):
             flags += ' --gfnff'
             # declaring the use of FF instead of semiempirical
@@ -459,17 +452,17 @@ def xtb_get_free_energy(
         try:
             with open('temp_hess.log', 'w') as outfile:
                 check_call(f'xtb --input {title}.inp {title}.xyz {flags}'.split(), stdout=outfile, stderr=STDOUT)
-            
+
         except KeyboardInterrupt:
             print('KeyboardInterrupt requested by user. Quitting.')
-            sys.exit()
+            sys.exit(1)
 
         # try:
         to_grep, index = {
             'G' : ('TOTAL FREE ENERGY', 4),
             'Gcorr' : ('G(RRHO) contrib.', 3),
             }[grep]
-        
+
         try:
             result = energy_grepper('temp_hess.log', to_grep, index)
         except Exception as e:
@@ -521,8 +514,7 @@ def crest_mtd_search(
         procs=4,
         threads=1,
         ):
-    '''
-    This function runs a crest metadynamic conformational search and 
+    """This function runs a crest metadynamic conformational search and
     returns its output.
 
     coords: array of shape (n,3) with cartesian coordinates for atoms.
@@ -551,8 +543,7 @@ def crest_mtd_search(
 
     threads: number of parallel threads to be used by the process. 
 
-    '''
-
+    """
     with NewFolderContext(title, delete_after=False):
 
         if constrained_indices is not None:
@@ -567,8 +558,8 @@ def crest_mtd_search(
             write_xyz(atoms, coords, f, title=title)
 
         s = '$opt\n   '
-            
-        if constrained_indices is not None:  
+
+        if constrained_indices is not None:
             s += '\n$constrain\n'
             # s += '   atoms: '
             # for i in np.unique(np.array(constrained_indices).flatten()):
@@ -588,8 +579,8 @@ def crest_mtd_search(
             assert len(constrained_dihedrals_indices) == len(constrained_dihedrals_values)
             s += '\n$constrain\n' if constrained_indices is None else ''
             for (a, b, c, d), angle in zip(constrained_dihedrals_indices, constrained_dihedrals_values):
-                s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"  
-    
+                s += f"   dihedral: {a+1}, {b+1}, {c+1}, {d+1}, {angle}\n"
+
         s += "\n$metadyn\n  atoms: "
 
         constrained_atoms_cumulative = set()
@@ -629,10 +620,10 @@ def crest_mtd_search(
         s = ''.join(s)
         with open(f'{title}.inp', 'w') as f:
             f.write(s)
-        
+
         # avoid restarting the run
         flags = '--norestart'
-        
+
         # add method flag
         if method.upper() in ('GFN-FF', 'GFNFF'):
             flags += ' --gfnff'
@@ -674,10 +665,10 @@ def crest_mtd_search(
         try:
             with open(f"{title}.out", "w") as f:
                 check_call(f'crest {title}.xyz --cinp {title}.inp {flags}'.split(), stdout=f, stderr=STDOUT)
-    
+
         except KeyboardInterrupt:
             print('KeyboardInterrupt requested by user. Quitting.')
-            sys.exit()
+            sys.exit(1)
 
         # if CREST crashes, cd into the parent folder before propagating the error
         except CalledProcessError:
@@ -686,13 +677,13 @@ def crest_mtd_search(
 
         new_coords = read_xyz('crest_conformers.xyz').coords
 
-        # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))     
+        # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))
 
         for filename in ('gfnff_topo',
                             'charges',
                             'wbo',
                             'xtbrestart',
-                            'xtbtopo.mol', 
+                            'xtbtopo.mol',
                             '.xtboptok',
                             'gfnff_adjacency',
                             'gfnff_charges',
@@ -701,7 +692,7 @@ def crest_mtd_search(
                 os.remove(filename)
             except FileNotFoundError:
                 pass
-        
+
         return new_coords
 
 def xtb_gsolv(
@@ -714,21 +705,19 @@ def xtb_gsolv(
             title='temp',
             assert_convergence=True,
         ):
-    '''
-    Returns the solvation free energy in kcal/mol, as computed by XTB.
+    """Returns the solvation free energy in kcal/mol, as computed by XTB.
     Single-point energy calculation carried out with GFN-FF.
 
-    '''
-    
+    """
     with NewFolderContext(title):
 
         with open(f'{title}.xyz', 'w') as f:
             write_xyz(atoms, coords, f, title=title)
 
         # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
-        outname = 'xtbopt.xyz'    
+        outname = 'xtbopt.xyz'
         flags = '--norestart'
-            
+
         # declaring the use of FF instead of semiempirical
         flags += ' --gfnff'
 
@@ -748,13 +737,13 @@ def xtb_gsolv(
         except CalledProcessError:
             if assert_convergence:
                 raise CalledProcessError
-        
+
         except KeyboardInterrupt:
             print('KeyboardInterrupt requested by user. Quitting.')
-            sys.exit()
+            sys.exit(1)
 
-                
-        else:    
+
+        else:
             gsolv = energy_grepper(f"{title}.out", '-> Gsolv', 3)
             clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out", outname))
 
@@ -762,7 +751,7 @@ def xtb_gsolv(
                             'charges',
                             'wbo',
                             'xtbrestart',
-                            'xtbtopo.mol', 
+                            'xtbtopo.mol',
                             '.xtboptok',
                             'gfnff_adjacency',
                             'gfnff_charges',
@@ -771,5 +760,5 @@ def xtb_gsolv(
                 os.remove(filename)
             except FileNotFoundError:
                 pass
-        
+
         return gsolv

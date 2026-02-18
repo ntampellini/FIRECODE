@@ -1,6 +1,4 @@
-'''
-
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 This program is free software: you can redistribute it and/or modify
@@ -13,7 +11,7 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-'''
+"""
 import numpy as np
 from prism_pruner.algebra import normalize
 
@@ -21,9 +19,8 @@ norm_of = np.linalg.norm
 
 
 def point_angle(p1, p2, p3):
-    '''
-    Returns the planar angle between three points in space, in degrees.
-    '''
+    """Returns the planar angle between three points in space, in degrees.
+    """
     return np.arccos(np.clip(normalize(p1 - p2) @ normalize(p3 - p2), -1.0, 1.0))*180/np.pi
 
 
@@ -34,13 +31,11 @@ def kronecker_delta(i, j) -> int:
 
 
 def align_vec_pair(ref, tgt):
-    '''
-    ref, tgt: iterables of two 3D vectors each
+    """ref, tgt: iterables of two 3D vectors each
     
     return: rotation matrix that when applied to tgt,
             optimally aligns it to ref
-    '''
-    
+    """
     B = np.zeros((3,3))
     for i in range(3):
         for k in range(3):
@@ -91,9 +86,8 @@ def cart_prod_idx(sizes: np.ndarray):
 
 
 def vector_cartesian_product(x, y):
-    '''
-    Cartesian product, but with vectors instead of indices
-    '''
+    """Cartesian product, but with vectors instead of indices
+    """
     indices = cart_prod_idx(np.asarray((x.shape[0], y.shape[0]), dtype=np.int32))
     dim = x.shape[-1] if len(x.shape) > 1 else 1
     new_arr = np.zeros((*indices.shape, dim), dtype=x.dtype)
@@ -104,11 +98,10 @@ def vector_cartesian_product(x, y):
 
 
 def transform_coords(coords, rot, pos):
-    '''
-    Returns the rotated and tranlated
+    """Returns the rotated and tranlated
     coordinates. Slightly faster than
     Numpy, uses memory-contiguous arrays.
-    '''
+    """
     t = np.transpose(coords)
     m = rot @ t
     f = np.transpose(m)

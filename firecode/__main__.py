@@ -1,7 +1,5 @@
 # coding=utf-8
-'''
-
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 This program is free software: you can redistribute it and/or modify
@@ -18,11 +16,13 @@ https://github.com/ntampellini/firecode
 
 Nicolo' Tampellini - nicolo.tampellini@yale.edu
 
-'''
+"""
 import argparse
 import os
 import sys
+
 from rich.traceback import install
+
 install(show_locals=True)
 
 def main():
@@ -65,24 +65,24 @@ def main():
     if args.setup:
         from firecode.modify_settings import run_setup
         run_setup()
-        sys.exit()
+        sys.exit(0)
 
     if args.cite:
         print('No citation link is available for FIRECODE yet. You can link to the code on https://www.github.com/ntampellini/firecode')
-        sys.exit()
+        sys.exit(0)
 
     if args.test:
         from firecode.tests import run_tests
         run_tests()
-        sys.exit()
+        sys.exit(0)
 
     if args.optimize:
         from firecode.standalone_optimizer import main
         main(args.optimize)
-        sys.exit()
+        sys.exit(0)
 
     if args.command_line:
-        
+
         filename = 'input_firecode.txt'
         with open(filename, 'w') as f:
             f.write(args.command_line)
@@ -96,7 +96,7 @@ def main():
     if args.profile:
         from firecode.profiler import profiled_wrapper
         profiled_wrapper(filename, args.name)
-        sys.exit()
+        sys.exit(0)
 
     embedder = Embedder(filename, stamp=args.name)
     # initialize embedder from input file

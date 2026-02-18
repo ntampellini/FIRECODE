@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import os as op_sys
 from time import perf_counter
@@ -60,7 +59,7 @@ class Optimizer:
                 choices=choices,
                 default=next(c.value for c in choices if c.value[0] == CALCULATOR),
                 ).execute()
-            
+
         if solvent is None:
 
             solvent = inquirer.fuzzy(
@@ -69,7 +68,7 @@ class Optimizer:
                 default="toluene",
                 validate=lambda x: ((x in epsilon_dict) or x is None),
             ).execute()
-            
+
         self.calc = calc
         self.method = method
         self.solvent = solvent
@@ -88,12 +87,10 @@ class Optimizer:
         return s
 
 def main(filenames):
-    """
-    Standalone optimizer entry point.
+    """Standalone optimizer entry point.
     args: iterable of strings of structure filenames.
     
     """
-
     optimizer = Optimizer()
 
     choices = [
@@ -105,7 +102,7 @@ def main(filenames):
         Choice(value="newfile",               name="Newfile          - Write optimized structure to a new file (*_opt.xyz)."),
         Choice(value="free_energy",           name="Free Energy      - Calculate free energy (G)."),
     ]
-        
+
     options_to_set = inquirer.checkbox(
         message="Select options (spacebar to toggle, enter to confirm):",
         choices=choices,
@@ -113,7 +110,7 @@ def main(filenames):
         disabled_symbol='⬡',
         enabled_symbol='⬢',
         ).execute()
-    
+
     # set options as booleans, will change idenity later
     for option in choices:
         setattr(optimizer, option.value, option.value in options_to_set)
@@ -132,7 +129,7 @@ def main(filenames):
         )
 
     # manually set constraints
-    if "constraints" in options_to_set:        
+    if "constraints" in options_to_set:
 
         while True:
 
@@ -151,9 +148,9 @@ def main(filenames):
             if '.' in data[-1]:
                 value = float(data.pop(-1))
 
-            constraint = Constraint([int(i) for i in data], value=value)                
+            constraint = Constraint([int(i) for i in data], value=value)
             optimizer.constraints.append(constraint)
-                
+
         print(f"Specified {len(optimizer.constraints)} constraints")
 
     # set constraint_file to textfile filename
@@ -165,7 +162,7 @@ def main(filenames):
                 default="./" if op_sys.name == "posix" else "C:\\",
                 validate=PathValidator(is_file=True, message="Input is not a file"),
                 only_files=True,
-            ).execute() 
+            ).execute()
 
         # set constraints from file
         with open(optimizer.constraint_file, 'r') as f:
@@ -186,7 +183,7 @@ def main(filenames):
                 if '.' in data[-1]:
                     value = float(data.pop(-1))
 
-                constraint = Constraint([int(i) for i in data], value=value)                
+                constraint = Constraint([int(i) for i in data], value=value)
                 optimizer.constraints.append(constraint)
 
             except Exception as e:
@@ -271,7 +268,7 @@ def main(filenames):
                         # correct indices from relative to the SMARTS
                         # string to absolute for this molecule
                         constraint.convert_constraint_with_smarts(coords, data.atomnos, smarts_string)
-                        
+
                     if constraint.type == 'B':
 
                         a, b = constraint.indices
@@ -291,11 +288,11 @@ def main(filenames):
 
                         constrained_angles_indices.append(constraint.indices)
                         constrained_angles_values.append(constraint.value)
-                        
+
                         print(f"CONSTRAIN ANGLE -> Angle({a}-{b}-{c}) = {round(point_angle(coords[a],coords[b],coords[c]), 3)}° at start of optimization, target {round(constraint.value, 3)}°")
 
                     elif constraint.type == 'D':
-                        
+
                         a, b, c, d = constraint.indices
                         if constraint.value is None:
                             constraint.value = dihedral(np.array([coords[a],coords[b],coords[c], coords[d]]))
@@ -304,7 +301,7 @@ def main(filenames):
                         constrained_dih_angles.append(constraint.value)
 
                         print(f"CONSTRAIN DIHEDRAL -> Dih({a}-{b}-{c}-{d}) = {round(dihedral(np.array([coords[a],coords[b],coords[c], coords[d]])), 3)}° at start of optimization, target {round(constraint.value, 3)}°")
-                
+
                 action = "Optimizing" if optimizer.opt else "Calculating SP energy on"
 
                 if optimizer.calc in ('AIMNET2', 'UMA') and optimizer.solvent is not None:
@@ -361,7 +358,7 @@ def main(filenames):
 
                     print(f'Performing vibrational analysis on {name} - {i+1} of {len(filenames)}, conf {c_n+1} of {len(data.coords)} ({optimizer.method})')
                     t_start = perf_counter()
-                    
+
                     energy = ase_get_free_energy(
                         data.atoms,
                         coords,
@@ -391,7 +388,7 @@ def main(filenames):
                     a, b = constraint.indices
                     final_value = np.linalg.norm(coords[a]-coords[b])
                     uom = ' Å'
-                
+
                 elif constraint.type == 'A':
                     a, b, c = constraint.indices
                     final_value = point_angle(coords[a],coords[b],coords[c])
@@ -431,27 +428,24 @@ def main(filenames):
 
         for i, (nc, energy) in enumerate(zip(names_confs, energies)):
             table.add_row([i+1, nc, energy/EH_TO_KCAL, round(energy-min_e, 2)])
-            
+
         print(table.get_string())
 
 def multiplicity_check(atomnos, charge, multiplicity=1) -> bool:
-    '''
-    Returns True if the multiplicity and the nuber of
+    """Returns True if the multiplicity and the nuber of
     electrons are one odd and one even, and vice versa.
 
-    '''
-
+    """
     electrons = sum(atomnos) - charge
-    
+
     return (multiplicity % 2) != (electrons % 2)
 
 def get_ts_d_estimate(filename, indices, factor=1.35, verbose=True):
-    '''
-    Returns an estimate for the distance between two
+    """Returns an estimate for the distance between two
     specific atoms in a transition state, by multipling
     the sum of covalent radii for a constant.
     
-    '''
+    """
     mol = read_xyz(filename)
     i1, i2 = indices
     a1, a2 = mol.atoms[i1], mol.atoms[i2]
@@ -462,5 +456,5 @@ def get_ts_d_estimate(filename, indices, factor=1.35, verbose=True):
 
     if verbose:
         print(f'--> Estimated TS d({a1}-{a2}) = {est_d} Å')
-        
+
     return est_d

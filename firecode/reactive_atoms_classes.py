@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 from copy import deepcopy
 
@@ -31,7 +30,7 @@ from firecode.parameters import orb_dim_dict
 
 
 class Single:
-    
+
     def __repr__(self):
         return 'Single Bond'
 
@@ -85,7 +84,7 @@ class Single:
 
 
 class Sp2:
-    
+
     def __repr__(self):
         return 'sp2'
 
@@ -95,7 +94,7 @@ class Sp2:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
-        
+
 
 
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
@@ -113,18 +112,18 @@ class Sp2:
             if orb_dim is None:
                 key = self.symbol + ' ' + str(self).split(' (')[0]
                 orb_dim = orb_dim_dict.get(key)
-                
+
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
-            
-            self.center = self.orb_vecs * orb_dim      
+
+            self.center = self.orb_vecs * orb_dim
 
             self.center += self.coord
 
 
 class Sp3:
-    
+
     def __repr__(self):
         return 'sp3'
 
@@ -136,7 +135,7 @@ class Sp3:
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
         self.coord = mol.coords[conf][i]
         self.others = mol.coords[conf][neighbors_indices]
-        
+
         if not mol.sp3_sigmastar:
 
             if not hasattr(self, 'leaving_group_index'):
@@ -148,7 +147,7 @@ class Sp3:
             elif len([atom for atom in self.neighbors_symbols if atom not in ['H']]) == 1: # if no clear leaving group but we only have one atom != H
                 self.leaving_group_coords = self.others[self.neighbors_symbols.index([atom for atom in self.neighbors_symbols if atom not in ['H']][0])]
 
-            else: # if we cannot infer, ask user if we didn't have already 
+            else: # if we cannot infer, ask user if we didn't have already
                 try:
                     # self.leaving_group_coords = self._set_leaving_group(mol, neighbors_indices)
 
@@ -163,17 +162,17 @@ class Sp3:
                         while True:
 
                             self.leaving_group_index = input(f'Please insert the index of the leaving group atom bonded to the sp3 reactive atom (index {self.index}) of molecule {mol.rootname} : ')
-                            
+
                             if self.leaving_group_index == '' or self.leaving_group_index.lower().islower():
                                 pass
-                            
+
                             elif int(self.leaving_group_index) in neighbors_indices:
                                 self.leaving_group_index = int(self.leaving_group_index)
                                 break
 
                             else:
                                 print(f'Atom {self.leaving_group_index} is not bonded to the sp3 center with index {self.index}.')
-                    
+
                     self.leaving_group_coords = self.others[neighbors_indices.index(self.leaving_group_index)]
 
             self.orb_vecs = np.array([self.coord - self.leaving_group_coords])
@@ -206,7 +205,7 @@ class Sp3:
             if orb_dim is None:
                 key = self.symbol + ' ' + str(self).split(' (')[0]
                 orb_dim = orb_dim_dict.get(key)
-                
+
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
@@ -214,12 +213,10 @@ class Sp3:
             self.center = np.array([orb_dim * normalize(vec) + self.coord for vec in self.orb_vecs])
 
     def _set_leaving_group(self, mol, neighbors_indices):
-        '''
-        Manually set the molecule leaving group from the ASE GUI, imposing
+        """Manually set the molecule leaving group from the ASE GUI, imposing
         a constraint on the desired atom.
 
-        '''
-
+        """
         if self.leaving_group_index is None:
 
             from ase import Atoms
@@ -235,7 +232,7 @@ class Sp3:
                     '\nThen go to Tools -> Constraints -> Constrain, and close the GUI.') % (mol.filename, self.index))
 
                 GUI(images=Images([atoms]), show_bonds=True).run()
-                
+
                 if atoms.constraints != []:
                     if len(list(atoms.constraints[0].get_indices())) == 1:
                         if list(atoms.constraints[0].get_indices())[0] in neighbors_indices:
@@ -253,7 +250,7 @@ class Sp3:
 
 
 class Ether:
-       
+
     def __repr__(self):
         return 'Ether'
 
@@ -263,7 +260,7 @@ class Ether:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
-        
+
 
 
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
@@ -276,7 +273,7 @@ class Ether:
             if orb_dim is None:
                 key = self.symbol + ' ' + str(self).split(' (')[0]
                 orb_dim = orb_dim_dict.get(key)
-                
+
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
@@ -287,13 +284,13 @@ class Ether:
 
             # self.orb_vecs = np.array([orb_mat @ v for v in self.orb_vecs])
             self.orb_vecs = (orb_mat @ self.orb_vecs.T).T
-            
+
             self.center = self.orb_vecs + self.coord
             # two vectors defining the position of the two orbital lobes centers
 
 
 class Ketone:
-    
+
     def __repr__(self):
         return f'Ketone ({self.subtype})'
 
@@ -302,7 +299,7 @@ class Ketone:
         '''
         self.index = i
         self.symbol = mol.atoms[i]
-        neighbors_indices = list(mol.graph.neighbors(i))       
+        neighbors_indices = list(mol.graph.neighbors(i))
         self.subtype = 'pre-init'
 
 
@@ -316,7 +313,7 @@ class Ketone:
             if orb_dim is None:
                 key = self.symbol + ' ' + str(self).split(' (')[0]
                 orb_dim = orb_dim_dict.get(key)
-                
+
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
@@ -328,7 +325,7 @@ class Ketone:
 
             if len(neighbors_of_neighbor_indices) == 1:
             # ketene
-            
+
                 ketene_sub_indices = list(mol.graph.neighbors(neighbors_of_neighbor_indices[0]))
                 ketene_sub_indices.remove(neighbors_indices[0])
 
@@ -345,7 +342,7 @@ class Ketone:
                 self.center = np.array([rot_mat_from_pointer(self.vector, 90*step) @ pointer for step in range(4)])
 
                 self.subtype = 'p+p'
-            
+
             elif len(neighbors_of_neighbor_indices) == 2:
             # if it is a normal ketone (or an enolate), n orbital lobes must be coplanar with
             # atoms connecting to ketone C atom, or p lobes must be placed accordingly
@@ -374,7 +371,7 @@ class Ketone:
 
                 self.center = np.array([rot_mat_from_pointer(pivot, 180) @ v for v in (v1, v2, v3)])
                 self.subtype = 'trilobe'
-        
+
             self.orb_vecs = np.array([normalize(center) for center in self.center])
             # unit vectors connecting reactive atom coord with orbital centers
 
@@ -383,7 +380,7 @@ class Ketone:
 
 
 class Imine:
-        
+
     def __repr__(self):
         return 'Imine'
 
@@ -393,7 +390,7 @@ class Imine:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
-        
+
 
 
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
@@ -406,11 +403,11 @@ class Imine:
             if orb_dim is None:
                 key = self.symbol + ' ' + str(self).split(' (')[0]
                 orb_dim = orb_dim_dict.get(key)
-                
+
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
-        
+
             if mol.sigmatropic[conf]:
                 # two p lobes
                 p_lobe = normalize(np.cross(self.vectors[0], self.vectors[1]))*orb_dim
@@ -425,7 +422,7 @@ class Imine:
 
 
 class Sp_or_carbene:
-        
+
     def __repr__(self):
         return self.type
 
@@ -434,7 +431,7 @@ class Sp_or_carbene:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
-        
+
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
 
         self.coord = mol.coords[conf][i]
@@ -445,7 +442,7 @@ class Sp_or_carbene:
 
         angle = vec_angle(normalize(self.others[0] - self.coord),
                           normalize(self.others[1] - self.coord))
-        
+
         if np.abs(angle - 180) < 5:
             self.type = 'sp'
 
@@ -474,7 +471,7 @@ class Sp_or_carbene:
 
             neighbors_of_neighbors_indices[0].remove(i)
             neighbors_of_neighbors_indices[1].remove(i)
-                
+
             if len(neighbors_of_neighbors_indices[0]) == 2:
                 substituent = mol.coords[conf][neighbors_of_neighbors_indices[0][0]]
                 ketene_atom = mol.coords[conf][neighbors_indices[0]]
@@ -492,11 +489,11 @@ class Sp_or_carbene:
             if orb_dim is None:
                 key = self.symbol + ' ' + self.type
                 orb_dim = orb_dim_dict.get(key)
-                
+
                 if orb_dim is None:
                     orb_dim = orb_dim_dict['Fallback']
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
-        
+
             if self.type == 'sp':
 
                 v = np.random.rand(3)
@@ -509,7 +506,7 @@ class Sp_or_carbene:
 
                     axis = normalize(self.others[0] - self.others[1])
                     # versor connecting reactive atom neighbors
-                    
+
                     if self.allene:
                         ref = (mol.coords[conf][neighbors_of_neighbors_indices[0][0]] -
                                mol.coords[conf][neighbors_indices[0]])
@@ -521,7 +518,7 @@ class Sp_or_carbene:
 
 
                 pivot2 = normalize(np.cross(pivot1, self.vectors[0]))
-                        
+
                 self.orb_vecs = np.array([rot_mat_from_pointer(pivot2, 90) @
                                           rot_mat_from_pointer(pivot1, angle) @
                                           normalize(self.vectors[0]) for angle in (0, 90, 180, 270)]) * orb_dim
@@ -532,7 +529,7 @@ class Sp_or_carbene:
 
 
             else: # bent carbene case: three centers, sp2+p
-                
+
                 self.orb_vecs = np.array([-normalize(np.mean([normalize(v) for v in self.vectors], axis=0))*orb_dim])
                 # one sp2 center first
 
@@ -546,7 +543,7 @@ class Sp_or_carbene:
 
 
 class Metal:
-    
+
     def __repr__(self):
         return 'Metal'
 
@@ -555,7 +552,7 @@ class Metal:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
-        
+
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
         self.coord = mol.coords[conf][i]
         self.others = mol.coords[conf][neighbors_indices]
@@ -579,7 +576,7 @@ class Metal:
         if update:
             if orb_dim is None:
                 orb_dim = orb_dim_dict[str(self)]
-            
+
             self.center = (self.orb_vecs * orb_dim) + self.coord
 
 # Keys are made of atom symbol and number of bonds that it makes
@@ -650,12 +647,11 @@ for metal in metals:
         atom_type_dict[metal+bonds] = Metal
 
 def get_atom_type(graph, index, override=None):
-    '''
-    Returns the appropriate class to represent
+    """Returns the appropriate class to represent
     the atom with the given index on the graph.
     If override is not None, returns the class
     with that name.
-    '''
+    """
     if override is not None:
         return atom_type_dict[override]
 

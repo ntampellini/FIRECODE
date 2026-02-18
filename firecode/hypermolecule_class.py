@@ -1,7 +1,5 @@
 # coding=utf-8
-'''
-
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021 Nicolò Tampellini
 
 This program is free software: you can redistribute it and/or modify
@@ -14,7 +12,7 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-'''
+"""
 
 import os
 import warnings
@@ -37,15 +35,13 @@ from firecode.utils import read_xyz
 warnings.simplefilter("ignore", UserWarning)
 
 def align_by_moi(atoms, structures):
-    '''
-    Aligns molecules of a structure array (shape is (n_structures, n_atoms, 3))
+    """Aligns molecules of a structure array (shape is (n_structures, n_atoms, 3))
     to the first one, based on the the moments of inertia vectors.
     Returns the aligned array.
 
-    '''
-
+    """
     reference, *targets = structures
-  
+
     masses = np.array([pt.mass(el) for el in atoms])
 
     # center all the structures at the origin
@@ -57,7 +53,7 @@ def align_by_moi(atoms, structures):
     output = np.zeros(structures.shape)
     output[0] = reference
 
-    # reference vectors   
+    # reference vectors
     ref_moi_vecs = np.eye(3)
     (ref_moi_vecs[0,0],
      ref_moi_vecs[1,1],
@@ -76,16 +72,15 @@ def align_by_moi(atoms, structures):
         except LinAlgError:
         # it is actually possible for the kabsch alg not to converge
             matrix = np.eye(3)
-        
+
         # output[t+1] = np.array([matrix @ vector for vector in target])
         output[t+1] = (matrix @ target.T).T
 
     return output
 
 class Hypermolecule:
-    '''
-    Molecule class to be used within firecode.
-    '''
+    """Molecule class to be used within firecode.
+    """
 
     def __repr__(self):
         r = self.rootname
@@ -94,15 +89,13 @@ class Hypermolecule:
         return r
 
     def __init__(self, filename, charge=0, mult=1, reactive_indices=None, debug_logfunction=None):
-        '''
-        Initializing class properties: reading conformational ensemble file, aligning
+        """Initializing class properties: reading conformational ensemble file, aligning
         conformers to first and centering them in origin.
 
         :params filename:           Input file name. Can be anything, .xyz preferred
         :params reactive_indices:     Index of atoms that will link during the desired reaction.
                                     May be either int or list of int.
-        '''
-
+        """
         if not os.path.isfile(filename):
             if '.' in filename:
                 raise SyntaxError((f'Molecule {filename} cannot be read. Please check your syntax.'))
@@ -111,8 +104,8 @@ class Hypermolecule:
         self.filename = filename
         self.debug_logfunction = debug_logfunction
         self.constraints = []
-        self.charge = 0
-        self.mult = 1
+        self.charge = charge
+        self.mult = mult
 
         if isinstance(reactive_indices, np.ndarray):
             self.reactive_indices = reactive_indices
@@ -122,7 +115,7 @@ class Hypermolecule:
         conf_ensemble_object = read_xyz(filename)
 
         coordinates = np.array(conf_ensemble_object.coords)
-        
+
         self.atomnos = conf_ensemble_object.atomnos
         self.atoms = conf_ensemble_object.atoms
         self.position = np.array([0,0,0], dtype=float)  # used in Embedder class
@@ -140,13 +133,11 @@ class Hypermolecule:
         # show_graph(self)
 
         self.all_atoms_coords = np.array([coord for structure in self.coords for coord in structure])       # single list with all atomic positions
-        
-    def compute_orbitals(self, override=None):
-        '''
-        Computes orbital positions for atoms in self.reactive_atoms
-        '''
 
-        if self.reactive_indices is None:
+    def compute_orbitals(self, override=None):
+        """Computes orbital positions for atoms in self.reactive_atoms
+        """
+        if len(self.reactive_indices) == 0:
             return
 
         self.sp3_sigmastar, self.sigmatropic = None, None
@@ -166,11 +157,10 @@ class Hypermolecule:
                 # We can update, that is set the reactive_atom.center attribute
 
     def _set_reactive_indices(self, filename):
-        '''
-        Manually set the molecule reactive atoms from the ASE GUI, imposing
+        """Manually set the molecule reactive atoms from the ASE GUI, imposing
         constraints on the desired atoms.
 
-        '''
+        """
         from ase import Atoms
         from ase.gui.gui import GUI
         from ase.gui.images import Images
@@ -187,17 +177,16 @@ class Hypermolecule:
             GUI(images=Images([atoms]), show_bonds=True).run()
 
         return list(atoms.constraints[0].get_indices())
-    
+
     def get_alignment_indices(self):
-        '''
-        Return the indices to align the molecule to, given a list of
+        """Return the indices to align the molecule to, given a list of
         atoms that should be reacting. List is composed by reactive atoms
         plus adjacent atoms.
         :param coords: coordinates of a single molecule
         :param reactive atoms: int or list of ints
         :return: list of indices
-        '''
-        if len(self.reactive_indices) == 0:
+        """
+        if not self.reactive_indices:
             return None
 
         indices = set()
@@ -210,11 +199,10 @@ class Hypermolecule:
         return list(indices)
 
     def _inspect_reactive_atoms(self, override=None):
-        '''
-        Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict
-        '''
+        """Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict
+        """
         self.reactive_atoms_classes_dict = {c:{} for c, _ in enumerate(self.coords)}
-        
+
         for c, _ in enumerate(self.coords):
             for index in self.reactive_indices:
                 symbol = self.atoms[index]
@@ -231,31 +219,27 @@ class Hypermolecule:
                     if self.debug_logfunction is not None:
                         self.debug_logfunction(f'DEBUG: Hypermolecule._inspect_reactive_atoms {self.filename} - Reactive atom {index+1} is a {symbol} atom of {atom_type} type. It is bonded to {len(self.graph.neighbors(index))} neighbor(s): {atom_type.neighbors_symbols}')
 
-                # deal with this in the Embedder class
-                except KeyError:
-                    pass
-                    
+                except KeyError as err:
+                    raise KeyError(err)
+
 
 
     def _scale_orbs(self, value):
-        '''
-        Scale each orbital dimension according to value.
-        '''
+        """Scale each orbital dimension according to value.
+        """
         for c, _ in enumerate(self.coords):
             for index, atom in self.reactive_atoms_classes_dict[c].items():
                 orb_dim = norm_of(atom.center[0]-atom.coord)
                 atom.init(self, index, update=True, orb_dim=orb_dim*value, conf=c)
 
     def get_r_atoms(self, c):
-        '''
-        c: conformer number
-        '''
+        """c: conformer number
+        """
         return list(self.reactive_atoms_classes_dict[c].values())
-    
+
     def get_centers(self, c):
-        '''
-        c: conformer number
-        '''
+        """c: conformer number
+        """
         return np.array([[v for v in atom.center] for atom in self.get_r_atoms(c)])
 
     # def calc_positioned_conformers(self):
@@ -322,9 +306,8 @@ class Hypermolecule:
                     f.write('%-5s %-8s %-8s %-8s\n' % ('X', round(orb[0], 6), round(orb[1], 6), round(orb[2], 6)))
 
     def get_orbital_length(self, index):
-        '''
-        index: reactive atom index
-        '''
+        """index: reactive atom index
+        """
         if index not in self.reactive_indices:
             raise NoOrbitalError(f'Index provided must be a molecule reactive index ({index}, {self.filename})')
 
@@ -332,8 +315,7 @@ class Hypermolecule:
         return norm_of(r_atom.center[0] - r_atom.coord)
 
 class Pivot:
-    '''
-    (Cyclical embed)
+    """(Cyclical embed)
     Pivot object: vector connecting two lobes of a
     molecule, starting from v1 (first reactive atom in
     mol.reacitve_atoms_classes_dict) and ending on v2.
@@ -342,13 +324,13 @@ class Pivot:
     that is molecules that undergo a cyclical embed
     while having only one reactive atom, pivots are
     built on that single atom.
-    '''
+    """
+
     def __init__(self, c1, c2, a1, a2, index1, index2):
-        '''
-        c: centers (orbital centers)
+        """c: centers (orbital centers)
         v: vectors (orbital vectors, non-normalized)
         i: indices (of coordinates, in mol.center)
-        '''
+        """
         self.start = c1
         self.end = c2
 

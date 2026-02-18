@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 from copy import deepcopy
 
@@ -30,27 +29,29 @@ from firecode.algebra import align_vec_pair
 from firecode.ase_manipulations import ase_bend
 from firecode.errors import TriangleError, ZeroCandidatesError
 from firecode.graph_manipulations import get_sum_graph
-from firecode.numba_functions import (compenetration_check,
-                                      get_torsion_fingerprint, tfd_similarity)
+from firecode.numba_functions import compenetration_check, get_torsion_fingerprint, tfd_similarity
 from firecode.torsion_module import get_quadruplets
-from firecode.utils import (cartesian_product, loadbar, polygonize, pretty_num,
-                            rmsd_similarity, rotation_matrix_from_vectors)
+from firecode.utils import (
+    cartesian_product,
+    loadbar,
+    polygonize,
+    pretty_num,
+    rmsd_similarity,
+    rotation_matrix_from_vectors,
+)
 
 
 def string_embed(embedder):
-    '''
-    return poses: return embedded structures, ready to be refined
+    """Return poses: return embedded structures, ready to be refined
     Algorithm used is the "string" algorithm (see docs).
-    '''
+    """
     assert len(embedder.objects) == 2
 
     def is_new_structure(coords, quadruplets, lru_cache, cache_size=5):
-        '''
-        Checks if the torsion fingerprint of a structure is
+        """Checks if the torsion fingerprint of a structure is
         similar to the ones present in lru_cache. If the
         structure is new, updates the cache.
-        '''
-
+        """
         # get the structure torsion fingerprint
         tfp = get_torsion_fingerprint(coords, quadruplets)
 
@@ -107,7 +108,7 @@ def string_embed(embedder):
 
                 mol2.rotation = rotation_matrix_from_vectors(mol_vec, -ref_vec)
 
-                if angle != 0:                  
+                if angle != 0:
                     delta_rot = rot_mat_from_pointer(ref_vec, angle)
                     mol2.rotation = delta_rot @ mol2.rotation
 
@@ -120,7 +121,7 @@ def string_embed(embedder):
                         poses.append(embedded_structure)
 
     loadbar(1, 1, prefix='Embedding structures ')
-    
+
     if not poses:
         s = ('\n--> Cyclical embed did not find any suitable disposition of molecules.\n' +
                '    This is probably because the two molecules cannot find a correct interlocking pose.\n' +
@@ -133,30 +134,26 @@ def string_embed(embedder):
     return np.array(poses)
 
 def _get_string_constrained_indices(embedder, n):
-    '''
-    Get constrained indices referring to the emebdded structures, repeated n times.
+    """Get constrained indices referring to the emebdded structures, repeated n times.
     :params n: int
     :return: list of lists consisting in atomic pairs to be constrained.
-    '''
+    """
     # Two molecules, string algorithm, one constraint for all, repeated n times
     return np.array([[[int(embedder.objects[0].reactive_indices[0]),
                        int(embedder.objects[1].reactive_indices[0] + embedder.ids[0])]] for _ in range(n)])
 
 def cyclical_embed(embedder, max_norm_delta=5):
-    '''
-    return threads: return embedded structures, with position and rotation attributes set, ready to be pumped
-                    into embedder.structures. Algorithm used is the "cyclical" algorithm (see docs).
-    '''
-    
+    """Return threads: return embedded structures, with position and rotation attributes set, ready to be pumped
+    into embedder.structures. Algorithm used is the "cyclical" algorithm (see docs).
+    """
     if len(embedder.objects) == 2 and embedder.options.rigid:
         return _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=max_norm_delta)
         # shortened, simplified version that is somewhat faster
 
     def _get_directions(norms):
-        '''
-        Returns two or three vectors specifying the direction in which each molecule should be aligned
+        """Returns two or three vectors specifying the direction in which each molecule should be aligned
         in the cyclical TS, pointing towards the center of the polygon.
-        '''
+        """
         assert len(norms) in (2,3)
 
         if len(norms) == 2:
@@ -176,7 +173,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
         vertices[2] = np.array([x,y])
         # similar to the code from polygonize, to get the active triangle
         # but without the orientation specified in the polygonize function
-        
+
         a = vertices[1,0] # first point, x
         b = vertices[2,0] # second point, x
         c = vertices[2,1] # second point, y
@@ -215,7 +212,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
         # invert the versors sign of circumcenter if
         # one angle is obtuse, because then
         # circumcenter is outside the triangle
-        
+
         dir1 = normalize(np.concatenate((dir1, [0])))
         dir2 = normalize(np.concatenate((dir2, [0])))
         dir3 = normalize(np.concatenate((dir3, [0])))
@@ -223,14 +220,13 @@ def cyclical_embed(embedder, max_norm_delta=5):
         return np.vstack((dir1, dir2, dir3))
 
     def _adjust_directions(embedder, directions, constrained_indices, triangle_vectors, pivots, conf_ids):
-        '''
-        For trimolecular TSs, correct molecules pre-alignment. That is, after the initial estimate
+        """For trimolecular TSs, correct molecules pre-alignment. That is, after the initial estimate
         based on pivot triangle circocentrum, systematically rotate each molecule around its pivot
         by fixed increments and look for the arrangement with the smallest deviation from orbital
         parallel interaction. This optimizes the obtainment of poses with the correct inter-reactive
         atoms distances.
 
-        '''
+        """
         assert directions.shape[0] == 3
 
         mols = deepcopy(embedder.objects)
@@ -251,7 +247,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
         vertices[2] = np.array([x,y])
         # similar to the code from polygonize, to get the active triangle
         # but without the orientation specified in the polygonize function
-        
+
         a = vertices[1,0] # first point, x
         b = vertices[2,0] # second point, x
         c = vertices[2,1] # second point, y
@@ -352,13 +348,13 @@ def cyclical_embed(embedder, max_norm_delta=5):
             cost += vec_angle(v0 - new_a02, new_a20 - v0)
             cost += vec_angle(v1 - new_a01, new_a10 - v1)
             cost += vec_angle(v2 - new_a21, new_a12 - v2)
-                    
+
             candidates.append((cost, angles, (d0, d1, d2)))
 
         ############### choose the one with the best alignment, that is minor cost
 
         cost, angles, directions = sorted(candidates, key=lambda x: x[0])[0]
-        
+
         return np.array(directions)
 
     s = f'\n--> Performing {embedder.embed} embed ({pretty_num(embedder.candidates)} candidates)'
@@ -387,14 +383,14 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
         pivots_indices = cartesian_product(*[range(len(mol.pivots[conf_ids[i]])) for i, mol in enumerate(embedder.objects)])
         # indices of pivots in each molecule self.pivots[conf] list. For three mols with 2 pivots each: [[0,0,0], [0,0,1], [0,1,0], ...]
-        
+
         for p, pi in enumerate(pivots_indices):
 
             loadbar(p+ci*(len(pivots_indices)), len(pivots_indices)*len(conf_indices), prefix='Embedding structures ')
-            
+
             pivots = [embedder.objects[m].pivots[conf_ids[m]][pi[m]] for m, _ in enumerate(embedder.objects)]
             # getting the active pivot for each molecule for this run
-            
+
             norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
             # getting the pivots norms to feed into the polygonize function
 
@@ -406,12 +402,11 @@ def cyclical_embed(embedder, max_norm_delta=5):
                 else:
                     norms_type = 'impossible_digon'
 
-            else:
-                if all([norms[i] < norms[i-1] + norms[i-2] for i in (0,1,2)]):
-                    norms_type = 'triangle'
+            elif all([norms[i] < norms[i-1] + norms[i-2] for i in (0,1,2)]):
+                norms_type = 'triangle'
 
-                else:
-                    norms_type = 'impossible_triangle'
+            else:
+                norms_type = 'impossible_triangle'
 
             if norms_type in ('triangle', 'digon'):
 
@@ -465,7 +460,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
                                             'circumstances, but if it does, it may be reasonable to print a statement on the log, ' +
                                             'discard the bent molecule, and then proceed with the embed. If you see this error, ' +
                                             'please report your input and structures on a GitHub issue. Thank you.'))
-                        
+
                         norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
                         # updating the pivots norms to feed into the polygonize function
 
@@ -481,7 +476,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
                 else:
                     continue
-            
+
             else: # norms type == 'impossible_digon', that is sides are too different in length
 
                 if not embedder.options.rigid:
@@ -500,11 +495,11 @@ def cyclical_embed(embedder, max_norm_delta=5):
                         # It ranges from 0.5 to 0.8 and is shifted more toward
                         # the shorter norm as the gap rises. For gaps of more
                         # than maxgap Angstroms, the target length is very close
-                        # to the shortest molecule, and only the molecule 
+                        # to the shortest molecule, and only the molecule
                         # with the longest pivot is bent.
 
                         target_length = min(norms)*r + max(norms)*(1-r)
-                
+
                     for i, mol in enumerate(deepcopy(embedder.objects)):
 
                         if len(mol.reactive_indices) > 1:
@@ -531,7 +526,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
                     pivots = [embedder.objects[m].pivots[conf_ids[m]][pi[m]] for m, _ in enumerate(embedder.objects)]
                     # updating the active pivot for each molecule for this run
-                    
+
                     norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
                     # updating the pivots norms to feed into the polygonize function
 
@@ -561,10 +556,10 @@ def cyclical_embed(embedder, max_norm_delta=5):
                     if len(embedder.objects) == 3:
 
                         directions = _adjust_directions(embedder, directions, ids, vecs, pivots, conf_ids)
-                        # For trimolecular TSs, the alignment direction previously get is 
+                        # For trimolecular TSs, the alignment direction previously get is
                         # just a general first approximation that needs to be corrected
                         # for the specific case through another algorithm.
-                        
+
                     for angles in embedder.systematic_angles:
 
                         for i, vec_pair in enumerate(vecs):
@@ -579,7 +574,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
                             # coordinates for the reactive atoms in this run
 
                             atomic_pivot_mean = np.mean(reactive_coords, axis=0)
-                            # mean position of the atoms active in this run 
+                            # mean position of the atoms active in this run
 
                             mol_direction = pivots[i].meanpoint-atomic_pivot_mean
                             if np.all(mol_direction == 0.):
@@ -592,13 +587,13 @@ def cyclical_embed(embedder, max_norm_delta=5):
                             # "antrafacial" vectors), we fallback to the vector starting from the molecule
                             # center (mean of atomic positions) and ending in pivot_means[i], so to avoid
                             # numeric errors in the next function.
-                                
+
                             alignment_rotation = align_vec_pair(np.array([end-start, directions[i]]),
                                                                 np.array([pivots[i].pivot, mol_direction]))
                             # this rotation superimposes the molecular orbitals active in this run (pivots[i].pivot
                             # goes to end-start) and also aligns the molecules so that they face each other
                             # (mol_direction goes to directions[i])
-                            
+
                             if len(reactive_coords) == 2:
                                 axis_of_step_rotation = alignment_rotation @ (reactive_coords[0]-reactive_coords[1])
                             else:
@@ -643,11 +638,9 @@ def cyclical_embed(embedder, max_norm_delta=5):
     return np.array(poses)
 
 def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
-    '''
-    return threads: return embedded structures, with position and rotation attributes set, ready to be pumped
-                    into embedder.structures. Algorithm used is the "cyclical" algorithm (see docs).
-    '''
-    
+    """Return threads: return embedded structures, with position and rotation attributes set, ready to be pumped
+    into embedder.structures. Algorithm used is the "cyclical" algorithm (see docs).
+    """
     embedder.log(f'\n--> Performing {embedder.embed} embed ({embedder.candidates} candidates)')
 
     conf_number = [len(mol.coords) for mol in embedder.objects]
@@ -663,10 +656,10 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
         for p, pi in enumerate(pivots_indices):
 
             loadbar(p+ci*(len(pivots_indices)), len(pivots_indices)*len(conf_indices), prefix='Embedding structures ')
-            
+
             pivots = [embedder.objects[m].pivots[conf_ids[m]][pi[m]] for m, _ in enumerate(embedder.objects)]
             # getting the active pivot for each molecule for this run
-            
+
             norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
             # getting the pivots norms to feed into the polygonize function
 
@@ -677,7 +670,7 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
             polygon_vectors = polygonize(norms)
 
             directions = np.array([[0, 1,0], [0,-1,0]])
-            # directions to orient the molecules toward, orthogonal to each vec_pair          
+            # directions to orient the molecules toward, orthogonal to each vec_pair
 
             for v, vecs in enumerate(polygon_vectors):
             # getting vertices to embed molecules with and iterating over start/end points
@@ -687,7 +680,7 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
 
                 if not embedder.pairings_table or all((pair in ids) or (pair in embedder.internal_constraints) for pair in embedder.pairings_table.values()):
                 # ensure that the active arrangement has all the pairings that the user specified
-                        
+
                     angular_poses = []
                     # initialize a container for the poses generated for this combination of conformations,
                     # pairing and polygon_vectors orientation. These will be used not to generate poses
@@ -707,7 +700,7 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
                             # coordinates for the reactive atoms in this run
 
                             atomic_pivot_mean = np.mean(reactive_coords, axis=0)
-                            # mean position of the atoms active in this run 
+                            # mean position of the atoms active in this run
 
                             mol_direction = pivots[i].meanpoint-atomic_pivot_mean
                             if np.all(mol_direction == 0.):
@@ -720,13 +713,13 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
                             # "antrafacial" vectors), we fallback to the vector starting from the molecule
                             # center (mean of atomic positions) and ending in pivot_means[i], so to avoid
                             # numeric errors in the next function.
-                                
+
                             alignment_rotation = align_vec_pair(np.array([end-start, directions[i]]),
                                                                 np.array([pivots[i].pivot, mol_direction]))
                             # this rotation superimposes the molecular orbitals active in this run (pivots[i].pivot
                             # goes to end-start) and also aligns the molecules so that they face each other
                             # (mol_direction goes to directions[i])
-                            
+
                             if len(reactive_coords) == 2:
                                 axis_of_step_rotation = alignment_rotation @ (reactive_coords[0]-reactive_coords[1])
                             else:
@@ -771,11 +764,9 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
     return np.array(poses)
 
 def _get_cyclical_reactive_indices(embedder, pivots, n):
-    '''
-    :params n: index of the n-th disposition of vectors yielded by the polygonize function.
+    """:params n: index of the n-th disposition of vectors yielded by the polygonize function.
     :return: list of index couples, to be constrained during the partial optimization.
-    '''
-
+    """
     cumulative_pivots_ids = [[p.start_atom.cumnum, p.end_atom.cumnum] for p in pivots]
 
     def orient(i,ids,n):
@@ -809,17 +800,15 @@ def _get_cyclical_reactive_indices(embedder, pivots, n):
     return couples
 
 def monomolecular_embed(embedder):
-    '''
-    return threads: embeds structures by bending molecules, storing them
+    """Return threads: embeds structures by bending molecules, storing them
     in embedder.structures. Algorithm used is the "monomolecular" algorithm (see docs).
-    '''
-
+    """
     assert len(embedder.objects) == 1
 
     embedder.log(f'\n--> Performing monomolecular embed ({embedder.candidates} candidates)')
 
     mol = embedder.objects[0]
-    
+
     embedder.structures = []
 
     for c, _ in enumerate(mol.coords):
@@ -871,11 +860,10 @@ def _get_monomolecular_reactive_indices(embedder):
     return np.array([[] for _ in embedder.structures])
 
 def get_embed(mols, conf_ids):
-    '''
-    mols: iterable of Hypermolecule objects
+    """mols: iterable of Hypermolecule objects
     conf_ids: iterable of conformer indices for each mol
 
     Returns an np.array with the coordinates
     of every molecule as a concatenated array.
-    '''
+    """
     return np.concatenate([(mol.rotation @ mol.coords[c].T).T + mol.position for mol, c in zip(mols, conf_ids)])

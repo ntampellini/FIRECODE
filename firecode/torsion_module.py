@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,19 +18,23 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 import os
 import time
 from copy import deepcopy
 
 import numpy as np
-from networkx import (connected_components, has_path, is_isomorphic,
-                      minimum_spanning_tree, shortest_path, subgraph)
+from networkx import (
+    connected_components,
+    has_path,
+    is_isomorphic,
+    minimum_spanning_tree,
+    shortest_path,
+    subgraph,
+)
 from prism_pruner.algebra import normalize, vec_angle
-from prism_pruner.graph_manipulations import (get_phenyl_ids, get_sp_n,
-                                              is_amide_n, is_ester_o)
-from prism_pruner.utils import (flatten, get_double_bonds_indices,
-                                rotate_dihedral, time_to_string)
+from prism_pruner.graph_manipulations import get_phenyl_ids, get_sp_n, is_amide_n, is_ester_o
+from prism_pruner.utils import flatten, get_double_bonds_indices, rotate_dihedral, time_to_string
 
 from firecode.algebra import norm_of
 from firecode.errors import SegmentedGraphError
@@ -56,19 +59,16 @@ class Torsion:
         self.torsion = (i1, i2, i3 ,i4)
 
     def in_cycle(self, graph):
-        '''
-        Returns True if the torsion is part of a cycle
-        '''
+        """Returns True if the torsion is part of a cycle
+        """
         graph.remove_edge(self.i2, self.i3)
         cyclical = has_path(graph, self.i1, self.i4)
         graph.add_edge(self.i2, self.i3)
         return cyclical
 
     def is_rotable(self, graph, hydrogen_bonds, keepdummy=False) -> bool:
-        '''
-        hydrogen bonds: iterable with pairs of sorted atomic indices
-        '''
-
+        """Hydrogen bonds: iterable with pairs of sorted atomic indices
+        """
         if sorted((self.i2, self.i3)) in hydrogen_bonds:
             # self.n_fold = 6
             # # This has to be an intermolecular HB: rotate it
@@ -94,7 +94,7 @@ class Torsion:
 
         if 'H' in symbols:
             return 6 # H-N, H-O hydrogen bonds
-        
+
         if is_amide_n(self.i2, graph, mode=2) or (
            is_amide_n(self.i3, graph, mode=2)):
            # tertiary amides rotations are 2-fold
@@ -112,10 +112,10 @@ class Torsion:
 
                 if self.mode == 'csearch':
                     return 3
-                
+
                 elif self.mode == 'symmetry':
                     return sp_n_i3 or 2
-            
+
             if 2 in (sp_n_i2, sp_n_i3):
                 return 2
 
@@ -130,13 +130,12 @@ class Torsion:
                 }.get(self.n_fold)
 
     def sort_torsion(self, graph, constrained_indices) -> None:
-        '''
-        Acts on the self.torsion tuple leaving it as it is or
+        """Acts on the self.torsion tuple leaving it as it is or
         reversing it, so that the first index of it (from which
         rotation will act) is external to the molecule constrained
         indices. That is we make sure to rotate external groups
         and not the whole structure.
-        '''
+        """
         graph.remove_edge(self.i2, self.i3)
         for d in constrained_indices.flatten():
             if has_path(graph, self.i2, d):
@@ -144,14 +143,13 @@ class Torsion:
         graph.add_edge(self.i2, self.i3)
 
 def _is_free(index, graph):
-    '''
-    Return True if the index specified
+    """Return True if the index specified
     satisfies all of the following:
     - Is not a sp2 carbonyl carbon atom
     - Is not the oxygen atom of an ester
     - Is not the nitrogen atom of a secondary amide (CONHR)
 
-    '''
+    """
     if all((
             graph.nodes[index]['atoms'] == 'C',
             is_sp_n(index, graph, 2),
@@ -168,14 +166,12 @@ def _is_free(index, graph):
     return True
 
 def _is_nondummy(i, root, graph) -> bool:
-    '''
-    Checks that a molecular rotation along the dihedral
+    """Checks that a molecular rotation along the dihedral
     angle (*, root, i, *) is non-dummy, that is the atom
     at index i, in the direction opposite to the one leading
     to root, has different substituents. i.e. methyl, CF3 and tBu
     rotations should return False.
-    '''
-
+    """
     if graph.nodes[i]['atoms'] not in ('C', 'N'):
         return True
     # for now, we only discard rotations around carbon
@@ -214,7 +210,7 @@ def _is_nondummy(i, root, graph) -> bool:
             if len(subgraphs) == 2:
                 return not is_isomorphic(subgraphs[0], subgraphs[1],
                                             node_match=lambda n1, n2: n1['atoms'] == n2['atoms'])
-            
+
             # We should not end up here, but if we do, rotation should not be dummy
             return True
 
@@ -240,17 +236,16 @@ def _is_nondummy(i, root, graph) -> bool:
         if not is_isomorphic(subgraphs[0], sub,
                                 node_match=lambda n1, n2: n1['atoms'] == n2['atoms']):
             return True
-    # Care should be taken because chiral centers are not taken into account: a rotation 
-    # involving an index where substituents only differ by stereochemistry, and where a 
+    # Care should be taken because chiral centers are not taken into account: a rotation
+    # involving an index where substituents only differ by stereochemistry, and where a
     # rotation is not an element of symmetry of the subsystem, the rotation is considered
-    # dummy even if it would be more correct not to. For rotaionally corrected RMSD this 
+    # dummy even if it would be more correct not to. For rotaionally corrected RMSD this
     # should only cause small inefficiencies and not lead to discarding any good conformer.
 
     return False
 
 def _get_hydrogen_bonds(atoms, coords, graph, d_min=2.5, d_max=3.3, max_angle=45, elements=None, fragments=None):
-    '''
-    Returns a list of tuples with the indices
+    """Returns a list of tuples with the indices
     of hydrogen bonding partners.
 
     An HB is a pair of atoms:
@@ -262,8 +257,7 @@ def _get_hydrogen_bonds(atoms, coords, graph, d_min=2.5, d_max=3.3, max_angle=45
 
     If fragments is specified (iterable of iterable of indices for each fragment)
     the function only returns inter-fragment hydrogen bonds.
-    '''
-
+    """
     hbs = []
     # initializing output list
 
@@ -322,13 +316,12 @@ def _get_hydrogen_bonds(atoms, coords, graph, d_min=2.5, d_max=3.3, max_angle=45
     return hbs
 
 def _get_rotation_mask(graph, torsion):
-    '''
-    Get mask for the atoms that will rotate in a torsion:
+    """Get mask for the atoms that will rotate in a torsion:
     all the ones in the graph reachable from the last index
     of the torsion but not going through the central two
     atoms in the torsion quadruplet.
     
-    '''
+    """
     _, i2, i3, i4 = torsion
 
     graph.remove_edge(i2, i3)
@@ -349,43 +342,39 @@ def _get_rotation_mask(graph, torsion):
     mask[i3] = False
     # do not rotate i3: it would not move,
     # since it lies on the rotation axis
-    
+
     return mask
 
 def get_quadruplets(graph):
-    '''
-    Returns list of quadruplets that indicate potential torsions
-    '''
-
+    """Returns list of quadruplets that indicate potential torsions
+    """
     # Step 1: Find spanning tree
     spanning_tree = minimum_spanning_tree(graph)
-        
+
     # Step 2: Add dihedrals for spanning tree
     dihedrals = []
-    
+
     # For each edge in the spanning tree, we can potentially define a dihedral
     # We need edges that have at least 2 neighbors each to form a 4-point dihedral
     for edge in spanning_tree.edges():
         i, j = edge
-        
+
         # Find neighbors of i and j in the original graph
         i_neighbors = [n for n in graph.neighbors(i) if n not in (i, j)]
         j_neighbors = [n for n in graph.neighbors(j) if n not in (i, j)]
-        
+
         if len(i_neighbors) > 0 and len(j_neighbors) > 0:
             # Form dihedral: neighbor_of_i - i - j - neighbor_of_j
             k = i_neighbors[0]  # Choose first available neighbor
             _l = j_neighbors[0]  # Choose first available neighbor
             dihedrals.append((k, i, j, _l))
-    
+
     return np.array(dihedrals)
 
 
 def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="csearch"):
-    '''
-    Returns list of Torsion objects
-    '''
-
+    """Returns list of Torsion objects
+    """
     torsions = []
     for path in get_quadruplets(graph):
         _, i2, i3, _ = path
@@ -426,7 +415,7 @@ def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="cs
 
 #     output = sorted(output, key=len)
 #     # largest groups last
-    
+
 #     return output
 
 def random_csearch(
@@ -443,14 +432,12 @@ def random_csearch(
                     interactive_print=True,
                     write_torsions=False
                 ):
-    '''
-    Random dihedral rotations - quickly generate n_out conformers
+    """Random dihedral rotations - quickly generate n_out conformers
 
     n_out: number of output structures
     max_tries: if n_out conformers are not generated after these number of tries, stop trying
     rotations: number of dihedrals to rotate per conformer. If none, all will be rotated
-    '''
-
+    """
     t_start_run = time.perf_counter()
 
     ############################################## LOG TORSIONS
@@ -482,7 +469,7 @@ def random_csearch(
     ############################################## END LOG TORSIONS
 
     logfunction(f'\n--> Random dihedral CSearch on {title}\n    mode 2 (random) - {len(torsions)} torsions')
-    
+
     angles = cartesian_product(*[t.get_angles() for t in torsions])
     # calculating the angles for rotation based on step values
 
@@ -513,19 +500,19 @@ def random_csearch(
             if angle != 0:
                 mask = _get_rotation_mask(graph, torsion.torsion)
                 temp_coords = rotate_dihedral(new_coords, torsion.torsion, angle, mask=mask)
-                
+
                 # if these coordinates are bad and compenetration is present
                 if not torsion_comp_check(temp_coords, torsion=torsion.torsion, mask=mask, thresh=1.5):
 
                     # back off five degrees
                     for _ in range(angle//5):
                         temp_coords = rotate_dihedral(temp_coords, torsion.torsion, -5, mask=mask)
-                        
+
                         # and reiterate until we have no more compenetrations,
                         # or until we have undone the previous rotation
                         if torsion_comp_check(temp_coords, torsion=torsion.torsion, mask=mask, thresh=1.5):
                             # print(f'------> DEBUG - backed off {_*5}/{angle} degrees')
-                            rotated_bonds += 1                  
+                            rotated_bonds += 1
                             break
 
                 else:
@@ -533,7 +520,7 @@ def random_csearch(
 
                 # update the active coordinates with the temp ones
                 new_coords = temp_coords
-        
+
         # add the rotated molecule to the output list
         if rotated_bonds != 0:
             new_structures.append(new_coords)
@@ -572,8 +559,7 @@ def csearch(
             debug=False,
             interactive_print=True,
             write_torsions=False):
-    '''
-    n: number of structures to keep from each torsion cluster
+    """n: number of structures to keep from each torsion cluster
     mode: 0 - torsion clustered - keep the n lowest energy conformers
     1 - torsion clustered - keep the n most diverse conformers
     2 - random dihedral rotations - quickly generate n_out conformers
@@ -581,8 +567,7 @@ def csearch(
     n_out: maximum number of output structures
 
     keep_hb: whether to preserve the presence of current hydrogen bonds or not
-    '''
-
+    """
     calc = FF_CALC if calc is None else calc
     method = DEFAULT_FF_LEVELS[calc] if method is None else method
     # Set default calculator attributes if user did not specify them
@@ -598,7 +583,7 @@ def csearch(
         graph.add_edge(i1, i2)
     # build a molecular graph of the TS
     # that includes constrained indices pairs
-    
+
     # ... and hydrogen bonding, if requested
     if keep_hb:
         hydrogen_bonds = _get_hydrogen_bonds(atoms, coords, graph)
@@ -620,7 +605,7 @@ def csearch(
 
         s = (f'{title} has a segmented connectivity graph: double check the input geometry.\n' +
               'if this is supposed to be a complex, FIRECODE was not able to find hydrogen bonds\n' +
-              'connecting the molecules, and the algorithm is not designed to reliably perform\n'+ 
+              'connecting the molecules, and the algorithm is not designed to reliably perform\n'+
               'conformational searches on loosely bound multimolecular arrangements.')
 
         if keep_hb:
@@ -644,7 +629,7 @@ def csearch(
 
     double_bonds = get_double_bonds_indices(atoms, coords)
     # get all double bonds - do not rotate these
-    
+
     torsions = _get_torsions(graph, hydrogen_bonds, double_bonds)
     # get all torsions that we should explore
 
@@ -713,16 +698,14 @@ def clustered_csearch(
                         interactive_print=True,
                         write_torsions=False,
                         debug=False):
-    '''
-    n: number of structures to keep from each torsion cluster
+    """n: number of structures to keep from each torsion cluster
     mode: 0 - torsion clustered - keep the n lowest energy conformers
     1 - torsion clustered - keep the n most diverse conformers
 
     n_out: maximum number of output structures
 
     keep_hb: whether to preserve the presence of current hydrogen bonds or not
-    '''
-
+    """
     assert mode != 0 or ff_opt, 'Either leave mode=1 or turn on force field optimization'
     assert mode in (0,1), 'The mode keyword can only be 0 or 1'
 
@@ -763,7 +746,7 @@ def clustered_csearch(
     logfunction(f'\n--> Clustered CSearch on {title}\n    mode {mode} ({"stability" if mode == 0 else "diversity"}) - ' +
                 f'{len(torsions)} torsions in {len(grouped_torsions)} group{"s" if len(grouped_torsions) != 1 else ""} - ' +
                 f'{[len(t) for t in grouped_torsions]}')
-    
+
     output_structures = []
     starting_points = [coords]
     for tg, torsions_group in enumerate(grouped_torsions):
@@ -773,7 +756,7 @@ def clustered_csearch(
         # calculating the angles for rotation based on step values
 
         logfunction(f'\n> Group {tg+1}/{len(grouped_torsions)} - {len(torsions_group)} bonds, ' +
-                      f'{[t.n_fold for t in torsions_group]} n-folds, {len(starting_points)} ' + 
+                      f'{[t.n_fold for t in torsions_group]} n-folds, {len(starting_points)} ' +
                       f'starting point{"s" if len(starting_points) > 1 else ""} = {candidates} conformers')
 
         new_structures = []
@@ -800,17 +783,17 @@ def clustered_csearch(
                         mask = _get_rotation_mask(graph, torsion.torsion)
                         temp_coords = rotate_dihedral(new_coords, torsion.torsion, angle, mask=mask)
                         # for every angle we have to rotate, calculate the new coordinates
-                       
+
                         if not torsion_comp_check(temp_coords, torsion=torsion.torsion, mask=mask, thresh=1.5):
                         # if these coordinates are bad and compenetration is present
 
                             for _ in range(angle//5):
                                 temp_coords = rotate_dihedral(temp_coords, torsion.torsion, -5, mask=mask)
                                 # back off five degrees
-                                
+
                                 if torsion_comp_check(temp_coords, torsion=torsion.torsion, mask=mask, thresh=1.5):
                                     # print(f'------> DEBUG - backed off {_*5}/{angle} degrees')
-                                    rotated_bonds += 1                  
+                                    rotated_bonds += 1
                                     break
                                 # and reiterate until we have no more compenetrations,
                                 # or until we have undone the previous rotation
@@ -820,7 +803,7 @@ def clustered_csearch(
 
                         new_coords = temp_coords
                         # update the active coordinates with the temp ones
-                
+
                 if rotated_bonds != 0:
                     new_structures.append(new_coords)
                     # add the rotated molecule to the output list
@@ -899,15 +882,13 @@ def clustered_csearch(
     return output_structures
 
 def most_diverse_conformers(n, structures, torsion_array, energies=None, interactive_print=False):
-    '''
-    Return the n most diverse structures from the set.
+    """Return the n most diverse structures from the set.
     First removes similar structures based on torsional fingerprints, then divides them in n subsets and:
     - If the enrgy list is given, chooses the
     one with the lowest energy from each.
     - If it is not, picks the most diverse structures.
     
-    '''
-        
+    """
     if len(structures) <= n:
         return structures
     # if we already pruned enough structures to meet the requirement, return them

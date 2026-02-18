@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,23 +18,25 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 from copy import deepcopy
 
 import numpy as np
-from networkx import (all_simple_paths, connected_components,
-                      get_node_attributes, set_node_attributes)
-from prism_pruner.graph_manipulations import (find_paths, get_sp_n)
+from networkx import (
+    all_simple_paths,
+    connected_components,
+    get_node_attributes,
+    set_node_attributes,
+)
+from prism_pruner.graph_manipulations import find_paths, get_sp_n
 
 from firecode.algebra import norm_of
 
 
 def _get_planar_angles(graph):
-    '''
-    Returns list of triplets that indicate angles.
+    """Returns list of triplets that indicate angles.
 
-    '''
-
+    """
     allpaths = []
     for node in graph:
         allpaths.extend(find_paths(graph, node, 2))
@@ -57,8 +58,7 @@ def _get_planar_angles(graph):
     return np.array(triplets)
 
 def is_sigmatropic(mol, conf):
-    '''
-    mol: Hypermolecule object
+    """mol: Hypermolecule object
     conf: conformer index
 
     A hypermolecule is considered sigmatropic when:
@@ -70,7 +70,7 @@ def is_sigmatropic(mol, conf):
 
     Used to set the mol.sigmatropic attribute, that affects orbital
     building (p or n lobes) for Ketone and Imine reactive atoms classes.
-    '''
+    """
     sp2_types = (
                 'Ketone',
                 'Imine',
@@ -101,15 +101,14 @@ def is_sigmatropic(mol, conf):
     return False
 
 def is_vicinal(mol):
-    '''
-    A hypermolecule is considered vicinal when:
+    """A hypermolecule is considered vicinal when:
     - has 2 reactive atoms
     - they are of sp3 or Single Bond type
     - they are bonded
 
     Used to set the mol.sp3_sigmastar attribute, that affects orbital
     building (BH4 or agostic-like behavior) for Sp3 and Single Bond reactive atoms classes.
-    '''
+    """
     vicinal_types = (
                 'sp3',
                 'Single Bond',
@@ -126,21 +125,18 @@ def is_vicinal(mol):
     return False
 
 def is_sp_n(index, graph, n):
-    '''
-    Returns True if the sp_n value matches the input
-    '''
+    """Returns True if the sp_n value matches the input
+    """
     sp_n = get_sp_n(index, graph)
     if sp_n == n:
         return True
     return False
 
 def get_sum_graph(graphs, extra_edges=None):
-    '''
-    Creates a graph containing all graphs, added in 
+    """Creates a graph containing all graphs, added in
     sequence, and then adds the specified extra edges
     (with cumulative numbering).
-    '''
-
+    """
     graph, *extra = graphs
     out = deepcopy(graph)
     cum_atoms = list(get_node_attributes(graphs[0], "atoms").values())

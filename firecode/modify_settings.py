@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,22 +18,23 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
+
+import os
 
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
-import os
-from firecode.settings import DEFAULT_LEVELS, DEFAULT_FF_LEVELS
+
+from firecode.settings import DEFAULT_FF_LEVELS, DEFAULT_LEVELS
+
 
 def run_setup():
-    '''
-    Invoked by the command
+    """Invoked by the command
     > python -m firecode -s (--setup)
 
     Guides the user in setting up the calculation options
     contained in the settings.py file.
-    '''
-
+    """
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
     properties = {
@@ -84,7 +84,7 @@ def run_setup():
     ).execute()
 
     #########################################################################################
-    
+
     properties['PROCS'] = inquirer.text(
         message=f'How many cores should {properties["CALCULATOR"]} jobs run on?:',
         default=str(properties['PROCS']),
@@ -155,7 +155,7 @@ def run_setup():
     with open('settings.py', 'w') as f:
         f.write(''.join(lines))
 
-    print('\FIRECODE setup performed correctly.')
+    print(r'\FIRECODE setup performed correctly.')
 
     ff = f'{FF_CALC}/{DEFAULT_FF_LEVELS[FF_CALC]}' if FF_OPT_BOOL else 'Turned off'
     opt = f'{CALCULATOR}/{DEFAULT_LEVELS[CALCULATOR]}'

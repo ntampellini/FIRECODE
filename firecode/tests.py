@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,21 +18,28 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import sys
 
 
 def run_tests():
-    
+
     import os
     import time
     from subprocess import CalledProcessError
 
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-    from firecode.settings import (CALCULATOR, COMMANDS, DEFAULT_FF_LEVELS,
-                                   DEFAULT_LEVELS, FF_CALC, FF_OPT_BOOL, PROCS)
+    from firecode.settings import (
+        CALCULATOR,
+        COMMANDS,
+        DEFAULT_FF_LEVELS,
+        DEFAULT_LEVELS,
+        FF_CALC,
+        FF_OPT_BOOL,
+        PROCS,
+    )
 
     if CALCULATOR not in ('AIMNET2', 'TBLITE', 'ORCA', 'XTB'):
         raise Exception(f'{CALCULATOR} is not a valid calculator. Use AIMNET, TBLITE, ORCA or XTB.')
@@ -44,8 +50,14 @@ def run_tests():
     from prism_pruner.utils import time_to_string
 
     from firecode.optimization_methods import Opt_func_dispatcher
-    from firecode.utils import (HiddenPrints, clean_directory, loadbar,
-                                read_xyz, run_command, suppress_stdout_stderr)
+    from firecode.utils import (
+        HiddenPrints,
+        clean_directory,
+        loadbar,
+        read_xyz,
+        run_command,
+        suppress_stdout_stderr,
+    )
 
     os.chdir('tests')
 
@@ -78,13 +90,13 @@ def run_tests():
     else:
         atoms = Atoms('HH', positions=np.array([[0, 0, 0], [0, 0, 1]]))
         atoms.calc = ase_calc
-        
+
         with suppress_stdout_stderr():
             LBFGS(atoms, logfile=None).run()
 
         clean_directory()
         print(f'{CALCULATOR} ASE calculator works.')
-    
+
     ##########################################################################
 
     print(f'\n{FF_OPT_BOOL=}')
@@ -103,7 +115,7 @@ def run_tests():
             print('XTB FF non-ASE calculator works.')
 
             ##########################################################################
-        
+
             atoms = Atoms('HH', positions=np.array([[0, 0, 0], [0, 0, 1]]))
             atoms.calc = ase_calc
             LBFGS(atoms, logfile=None).run()
@@ -136,7 +148,7 @@ def run_tests():
 
         name = filename.split('\\')[-1].split('/')[-1][:-4] # trying to make it work for either Win, Linux (and Mac?)
         loadbar(i, len(tests), f'Running FIRECODE tests ({name}): ')
-        
+
         t_start = time.perf_counter()
         try:
             # print(f'python -m firecode {filename} -n {name} [in {os.getcwd()}]')
@@ -146,12 +158,12 @@ def run_tests():
         except CalledProcessError as error:
             print('\n\n--> An error occurred:\n')
             print(error.stderr.decode("utf-8"))
-            sys.exit()
-                    
+            sys.exit(1)
+
         t_end = time.perf_counter()
         times.append(t_end-t_start)
 
-    loadbar(len(tests), len(tests), f'Running FIRECODE tests ({name}): ')  
+    loadbar(len(tests), len(tests), f'Running FIRECODE tests ({name}): ')
 
     print()
     for i, f in enumerate(tests):

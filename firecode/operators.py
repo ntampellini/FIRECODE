@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 # import pickle
 import time
@@ -39,26 +38,29 @@ from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
 from firecode.mep_relaxer import ase_mep_relax
 from firecode.numba_functions import prune_conformers_tfd
-from firecode.optimization_methods import refine_structures, optimize
+from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.settings import (CALCULATOR, DEFAULT_FF_LEVELS, DEFAULT_LEVELS,
-                               FF_CALC, FF_OPT_BOOL, PROCS)
+from firecode.settings import (
+    CALCULATOR,
+    DEFAULT_FF_LEVELS,
+    DEFAULT_LEVELS,
+    FF_CALC,
+    FF_OPT_BOOL,
+    PROCS,
+)
 from firecode.torsion_module import csearch, get_quadruplets
-from firecode.utils import (get_scan_peak_index, molecule_check, read_xyz,
-                            write_xyz)
+from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
 
 def operate(input_string, embedder):
-    '''
-    Perform the operations according to the chosen
+    """Perform the operations according to the chosen
     operator and return the outname of the (new) .xyz
     file to read instead of the input one.
-    '''
-
+    """
     filename = embedder._extract_filename(input_string)
-   
+
     if not hasattr(embedder, "t_start_run"):
         embedder.t_start_run = time.perf_counter()
 
@@ -76,7 +78,7 @@ def operate(input_string, embedder):
 
     elif 'csearch_hb>' in input_string:
         outname = csearch_operator(filename, embedder, keep_hb=True)
-        
+
     elif 'rsearch>' in input_string:
         outname = csearch_operator(filename, embedder, mode=2)
 
@@ -88,7 +90,7 @@ def operate(input_string, embedder):
 
     elif 'scan>' in input_string:
         outname = scan_operator(filename, embedder)
-      
+
     elif 'neb>' in input_string:
         neb_operator(filename, embedder)
         embedder.normal_termination()
@@ -126,11 +128,11 @@ def operate(input_string, embedder):
                                                 verbose_print=True,
                                                 safe=True
                                                 )
-            
+
         else:
             mep = data.coords
             exit_status = True
-        
+
         if exit_status:
 
             if no_bonds_breaking:
@@ -147,7 +149,7 @@ def operate(input_string, embedder):
                 verbose_print=True,
                 safe=True
                 )
-        
+
         embedder.normal_termination()
 
     else:
@@ -172,7 +174,7 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
     if len(data.coords) > 1:
         embedder.log('Requested conformational search on multimolecular file - will do\n' +
                       'an individual search from each conformer (might be time-consuming).')
-                                
+
     # calc, method, procs = _get_lowest_calc(embedder)
     conformers = []
 
@@ -321,7 +323,7 @@ def neb_operator(filename, embedder, attempts=3):
         mep_override = data.coords
         embedder.log(f'--> {n_str} structures as input: casting {n_images} images from these as the NEB MEP guess.')
 
-    from firecode.ase_manipulations import ase_neb 
+    from firecode.ase_manipulations import ase_neb
 
     title = filename[:-4] + '_NEB'
 
@@ -360,7 +362,7 @@ def neb_operator(filename, embedder, attempts=3):
                                             dispatcher=embedder.dispatcher,
                                             debug=embedder.options.debug,
                                             )
-        
+
         if mep_override is not None:
             mep_override[0] = reagents
             mep_override[-1] = products
@@ -383,7 +385,7 @@ def neb_operator(filename, embedder, attempts=3):
                                                                 reagents,
                                                                 products,
                                                                 n_images=n_images,
-                                                                
+
                                                                 charge=embedder.options.charge,
                                                                 mult=embedder.options.mult,
                                                                 ts_guess= ts_guess,
@@ -411,7 +413,7 @@ def neb_operator(filename, embedder, attempts=3):
     embedder.log(f'NEB completed, relative energy from start/end points (not barrier heights):\n'
                f'  > E(TS)-E(start): {"+" if e1>=0 else "-"}{e1:.3f} kcal/mol\n'
                f'  > E(TS)-E(end)  : {"+" if e2>=0 else "-"}{e2:.3f} kcal/mol\n')
-    
+
     embedder.log(f'Barrier heights (based on lowest energy point on each side):\n'
                f'  > E(TS)-E(left) : {"+" if dg1>=0 else "-"}{dg1:.3f} kcal/mol\n'
                f'  > E(TS)-E(right): {"+" if dg2>=0 else "-"}{dg2:.3f} kcal/mol')
@@ -424,10 +426,8 @@ def neb_operator(filename, embedder, attempts=3):
 
 
 def mtd_search_operator(filename, embedder):
-    '''
-    Run a CREST metadynamic conformational search and return the output filename.
-    '''
-
+    """Run a CREST metadynamic conformational search and return the output filename.
+    """
     assert crest_is_installed(), 'CREST 2 does not seem to be installed. Install it with: conda install -c conda-forge crest==2.*'
 
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
@@ -446,7 +446,7 @@ def mtd_search_operator(filename, embedder):
     constrained_indices = _get_internal_constraints(filename, embedder)
     constrained_distances = [embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices]
 
-    (  
+    (
         constrained_angles_indices,
         constrained_angles_values,
         constrained_dihedrals_indices,
@@ -456,7 +456,7 @@ def mtd_search_operator(filename, embedder):
     logfunction(f'--> {filename}: Geometry optimization pre-mtd_search ({embedder.options.theory_level} via {embedder.options.calculator})')
     return_char = "\n"
     logfunction(f'    {len(constrained_indices)} constraints applied{": "+str(constrained_indices).replace(return_char, " ") if len(constrained_indices) > 0 else ""}')
-    
+
     for c, coords in enumerate(mol.coords.copy()):
         logfunction(f"    Optimizing conformer {c+1}/{len(mol.coords)}")
 
@@ -484,9 +484,9 @@ def mtd_search_operator(filename, embedder):
                                     debug=embedder.options.debug,
 
                                 ) if embedder.options.optimization else (coords, None, True)
-        
+
         exit_status = "" if success else "CRASHED"
-        
+
         if success:
             success = molecule_check(mol.atoms, coords, opt_coords)
             exit_status = "" if success else "SCRAMBLED"
@@ -499,13 +499,13 @@ def mtd_search_operator(filename, embedder):
             logfunction(f"{filename}, conformer {c+1}/{len(mol.coords)} optimization {exit_status}. Inspect geometry at {dumpname}. Aborting run.")
 
             raise FatalError(filename)
-        
+
         # update embedder structures after optimization
         mol.coords[c] = opt_coords
 
     logfunction()
 
-    # update mol and embedder graph after optimization 
+    # update mol and embedder graph after optimization
     mol.graph = graphize(mol.atoms, mol.coords[0])
     embedder.graphs = [m.graph for m in embedder.objects]
     crest_method = getattr(embedder.options, "crestlevel", 'GFN2-XTB//GFN-FF')
@@ -518,7 +518,7 @@ def mtd_search_operator(filename, embedder):
 
     if embedder.options.crestnci:
         logfunction('--> CRESTNCI: Running crest in NCI mode (wall potential applied)')
-    
+
     if len(mol.coords) > 1:
         embedder.log('--> Requested conformational search on multimolecular file - will do\n' +
                       'an individual search from each conformer (might be time-consuming).')
@@ -551,7 +551,7 @@ def mtd_search_operator(filename, embedder):
                                             procs=2,
                                             threads=max_workers,
                                         )
-            
+
         # if the run errors out, we retry with XTB2
         except CalledProcessError:
             logfunction('--> Metadynamics run failed with GFN2-XTB//GFN-FF, retrying with just GFN2-XTB (slower but more stable)')
@@ -567,7 +567,7 @@ def mtd_search_operator(filename, embedder):
 
                                             constrained_dihedrals_indices=constrained_dihedrals_indices,
                                             constrained_dihedrals_values=constrained_dihedrals_values,
-                                            
+
                                             solvent=embedder.options.solvent,
                                             charge=mol.charge,
                                             method='GFN2-XTB', # try with XTB2
@@ -610,19 +610,18 @@ def mtd_search_operator(filename, embedder):
         for i, new_s in enumerate(conformers):
             write_xyz(mol.atoms, new_s, f, title=f'Conformer {i}/{len(conformers)} from CREST MTD')
 
-    
+
     # check the structures again and warn if some look compenetrated
     embedder.check_objects_compenetration()
 
     return f'{mol.rootname}_mtd_confs.xyz'
 
 def scan_operator(filename, embedder):
-    '''
-    Scan operator dispatcher:
+    """Scan operator dispatcher:
     2 indices: distance_scan
     4 indices: dihedral_scan
 
-    '''
+    """
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
 
     assert len(mol.coords) == 1, 'The scan> operator works on a single .xyz geometry.'
@@ -631,16 +630,14 @@ def scan_operator(filename, embedder):
 
     if len(mol.reactive_indices) == 2:
         return distance_scan(embedder)
-    
+
     elif len(mol.reactive_indices) == 4:
         return dihedral_scan(embedder)
 
 def distance_scan(embedder):
-    '''
-    Thought to approach or separate two reactive atoms, looking for the energy maximum.
+    """Thought to approach or separate two reactive atoms, looking for the energy maximum.
     Scan direction is inferred by the reactive index distance.
-    '''
-
+    """
     embedder.t_start_run = time.perf_counter()
     mol = embedder.objects[0]
     t_start = time.perf_counter()
@@ -669,7 +666,7 @@ def distance_scan(embedder):
 
         # making sure step has the right sign
         step = 0.05 if target > d else -0.05
-        
+
         max_iterations = round(abs(d-target) / abs(step))
         embedder.log(f'--> {mol.rootname}: ({i1}-{i2}) final scan distance set to {target:.2f} A ({max_iterations} iterations)')
 
@@ -695,17 +692,17 @@ def distance_scan(embedder):
     for i in range(max_iterations):
 
         t_start = time.perf_counter()
-           
+
         coords, energy, _ = optimize(
                                     mol.atoms,
                                     coords,
-                                    
+
                                     calculator=embedder.options.calculator,
                                     ase_calc=embedder.dispatcher.ase_calc,
-                                    
+
                                     constrained_indices=np.array([mol.reactive_indices]),
                                     constrained_distances=(d,),
-                                    
+
                                     solvent=embedder.options.solvent,
                                     charge=embedder.options.charge,
                                     mult=embedder.options.mult,
@@ -768,13 +765,13 @@ def distance_scan(embedder):
 
     if step < 0:
         plt.gca().invert_xaxis()
-        
+
     plt.ylabel(f'Rel. E. (kcal/mol) - {embedder.options.theory_level}/{embedder.options.calculator}/{embedder.options.solvent}')
     plt.savefig(f'{title.replace(" ", "_")}_plt.svg')
     # with open(f'{title.replace(" ", "_")}_plt.pickle', 'wb') as _f:
     #     pickle.dump(fig, _f)
 
-    ### Start structure writing 
+    ### Start structure writing
 
     # print all scan structures
     with open(f'{mol.filename[:-4]}_scan.xyz', 'w') as f:
@@ -798,19 +795,17 @@ def distance_scan(embedder):
     return f'{mol.filename[:-4]}_scan.xyz'
 
 def crest_is_installed() -> bool:
-    '''
-    Returns True if a CREST installation is found.
+    """Returns True if a CREST installation is found.
     For now, only CREST 2 is supported.
 
-    '''
+    """
     return (which('crest') is not None)
 
 def _get_lowest_calc(embedder=None):
-    '''
-    Returns the values for calculator,
+    """Returns the values for calculator,
     method and processors for the lowest
     theory level available from embedder or settings.
-    '''
+    """
     if embedder is None:
         if FF_OPT_BOOL:
             return (FF_CALC, DEFAULT_FF_LEVELS[FF_CALC], PROCS)

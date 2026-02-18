@@ -4,7 +4,7 @@
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
 <!-- FINALSPLEVEL keyword? -->
- <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>-->
+ <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer-->
 
 ## FIRECODE 1.5.1 🔥 (February 17 2026)
 - Imports bugfixes.
@@ -26,7 +26,7 @@
 ## FIRECODE 1.3.0 🔥 (December 15 2025)
 - Added [UMA](https://fair-chem.github.io/core/uma.html) as a calculator with Meta MLIPs, via ASE and the fairchem-core library. The model path needs to be specified in the settings.py file.
 - Polished the neb> and scan> operators to work in sequence (neb> scan> start.xyz i1 i2).
-- Added standalone structure optimizer, called with "python -m firecode -o mol.xyz".
+- Added standalone structure optimizer, called with "firecode -o mol.xyz".
 - Corrected behavior of fixed constraints with no specified distance, which before would relax. Now they are kept fixed at the initial distance.
 - Moved tests to their own folders.
 <!-- - Added free energy calculation via ASE vibrational analysis. -->

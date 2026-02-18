@@ -8,12 +8,11 @@ from prism_pruner.algebra import dihedral
 from prism_pruner.utils import time_to_string
 
 from firecode.algebra import norm_of, point_angle
-from firecode.ase_manipulations import (DihedralSpring, PlanarAngleSpring,
-                                        Spring)
-from firecode.calculators.__init__ import NewFolderContext
+from firecode.ase_manipulations import DihedralSpring, PlanarAngleSpring, Spring
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import UMA_MODEL_PATH
 from firecode.units import EV_TO_KCAL
+from firecode.utils import NewFolderContext
 
 
 def uma_opt(
@@ -44,16 +43,14 @@ def uma_opt(
                 debug=False,
                 **kwargs,
             ):
-    '''
-    coords: 
+    """coords:
     atoms: 
     constrained_indices:
     safe: if True, adds a potential that prevents atoms from scrambling
     safe_mask: bool array, with False for atoms to be excluded when calculating bonds to preserve
     traj: if set to a string, traj is used as a filename for the bending trajectory.
     not only the atoms will be printed, but also all the orbitals and the active pivot.
-    '''
-
+    """
     maxiter = maxiter or 500
 
     # create working folder and cd into it
@@ -106,13 +103,13 @@ def uma_opt(
 
         except KeyboardInterrupt:
             print('KeyboardInterrupt requested by user. Quitting.')
-            sys.exit()
+            sys.exit(1)
 
         except TypeError as e:
             if logfunction is not None:
                 logfunction(f'{title} in uma_opt CRASHED')
                 logfunction(e)
-            return coords, None, False 
+            return coords, None, False
 
         new_structure = ase_atoms.get_positions()
         success = (iterations < 499)
@@ -128,7 +125,7 @@ def uma_opt(
 
         # try:
         #     os.remove('temp.traj')
-            
+
         # except FileNotFoundError:
         #     pass
 
@@ -148,10 +145,8 @@ def uma_opt(
     return new_structure, energy, success
 
 def get_uma_calc(method="omol", logfunction=None):
-    '''
-    Load UMA model from disk and return the ASE calculator object
-    '''
-
+    """Load UMA model from disk and return the ASE calculator object
+    """
     try:
         from fairchem.core import FAIRChemCalculator
         from fairchem.core.units.mlip_unit import load_predict_unit
@@ -170,18 +165,17 @@ def get_uma_calc(method="omol", logfunction=None):
         if logfunction is not None:
             logfunction(f'--> {cuda.device_count()} CUDA devices detected: loading model on GPU')
 
-    else:
-        if logfunction is not None:
-            logfunction('--> No CUDA devices detected: loading model on CPU')
+    elif logfunction is not None:
+        logfunction('--> No CUDA devices detected: loading model on CPU')
 
     if logfunction is not None:
             logfunction(f'--> Loading UMA/{method.upper()} model from file')
-    
+
     if UMA_MODEL_PATH[0] == '.':
         path = os.path.join(os.path.dirname(os.path.realpath(__file__)), os.path.basename(UMA_MODEL_PATH))
     else:
         path = UMA_MODEL_PATH
-        
+
     try:
         predictor = load_predict_unit(path, device='cuda' if gpu_bool else 'cpu')
 

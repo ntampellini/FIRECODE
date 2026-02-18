@@ -1,9 +1,9 @@
 # coding=utf-8
 
-from firecode.__main__ import __version__
+from importlib.metadata import version
 
 references = {
-    'FIRECODE' : f'Tampellini, N. FIRECODE {__version__}, Github - https://github.com/ntampellini/firecode',
+    'FIRECODE' : f'Tampellini, N. FIRECODE {version('firecode')}, Github - https://github.com/ntampellini/firecode',
     'GFN-FF' : 'Spicher, S.; Grimme, S. Angew. Chem. Int. Ed. 2020, 59, 15665-15673 -  https://doi.org/10.1002/anie.202004239',
     'GFN2-XTB': 'Bannwarth, C.; Ehlert, S.; Grimme, S. J. Chem. Theory Comput. 2019, 15, 1652-1671 - https://doi.org/10.1021/acs.jctc.8b01176',
     'CREST' : 'Pracht, P.; Bohle, F.; Grimme, S. PCCP 2020, 22, 7169-7192 - https://doi.org/10.1039/C9CP06869D',

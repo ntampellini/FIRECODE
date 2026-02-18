@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 from time import time
 
@@ -51,17 +50,15 @@ def ase_torsion_TSs(embedder,
                     logfile=None,
                     bernytraj=None,
                     plot=False):
-    '''
-    Automated dihedral scan. Runs two preliminary scans
+    """Automated dihedral scan. Runs two preliminary scans
     (clockwise, anticlockwise) in 10 degrees increments,
     then peaks above 'kcal_thresh' are re-scanned accurately
     in 1 degree increments.
 
-    '''
-    
+    """
     assert len(indices) == 4
     # cyclical = False
-    
+
     ts_structures, energies = [], []
 
     graph = graphize(atoms, coords)
@@ -132,7 +129,7 @@ def ase_torsion_TSs(embedder,
         rel_energies = [e-min_e for e in energies]
 
         tag = '_relaxed' if optimization else '_rigid'
-        
+
         with open(title + tag + direction + '_scan.xyz', 'w') as outfile:
             for s, structure in enumerate(align_structures(np.array(structures), indices[:-1])):
                 write_xyz(atoms, structure, outfile, title=f'Scan point {s+1}/{len(structures)} - Rel. E = {round(rel_energies[s], 3)} kcal/mol')
@@ -190,7 +187,7 @@ def ase_torsion_TSs(embedder,
 
                     for i, (x_, y_) in enumerate(get_plot_segments(x2, y2, max_step=abs(degrees/10)+1)):
 
-                        plt.plot(x_, 
+                        plt.plot(x_,
                                 y_,
                                 '-o',
                                 color='tab:red',
@@ -205,7 +202,7 @@ def ase_torsion_TSs(embedder,
 
                     s = 's' if len(sub_peaks_indices) > 1 else ''
                     msg = f'Found {len(sub_peaks_indices)} sub-peak{s}.'
-                    
+
                     if embedder.options.neb:
                         tag = 'NEB TS'
                         msg += f'Performing {tag} optimization{s}.'
@@ -227,9 +224,9 @@ def ase_torsion_TSs(embedder,
 
                             loadbar_title = f'  > NEB TS opt on sub-peak {s+1}/{len(sub_peaks_indices)}, {direction[1:]}'
                             drctn = 'clkws' if direction == '_clockwise' else 'ccws'
-                            
+
                             print(loadbar_title)
-                        
+
                             optimized_geom, energy, success = ase_neb(embedder,
                                                                         atoms,
                                                                         sub_structures[sub_peak-2],
@@ -249,7 +246,7 @@ def ase_torsion_TSs(embedder,
                             energies.append(sub_energies[sub_peak])
 
                         print()
-            
+
                 else:
                     print('No suitable sub-peaks found.\n')
                     if logfile is not None:
@@ -274,12 +271,11 @@ def ase_torsion_TSs(embedder,
     return ts_structures, energies
 
 def atropisomer_peaks(data, min_thr, max_thr):
-    '''
-    data: iterable
+    """data: iterable
     min_thr: peaks must be values greater than min_thr
     max_thr: peaks must be values smaller than max_thr
     return: list of peak indices
-    '''
+    """
     _l = len(data)
     peaks = [i for i in range(_l-2) if (
 
@@ -295,7 +291,7 @@ def atropisomer_peaks(data, min_thr, max_thr):
     )]
 
     return peaks
-    
+
 def ase_dih_scan(embedder,
             atoms,
             coords,
@@ -307,10 +303,9 @@ def ase_dih_scan(embedder,
             indices_to_be_moved=None,
             title='temp scan',
             logfile=None):
-    '''
-    Performs a dihedral scan via the ASE library
+    """Performs a dihedral scan via the ASE library
     if ad libitum, steps is the minimum number of performed steps
-    '''
+    """
     assert len(indices) == 4
 
     if ad_libitum:
@@ -346,9 +341,9 @@ def ase_dih_scan(embedder,
 
         if relaxed:
             atoms.set_constraint(FixInternals(dihedrals_deg=[[atoms.get_dihedral(*indices), indices]]))
-            
+
             with LBFGS(atoms, maxstep=0.2, logfile=None, trajectory=None) as opt:
-                
+
                 try:
                     opt.run(fmax=0.05, steps=500)
                     exit_str = 'converged'
@@ -401,13 +396,12 @@ def ase_dih_scan(embedder,
     return align_structures(structures, indices), energies
 
 def get_plot_segments(x, y, max_step=2):
-    '''
-    Returns a zip object with x, y segments.
+    """Returns a zip object with x, y segments.
     A single segment has x values with separation
     smaller than max_step.
-    '''
+    """
     x, y = zip(*sorted(zip(x, y), key=lambda t: t[0]))
-    
+
     x_slices, y_slices = [], []
     for i, n in enumerate(x):
         if abs(x[i-1]-n) > max_step:
@@ -420,14 +414,12 @@ def get_plot_segments(x, y, max_step=2):
     return zip(x_slices, y_slices)
 
 def dihedral_scan(embedder):
-    '''
-    Automated dihedral scan. Runs two preliminary scans
+    """Automated dihedral scan. Runs two preliminary scans
     (clockwise, anticlockwise) in 10 degrees increments,
     then peaks above 'kcal_thresh' are re-scanned accurately
     in 1 degree increments.
 
-    '''
-
+    """
     if 'kcal' not in embedder.kw_line.lower():
     # set to 5 if user did not specify a value
         embedder.options.kcal_thresh = 5
@@ -492,7 +484,7 @@ def dihedral_scan(embedder):
     embedder.structures, mask = prune_by_rmsd(embedder.structures, mol.atoms, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
     embedder.energies = embedder.energies[mask]
     if 0 in mask:
-        embedder.log(f'Discarded {int(len([b for b in mask if not b]))} candidates for RMSD similarity ({len([b for b in mask if b])} left)')
+        embedder.log(f'Discarded {len([b for b in mask if not b])} candidates for RMSD similarity ({len([b for b in mask if b])} left)')
 
     # sort structures based on energy
     embedder.energies, embedder.structures = zip(*sorted(zip(embedder.energies, embedder.structures), key=lambda x: x[0]))

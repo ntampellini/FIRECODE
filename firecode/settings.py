@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 # IF YOU MANUALLY EDIT THIS FILE, BE SURE NOT TO
 # CHANGE IDENTATION/WHITESPACES/NEWLINES!
@@ -48,7 +47,7 @@ SINGLE_THREAD_BOOL = True
 # but may suffer from performance issues on some machines.
 
 UMA_MODEL_PATH = "./uma-s-1p1.pt"
-# Path of UMA model to load, either relative (to firecode/calculators/) or absolute 
+# Path of UMA model to load, either relative (to firecode/calculators/) or absolute
 
 DEFAULT_LEVELS = {
     'ORCA':'PM3',

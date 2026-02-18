@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,10 +18,11 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import os
 import re
+import shutil
 import sys
 import time
 from shutil import rmtree
@@ -42,12 +42,12 @@ from firecode.units import EH_TO_KCAL
 
 
 class Constraint:
-    '''
-    Constraint class with indices, type and value attributes.
+    """Constraint class with indices, type and value attributes.
     
-    '''
+    """
+
     def __init__(self, indices, value=None):
-        
+
         self.indices = indices
 
         self.type = {
@@ -59,15 +59,15 @@ class Constraint:
         self.value = value
 
 class suppress_stdout_stderr(object):
-    '''
-    A context manager for doing a "deep suppression" of stdout and stderr in 
+    """A context manager for doing a "deep suppression" of stdout and stderr in
     Python, i.e. will suppress all print, even if the print originates in a 
     compiled C/Fortran sub-function.
     This will not suppress raised exceptions, since exceptions are printed
     to stderr just before a script exits, and after the context manager has
     exited (at least, I think that is why it lets exceptions through).      
 
-    '''
+    """
+
     def __init__(self):
         # Open a pair of null files
         self.null_fds =  [os.open(os.devnull,os.O_RDWR) for x in range(2)]
@@ -96,9 +96,16 @@ class HiddenPrints:
         sys.stdout.close()
         sys.stdout = self._original_stdout
 
-def clean_directory(to_remove=None):
+def clean_directory(
+        to_remove: list | None =None,
+        to_remove_startswith: list | None = None,
+        to_remove_endswith: list | None = None,
+        to_remove_contains: list | None = None,
+    ) -> None:
+    """Cleans the current directory from temporary files created during a run.
 
-    if to_remove:
+    """
+    if to_remove is not None:
         for name in to_remove:
             try:
                 os.remove(name)
@@ -107,15 +114,15 @@ def clean_directory(to_remove=None):
             except FileNotFoundError:
                 pass
 
+    to_remove_startswith = to_remove_startswith or []
+    to_remove_endswith = to_remove_endswith or []
+    to_remove_contains = to_remove_contains or []
     for f in os.listdir():
-        if f.split('.')[0] == 'temp':
-            try:
-                os.remove(f)
-            except IsADirectoryError:
-                rmtree(os.path.join(os.getcwd(), f))
-            except FileNotFoundError:
-                pass
-        elif f.startswith('temp_'):
+        if (
+            f.startswith(('temp', *to_remove_startswith)) or
+            f.endswith(('temp', *to_remove_endswith)) or
+            any([s in f for s in to_remove_contains])
+            ):
             try:
                 os.remove(f)
             except IsADirectoryError:
@@ -138,10 +145,9 @@ def run_command(command:str, p=False):
     return result
 
 def write_xyz(atoms:np.array, coords:np.array, output, title='temp'):
-    '''
-    output is of _io.TextIOWrapper type
+    """Output is of _io.TextIOWrapper type
 
-    '''
+    """
     assert atoms.shape[0] == coords.shape[0]
     assert coords.shape[1] == 3
     string = ''
@@ -152,22 +158,20 @@ def write_xyz(atoms:np.array, coords:np.array, output, title='temp'):
     output.write(string)
 
 def read_xyz(filename):
-    '''
-    Wrapper for PRISM's ConformerEnsemble xyz reader, adding FIRECODE support.
+    """Wrapper for PRISM's ConformerEnsemble xyz reader, adding FIRECODE support.
     
     Raises an error if unsuccessful.
 
-    '''
+    """
     mol = ConformerEnsemble.from_xyz(filename)
     mol.atomnos = np.array([pt.number(letter) for letter in mol.atoms])
-    
+
     assert mol is not None, f'Reading molecule {filename} failed - check its integrity.'
     return mol
 
 def read_xyz_energies(filename, verbose=True):
-    '''
-    Read energies from a .xyz file. Returns None or an array of floats (in Hartrees).
-    '''
+    """Read energies from a .xyz file. Returns None or an array of floats (in Hartrees).
+    """
     energies = None
 
     # get lines right after the number of atom, which should contain the energy
@@ -181,9 +185,8 @@ def read_xyz_energies(filename, verbose=True):
             if verbose:
                 print(f'--> Read {len(energies)} energies from {filename} (single number, no UOM: assuming Eh units).')
 
-        else:
-            if verbose:
-                print(f'--> Could not parse energies for {filename} - skipping.')
+        elif verbose:
+            print(f'--> Could not parse energies for {filename} - skipping.')
 
     else:
         # multiple energies found, parse units
@@ -200,16 +203,15 @@ def read_xyz_energies(filename, verbose=True):
             energies = [float(re.findall(r'-*\d+.\d+\sKCAL/MOL', e.upper())[0].split()[0].strip())/EH_TO_KCAL for e in comment_lines]
             if verbose:
                 print(f'--> Read {len(comment_lines)} energies from {filename} (first number followed by kcal/mol units).')
-    
+
         # last resort, parse the first thing that looks like an energy and assume it's in Eh
         elif number_matches:
             energies = [float(re.findall(r'-*\d+.\d+', e)[0].strip()) for e in comment_lines]
             if verbose:
                 print(f'--> Read {len(comment_lines)} energies from {filename} (first number, no UOM: assuming Eh units).')
 
-        else:
-            if verbose:
-                print(f'--> Could not parse energies for {filename} - skipping.')
+        elif verbose:
+            print(f'--> Could not parse energies for {filename} - skipping.')
 
     return energies
 
@@ -232,8 +234,7 @@ def cartesian_product(*arrays):
     return np.stack(np.meshgrid(*arrays), -1).reshape(-1, len(arrays))
 
 def rotation_matrix_from_vectors(vec1, vec2):
-    """
-    Find the rotation matrix that aligns vec1 to vec2
+    """Find the rotation matrix that aligns vec1 to vec2
     :param vec1: A 3d "source" vector
     :param vec2: A 3d "destination" vector
     :return mat: A transform matrix (3x3) which when applied to vec1, aligns it with vec2.
@@ -250,24 +251,23 @@ def rotation_matrix_from_vectors(vec1, vec2):
         kmat = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
         rotation_matrix = np.eye(3) + kmat + kmat.dot(kmat) * ((1 - c) / (s ** 2))
         return rotation_matrix
-    
+
     # if the cross product is zero, then vecs must be parallel or perpendicular
     if norm_of(a + b) == 0:
         pointer = np.array([0,0,1])
         return rot_mat_from_pointer(pointer, 180)
-        
+
     return np.eye(3)
 
 def polygonize(lengths):
-    '''
-    Returns coordinates for the polygon vertices used in cyclical TS construction,
+    """Returns coordinates for the polygon vertices used in cyclical TS construction,
     as a list of vector couples specifying starting and ending point of each pivot 
     vector. For bimolecular TSs, returns vertices for the centered superposition of
     two segments. For trimolecular TSs, returns triangle vertices.
 
     :params vertices: list of floats, used as polygon side lenghts.
     :return vertices_out: list of vectors couples (start, end)
-    '''
+    """
     assert len(lengths) in (2,3)
 
     arr = np.zeros((len(lengths),2,3))
@@ -283,8 +283,8 @@ def polygonize(lengths):
         vertices_out[1,1] *= -1
 
     else:
-        
-        if not all([lengths[i] < lengths[i-1] + lengths[i-2] for i in (0,1,2)]): 
+
+        if not all([lengths[i] < lengths[i-1] + lengths[i-2] for i in (0,1,2)]):
             raise TriangleError(f'Impossible to build a triangle with sides {lengths}')
             # check that we can build a triangle with the specified vectors
 
@@ -312,9 +312,8 @@ def polygonize(lengths):
     return vertices_out
 
 def ase_view(mol):
-    '''
-    Display an Hypermolecule instance from the ASE GUI
-    '''
+    """Display an Hypermolecule instance from the ASE GUI
+    """
     from ase import Atoms
     from ase.gui.gui import GUI
     from ase.gui.images import Images
@@ -329,7 +328,7 @@ def ase_view(mol):
 
     else:
         images = [Atoms(mol.atoms, positions=coords) for coords in mol.coords]
-        
+
     try:
         GUI(images=Images(images), show_bonds=True).run()
     # except TclError:
@@ -337,10 +336,9 @@ def ase_view(mol):
         print('--> GUI not available from command line interface. Skipping it.')
 
 def get_scan_peak_index(energies, max_thr=50, min_thr=0.1):
-    '''
-    Returns the index of the energies iterable that
+    """Returns the index of the energies iterable that
     corresponds to the most prominent peak.
-    '''
+    """
     _l = len(energies)
     peaks = [i for i in range(_l) if (
 
@@ -362,9 +360,8 @@ def get_scan_peak_index(energies, max_thr=50, min_thr=0.1):
     # if more than one, return the highest
 
 def molecule_check(atoms, old_coords, new_coords, max_newbonds=0):
-    '''
-    Checks if two molecules have the same bonds between the same atomic indices
-    '''
+    """Checks if two molecules have the same bonds between the same atomic indices
+    """
     old_bonds = {(a, b) for a, b in list(graphize(atoms, old_coords).edges) if a != b}
     new_bonds = {(a, b) for a, b in list(graphize(atoms, new_coords).edges) if a != b}
 
@@ -376,18 +373,17 @@ def molecule_check(atoms, old_coords, new_coords, max_newbonds=0):
     return True
 
 def scramble_check(embedded_atoms, embedded_structure, excluded_atoms, mols_graphs, max_newbonds=0, logfunction=None, title=None) -> bool:
-    '''
-    Check if a multimolecular arrangement has scrambled during some optimization
+    """Check if a multimolecular arrangement has scrambled during some optimization
     steps. If more than a given number of bonds changed (formed or broke) the
     structure is considered scrambled, and the method returns False.
-    '''
+    """
     assert len(embedded_structure) == sum([len(graph.nodes) for graph in mols_graphs])
 
     bonds = set()
     for i, graph in enumerate(mols_graphs):
 
         pos = sum([len(other_graph.nodes) for j, other_graph in enumerate(mols_graphs) if j < i])
-        
+
         for bond in [tuple(sorted((a+pos, b+pos))) for a, b in list(graph.edges) if a != b]:
             bonds.add(bond)
     # creating bond set containing all bonds present in the desired molecular assembly
@@ -410,16 +406,14 @@ def scramble_check(embedded_atoms, embedded_structure, excluded_atoms, mols_grap
     return True
 
 def set_planar_angle(coords, indices, target, graph):
-    '''
-    Modifies a planar angle, setting the angle
+    """Modifies a planar angle, setting the angle
     value to target degrees. Moves the part
     of the molecule attached to the last of
     the three indices defining the angle.
 
-    '''
-
+    """
     assert len(indices) == 3
-    
+
     # define points, axis of rotation and center
     i1, i2 ,i3 = indices
     p1 ,p2, p3 = coords[np.array(indices)]
@@ -448,16 +442,14 @@ def set_planar_angle(coords, indices, target, graph):
     return coords
 
 def set_distance(coords, indices, target, graph):
-    '''
-    Modifies a distance, setting the 
+    """Modifies a distance, setting the
     value to target Angström. Moves the part
     of the molecule attached to the last of
     the two indices defining the distance.
 
-    '''
-
+    """
     assert len(indices) == 2
-    
+
     # define points, axis of rotation and center
     i1, i2 = indices
     p1 ,p2 = coords[np.array(indices)]
@@ -498,20 +490,19 @@ def auto_newline(string, max_line_len=50, padding=2):
     return ' '.join(out)
 
 def timing_wrapper(function, *args, payload=None, **kwargs):
-    '''
-    Generic function wrapper that appends the
+    """Generic function wrapper that appends the
     execution time at the end of return.
     If payload is not None, appends it at the end
     of the function return, before the elapsed time.
     
-    '''
+    """
     start_time = time.perf_counter()
     func_return = function(*args, **kwargs)
     elapsed = time.perf_counter() - start_time
 
     if payload is None:
         return func_return, elapsed
-    
+
     return func_return, payload, elapsed
 
 def saturation_check(atoms, charge=0):
@@ -525,7 +516,7 @@ def saturation_check(atoms, charge=0):
                     "Ho", "Er", "Tm", "Yb", "Lu", "Hf",
                     "Ta", "W", "Re", "Os", "Ir", "Pt",
                     "Au", "Hg", "Th", "Pa", "U", "Np",
-                    "Pu", "Am", 
+                    "Pu", "Am",
     ]
 
     # if we have any transition metal, it's hard to tell
@@ -547,18 +538,66 @@ def saturation_check(atoms, charge=0):
     return looks_ok
 
 def rmsd_similarity(ref, structures, rmsd_thr=0.5) -> bool:
-    '''
-    Simple, RMSD similarity eval function.
+    """Simple, RMSD similarity eval function.
 
-    '''
-
+    """
     # iterate over target structures
     for structure in structures:
-        
+
         # compute RMSD and max deviation
         rmsd_value, maxdev_value = rmsd_and_max(ref, structure)
 
         if rmsd_value < rmsd_thr and maxdev_value < 2 * rmsd_thr:
             return True
-            
+
     return False
+
+
+class NewFolderContext:
+    """Context manager: creates a new directory and moves into it on entry.
+    
+    On exit, moves out of the directory and deletes it if instructed to do so.
+     
+    """
+
+    def __init__(self, new_folder_name, delete_after=True):
+        self.new_folder_name = new_folder_name
+        self.delete_after = delete_after
+
+    def __enter__(self):
+        # create working folder and cd into it
+        if self.new_folder_name in os.listdir():
+            shutil.rmtree(os.path.join(os.getcwd(), self.new_folder_name))
+
+        os.mkdir(self.new_folder_name)
+        os.chdir(os.path.join(os.getcwd(), self.new_folder_name))
+
+    def __exit__(self, *args):
+        # get out of working folder
+        os.chdir(os.path.dirname(os.getcwd()))
+
+        # and eventually delete it
+        if self.delete_after:
+            shutil.rmtree(os.path.join(os.getcwd(), self.new_folder_name))
+
+
+class FolderContext:
+    """Context manager: works in the specified directory and moves back after.
+        
+    """
+
+    def __init__(self, target_folder):
+        self.target_folder = os.path.join(os.getcwd(), target_folder)
+        self.initial_folder = os.getcwd()
+
+    def __enter__(self):
+        # move into folder
+        if os.path.isdir(self.target_folder):
+            os.chdir(self.target_folder)
+
+        else:
+            raise NotADirectoryError(self.target_folder)
+
+    def __exit__(self, *args):
+        # get out of working folder
+        os.chdir(self.initial_folder)

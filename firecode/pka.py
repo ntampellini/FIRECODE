@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,33 +18,31 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import numpy as np
 from prism_pruner.graph_manipulations import graphize
 
 from firecode.algebra import normalize
 from firecode.calculators._xtb import xtb_get_free_energy
-from firecode.optimization_methods import (optimize, refine_structures,
-                                           write_xyz)
+from firecode.optimization_methods import optimize, refine_structures, write_xyz
 from firecode.torsion_module import csearch
 from firecode.utils import loadbar
 
 
 def _get_anions(
                 embedder,
-                atoms, 
-                structures, 
+                atoms,
+                structures,
                 index,
                 logfunction=print,
             ):
-    '''
-    atoms: 1D array of atomic numbers
+    """atoms: 1D array of atomic numbers
     structures: array of 3D of coordinates
     index: position of hydrogen atom to be abstracted
 
     return: anion optimized geomertries, their energies and the new atoms array
-    '''
+    """
     assert embedder.options.calculator == 'XTB', 'Charge calculations only implemented for XTB'
 
     # removing proton from atoms
@@ -88,18 +85,17 @@ def _get_anions(
 
 def _get_cations(
                 embedder,
-                atoms, 
-                structures, 
+                atoms,
+                structures,
                 index,
                 logfunction=print,
             ):
-    '''
-    structures: array of 3D of coordinates
+    """structures: array of 3D of coordinates
     atoms: 1D array of atomic numbers
     index: position where the new hydrogen atom has to be inserted
 
     return: cation optimized geomertries, their energies and the new atoms array
-    '''
+    """
     assert embedder.options.calculator == 'XTB', 'Charge calculations not yet implemented for Gau, Orca, Mopac, OB'
 
     cation_atoms = np.append(atoms, 1)
@@ -141,12 +137,10 @@ def _get_cations(
     return cations, energies, cation_atoms
 
 def protonate(atoms, coords, index, length=1):
-    '''
-    Returns the input structure,
+    """Returns the input structure,
     protonated at the index provided,
     ready to be optimized
-    '''
-
+    """
     graph = graphize(atoms, coords)
     nbs = graph.neighbors(index)
     versor = -normalize(np.mean(coords[nbs]-coords[index], axis=0))
@@ -156,12 +150,11 @@ def protonate(atoms, coords, index, length=1):
     return coords
 
 def pka_routine(filename, embedder, search=True):
-    '''
-    Calculates the energy difference between
+    """Calculates the energy difference between
     the most stable conformer of the provided
     structure and its conjugate base, obtained
     by removing one proton at the specified position.
-    '''
+    """
     mol_index = [m.filename for m in embedder.objects].index(filename)
     mol = embedder.objects[mol_index]
 
@@ -273,7 +266,7 @@ def get_free_energies(embedder, atoms, structures, charge=0, title='Molecule'):
     for s, structure in enumerate(structures):
 
         loadbar(s, len(structures), f'{title} Hessian {s+1}/{len(structures)} ')
-        
+
         free_energies.append(xtb_get_free_energy(
                                                     atoms,
                                                     structure,

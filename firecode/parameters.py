@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 orb_dim_dict = {
     'H Single Bond' : 0.85,
@@ -55,7 +54,7 @@ orb_dim_dict = {
     'Metal' : 2.5,
 
     'Fallback' : 1
-                }       
+                }
 # Half-lenght of the transition state bonding distance involving a given atom
 
 nci_dict={
