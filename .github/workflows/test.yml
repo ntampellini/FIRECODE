@@ -28,7 +28,7 @@ jobs:
           cache: true
           environments: dev
 
-      - run: pixi install -e dev --locked
+      - run: pixi install -e dev
       # - run: pixi run fmt
       # - run: pixi run lint
       # - run: pixi run types
