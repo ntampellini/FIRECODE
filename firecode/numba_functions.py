@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 import numpy as np
 from networkx import Graph, connected_components
@@ -30,15 +29,13 @@ from firecode.algebra import norm_of
 
 
 def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool:
-    '''
-    coords: 3D molecule coordinates
+    """coords: 3D molecule coordinates
     mask: 1D boolean array with the mask torsion
     thresh: threshold value for when two atoms are considered clashing
     max_clashes: maximum number of clashes to pass a structure
     returns True if the molecule shows less than max_clashes
-    '''
+    """
     _, i2, i3, _ = torsion
-
 
     antimask = ~mask
     antimask[i2] = False
@@ -49,137 +46,128 @@ def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool
     m2 = coords[antimask]
     # fragment identification by boolean masking
 
-    return 0 if np.count_nonzero(cdist(m2,m1) < thresh) > max_clashes else 1
- 
+    return 0 if np.count_nonzero(cdist(m2, m1) < thresh) > max_clashes else 1
+
+
 def count_clashes(coords):
-    '''
-    '''
-    return np.count_nonzero(
-                            (cdist(coords,coords) < 0.5) & (
-                             cdist(coords,coords) > 0)
-                            )
+    """ """
+    return np.count_nonzero((cdist(coords, coords) < 0.5) & (cdist(coords, coords) > 0))
 
 
 def compenetration_check(coords, ids=None, thresh=1.5, max_clashes=0) -> bool:
-    '''
-    coords: 3D molecule coordinates
-    ids: 1D array with the number of atoms for each 
+    """coords: 3D molecule coordinates
+    ids: 1D array with the number of atoms for each
     molecule (contiguous fragments in array)
     thresh: threshold value for when two atoms are considered clashing
     max_clashes: maximum number of clashes to pass a structure
     returns True if the molecule shows less than max_clashes
-    
-    '''
 
+    """
     if ids is None:
         return 0 if count_clashes(coords) > max_clashes else 1
 
     if len(ids) == 2:
-    # Bimolecular
+        # Bimolecular
 
-        m1 = coords[0:ids[0]]
-        m2 = coords[ids[0]:]
+        m1 = coords[0 : ids[0]]
+        m2 = coords[ids[0] :]
         # fragment identification by length (contiguous)
 
-        return 0 if np.count_nonzero(cdist(m2,m1) < thresh) > max_clashes else 1
+        return 0 if np.count_nonzero(cdist(m2, m1) < thresh) > max_clashes else 1
 
     # if len(ids) == 3:
 
     clashes = 0
     # max_clashes clashes is good, max_clashes + 1 is not
 
-    m1 = coords[0:ids[0]]
-    m2 = coords[ids[0]:ids[0]+ids[1]]
-    m3 = coords[ids[0]+ids[1]:]
+    m1 = coords[0 : ids[0]]
+    m2 = coords[ids[0] : ids[0] + ids[1]]
+    m3 = coords[ids[0] + ids[1] :]
     # fragment identification by length (contiguous)
 
-    clashes += np.count_nonzero(cdist(m2,m1) < thresh)
+    clashes += np.count_nonzero(cdist(m2, m1) < thresh)
     if clashes > max_clashes:
         return 0
 
-    clashes += np.count_nonzero(cdist(m3,m2) < thresh)
+    clashes += np.count_nonzero(cdist(m3, m2) < thresh)
     if clashes > max_clashes:
         return 0
 
-    clashes += np.count_nonzero(cdist(m1,m3) < thresh)
+    clashes += np.count_nonzero(cdist(m1, m3) < thresh)
     if clashes > max_clashes:
         return 0
 
     return 1
 
+
 def scramble(array, sequence):
     return np.array([array[s] for s in sequence])
 
+
 def prune_conformers_tfd(structures, quadruplets, thresh=10, verbose=False):
-    '''
-    Removes similar structures by repeatedly grouping them into k
+    """Removes similar structures by repeatedly grouping them into k
     subgroups and removing similar ones. A cache is present to avoid
     repeating TFD computations.
-    
+
     Similarity occurs for structures with a total angle difference
     greater than thresh degrees
-    '''
-
+    """
     # Get torsion fingerprints for structures
     tf_mat = _get_tf_mat(structures, quadruplets)
 
     cache_set = set()
     final_mask = np.ones(structures.shape[0], dtype=bool)
-    
-    for k in (5e5, 2e5, 1e5, 5e4, 2e4, 1e4,
-              5000, 2000, 1000, 500, 200, 100,
-              50, 20, 10, 5, 2, 1):
 
+    for k in (5e5, 2e5, 1e5, 5e4, 2e4, 1e4, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1):
         num_active_str = np.count_nonzero(final_mask)
-        
-        if k == 1 or 5*k < num_active_str:
-        # proceed only of there are at least five structures per group
 
-            if verbose:      
-                print(f'Working on subgroups with k={k} ({num_active_str} candidates left) {" "*10}', end='\r')
+        if k == 1 or 5 * k < num_active_str:
+            # proceed only of there are at least five structures per group
+
+            if verbose:
+                print(
+                    f"Working on subgroups with k={k} ({num_active_str} candidates left) {' ' * 10}",
+                    end="\r",
+                )
 
             d = int(len(structures) // k)
 
             for step in range(int(k)):
-            # operating on each of the k subdivisions of the array
-                if step == k-1:
-                    _l = len(range(d*step, num_active_str))
+                # operating on each of the k subdivisions of the array
+                if step == k - 1:
+                    _l = len(range(d * step, num_active_str))
                 else:
-                    _l = len(range(d*step, int(d*(step+1))))
+                    _l = len(range(d * step, int(d * (step + 1))))
 
                 # similarity_mat = np.zeros((_l, _l))
                 matches = set()
 
                 for i_rel in range(_l):
-                    for j_rel in range(i_rel+1,_l):
-
-                        i_abs = i_rel+(d*step)
-                        j_abs = j_rel+(d*step)
+                    for j_rel in range(i_rel + 1, _l):
+                        i_abs = i_rel + (d * step)
+                        j_abs = j_rel + (d * step)
 
                         if (i_abs, j_abs) not in cache_set:
-                        # if we have already performed the comparison,
-                        # structures were not similar and we can skip them
+                            # if we have already performed the comparison,
+                            # structures were not similar and we can skip them
 
-                            if tfd_similarity(tf_mat[i_abs],
-                                              tf_mat[j_abs],
-                                              thresh=thresh):
-
+                            if tfd_similarity(tf_mat[i_abs], tf_mat[j_abs], thresh=thresh):
                                 # similarity_mat[i_rel,j_rel] = 1
-                                matches.add((i_rel,j_rel))
+                                matches.add((i_rel, j_rel))
                                 break
                             else:
-                                i_abs = i_rel+(d*step)
-                                j_abs = j_rel+(d*step)
+                                i_abs = i_rel + (d * step)
+                                j_abs = j_rel + (d * step)
                                 cache_set.add((i_abs, j_abs))
 
                 # for i_rel, j_rel in zip(*np.where(similarity_mat == False)):
                 #     i_abs = i_rel+(d*step)
                 #     j_abs = j_rel+(d*step)
                 #     cache_set.add((i_abs, j_abs))
-                    # adding indices of structures that are considered equal,
-                    # so as not to repeat computing their TFD
-                    # Their index accounts for their position in the initial
-                    # array (absolute index)
+                # adding indices of structures that are considered equal,
+                # so as not to repeat computing their TFD
+                # Their index accounts for their position in the initial
+                # array (absolute index)
 
                 # matches = [(i,j) for i,j in zip(*np.where(similarity_mat))]
                 g = Graph(matches)
@@ -197,14 +185,14 @@ def prune_conformers_tfd(structures, quadruplets, thresh=10, verbose=False):
                         rejects.append(i)
 
                 for i in rejects:
-                    abs_index = i + d*step
+                    abs_index = i + d * step
                     final_mask[abs_index] = 0
 
     return structures[final_mask], final_mask
 
+
 def _get_tf_mat(structures, quadruplets):
-    '''
-    '''
+    """ """
     tf_mat = np.empty(shape=(len(structures), len(quadruplets)), dtype=float)
 
     for i in range(len(structures)):
@@ -212,11 +200,9 @@ def _get_tf_mat(structures, quadruplets):
 
     return tf_mat
 
-def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
-    '''
-    Return True if the two structure are similar under the torsion fingeprint criteria.
-    '''
 
+def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
+    """Return True if the two structure are similar under the torsion fingeprint criteria."""
     # Compute their absolute difference
     deltas = np.abs(tfp1 - tfp2)
 
@@ -228,22 +214,20 @@ def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
 
     return False
 
+
 def get_torsion_fingerprint(coords, quadruplets):
     out = np.zeros(quadruplets.shape[0], dtype=float)
     for i, q in enumerate(quadruplets):
         i1, i2, i3, i4 = q
-        out[i] = dihedral([coords[i1],
-                           coords[i2],
-                           coords[i3],
-                           coords[i4]])
+        out[i] = dihedral([coords[i1], coords[i2], coords[i3], coords[i4]])
     return out
 
+
 def _score_embed_poses(structures, constrained_indices, constrained_distances):
-    '''
-    Returns array of scores for embedded structures.
+    """Returns array of scores for embedded structures.
     The score is calculated as the sum of deltas from
     the desired embed distances.
-    '''
+    """
     _l = len(structures)
     scores = np.zeros(shape=_l, dtype=float)
 

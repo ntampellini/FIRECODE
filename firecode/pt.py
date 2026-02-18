@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,8 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
+
 from dataclasses import dataclass
 
 from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
@@ -27,14 +27,14 @@ from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
 
 @dataclass
 class PeriodicTable:
-
     def covalent_radius(self, symbol):
         return RADII_TABLE[symbol]
 
     def mass(self, symbol):
         return MASSES_TABLE[symbol]
-    
+
     def number(self, symbol):
         return INDEX_TABLE[symbol]
-    
+
+
 pt = PeriodicTable()

@@ -1,6 +1,5 @@
 # coding=utf-8
-'''
-FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
+"""FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles
 Copyright (C) 2021-2026 Nicolò Tampellini
 
 SPDX-License-Identifier: LGPL-3.0-or-later
@@ -19,7 +18,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
-'''
+"""
 
 # import pickle
 import time
@@ -39,74 +38,74 @@ from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
 from firecode.mep_relaxer import ase_mep_relax
 from firecode.numba_functions import prune_conformers_tfd
-from firecode.optimization_methods import refine_structures, optimize
+from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.settings import (CALCULATOR, DEFAULT_FF_LEVELS, DEFAULT_LEVELS,
-                               FF_CALC, FF_OPT_BOOL, PROCS)
+from firecode.settings import (
+    CALCULATOR,
+    DEFAULT_FF_LEVELS,
+    DEFAULT_LEVELS,
+    FF_CALC,
+    FF_OPT_BOOL,
+    PROCS,
+)
 from firecode.torsion_module import csearch, get_quadruplets
-from firecode.utils import (get_scan_peak_index, molecule_check, read_xyz,
-                            write_xyz)
+from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
 
 def operate(input_string, embedder):
-    '''
-    Perform the operations according to the chosen
+    """Perform the operations according to the chosen
     operator and return the outname of the (new) .xyz
     file to read instead of the input one.
-    '''
-
+    """
     filename = embedder._extract_filename(input_string)
-   
+
     if not hasattr(embedder, "t_start_run"):
         embedder.t_start_run = time.perf_counter()
 
     if embedder.options.dryrun:
-        embedder.log(f'--> Dry run requested: skipping operator \"{input_string}\"')
+        embedder.log(f'--> Dry run requested: skipping operator "{input_string}"')
         return filename
 
-    elif 'csearch>' in input_string:
+    elif "csearch>" in input_string:
         outname = csearch_operator(filename, embedder)
 
-    elif 'opt>' in input_string:
-        outname = opt_operator(filename,
-                                embedder,
-                                logfunction=embedder.log)
+    elif "opt>" in input_string:
+        outname = opt_operator(filename, embedder, logfunction=embedder.log)
 
-    elif 'csearch_hb>' in input_string:
+    elif "csearch_hb>" in input_string:
         outname = csearch_operator(filename, embedder, keep_hb=True)
-        
-    elif 'rsearch>' in input_string:
+
+    elif "rsearch>" in input_string:
         outname = csearch_operator(filename, embedder, mode=2)
 
-    elif any(string in input_string for string in ('mtd_search>', 'mtd>')):
+    elif any(string in input_string for string in ("mtd_search>", "mtd>")):
         outname = mtd_search_operator(filename, embedder)
 
-    elif 'rdkit_search>' in input_string:
+    elif "rdkit_search>" in input_string:
         outname = rdkit_search_operator(filename, embedder)
 
-    elif 'scan>' in input_string:
+    elif "scan>" in input_string:
         outname = scan_operator(filename, embedder)
-      
-    elif 'neb>' in input_string:
+
+    elif "neb>" in input_string:
         neb_operator(filename, embedder)
         embedder.normal_termination()
 
-    elif 'fsm>' in input_string:
+    elif "fsm>" in input_string:
         outname = fsm_operator(embedder)
 
-    elif 'refine>' in input_string:
+    elif "refine>" in input_string:
         outname = filename
         # this operator is accounted for in the OptionSetter
         # class of Options, set when the Embedder calls _set_options
 
-    elif 'pka>' in input_string:
+    elif "pka>" in input_string:
         pka_routine(filename, embedder)
         outname = filename
 
-    elif 'mep_relax>' in input_string:
-
+    elif "mep_relax>" in input_string:
         data = read_xyz(filename)
 
         # can implement a smart safety feature that is
@@ -114,25 +113,23 @@ def operate(input_string, embedder):
         no_bonds_breaking = True
 
         if no_bonds_breaking:
-
             mep, _, exit_status = ase_mep_relax(
-                                                embedder,
-                                                data.atoms,
-                                                data.coords,
-                                                title=embedder.stamp+"_safe",
-                                                n_images=embedder.options.images if hasattr(embedder.options, 'images') else None,
-                                                logfunction=embedder.log,
-                                                write_plot=True,
-                                                verbose_print=True,
-                                                safe=True
-                                                )
-            
+                embedder,
+                data.atoms,
+                data.coords,
+                title=embedder.stamp + "_safe",
+                n_images=embedder.options.images if hasattr(embedder.options, "images") else None,
+                logfunction=embedder.log,
+                write_plot=True,
+                verbose_print=True,
+                safe=True,
+            )
+
         else:
             mep = data.coords
             exit_status = True
-        
-        if exit_status:
 
+        if exit_status:
             if no_bonds_breaking:
                 print("--> Completed safe optimization, relaxing bond distance constraints.")
 
@@ -141,28 +138,28 @@ def operate(input_string, embedder):
                 data.atoms,
                 mep,
                 title=embedder.stamp,
-                n_images=embedder.options.images if hasattr(embedder.options, 'images') else None,
+                n_images=embedder.options.images if hasattr(embedder.options, "images") else None,
                 logfunction=embedder.log,
                 write_plot=True,
                 verbose_print=True,
-                safe=True
-                )
-        
+                safe=True,
+            )
+
         embedder.normal_termination()
 
     else:
-        op = input_string.split('>')[0]
-        raise Exception(f'Operator {op} not recognized.')
+        op = input_string.split(">")[0]
+        raise Exception(f"Operator {op} not recognized.")
 
     return outname
 
-def csearch_operator(filename, embedder, keep_hb=False, mode=1):
-    '''
-    '''
 
-    s = f'--> Performing conformational search on {filename}'
+def csearch_operator(filename, embedder, keep_hb=False, mode=1):
+    """ """
+
+    s = f"--> Performing conformational search on {filename}"
     if keep_hb:
-        s += ' (preserving current hydrogen bonds)'
+        s += " (preserving current hydrogen bonds)"
     embedder.log(s)
 
     # t_start = time.perf_counter()
@@ -170,31 +167,32 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
     data = read_xyz(filename)
 
     if len(data.coords) > 1:
-        embedder.log('Requested conformational search on multimolecular file - will do\n' +
-                      'an individual search from each conformer (might be time-consuming).')
-                                
+        embedder.log(
+            "Requested conformational search on multimolecular file - will do\n"
+            + "an individual search from each conformer (might be time-consuming)."
+        )
+
     # calc, method, procs = _get_lowest_calc(embedder)
     conformers = []
 
     for i, coords in enumerate(data.coords):
-
         opt_coords = coords
 
         conf_batch = csearch(
-                                data.atoms,
-                                opt_coords,
-                                charge=embedder.options.charge,
-                                mult=embedder.options.mult,
-                                constrained_indices=_get_internal_constraints(filename, embedder),
-                                keep_hb=keep_hb,
-                                mode=mode,
-                                n_out=embedder.options.max_confs//len(data.coords),
-                                title=f'{filename}_conf{i}',
-                                logfunction=embedder.log,
-                                dispatcher=embedder.dispatcher,
-                                write_torsions=embedder.options.debug,
-                                debug=embedder.options.debug,
-                            )
+            data.atoms,
+            opt_coords,
+            charge=embedder.options.charge,
+            mult=embedder.options.mult,
+            constrained_indices=_get_internal_constraints(filename, embedder),
+            keep_hb=keep_hb,
+            mode=mode,
+            n_out=embedder.options.max_confs // len(data.coords),
+            title=f"{filename}_conf{i}",
+            logfunction=embedder.log,
+            dispatcher=embedder.dispatcher,
+            write_torsions=embedder.options.debug,
+            debug=embedder.options.debug,
+        )
         # generate the most diverse conformers starting from optimized geometry
 
         conformers.extend(conf_batch)
@@ -205,32 +203,38 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
     conformers = conformers.reshape(-1, data.atomnos.shape[0], 3)
     # merging structures from each run in a single array
 
-    print(f'Writing conformers to file...{" "*10}', end='\r')
+    print(f"Writing conformers to file...{' ' * 10}", end="\r")
 
-    confname = filename[:-4] + '_confs.xyz'
-    with open(confname, 'w') as f:
+    confname = filename[:-4] + "_confs.xyz"
+    with open(confname, "w") as f:
         for i, conformer in enumerate(conformers):
-            write_xyz(data.atoms, conformer, f, title=f'Generated conformer {i}')
+            write_xyz(data.atoms, conformer, f, title=f"Generated conformer {i}")
 
-    print(f'{" "*30}', end='\r')
+    print(f"{' ' * 30}", end="\r")
 
-    embedder.log('\n')
+    embedder.log("\n")
 
     return confname
 
+
 def opt_operator(filename, embedder, logfunction=None):
-    '''
-    '''
+    """ """
 
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
     # load molecule to be optimized from embedder
 
     if logfunction is not None:
-        logfunction(f'--> Performing {embedder.options.calculator} {embedder.options.theory_level}' + (
-                    f'{f"/{embedder.options.solvent}" if embedder.options.solvent is not None else ""} optimization on {filename} ({len(mol.coords)} conformers)'))
+        logfunction(
+            f"--> Performing {embedder.options.calculator} {embedder.options.theory_level}"
+            + (
+                f"{f'/{embedder.options.solvent}' if embedder.options.solvent is not None else ''} optimization on {filename} ({len(mol.coords)} conformers)"
+            )
+        )
 
     constrained_indices = _get_internal_constraints(filename, embedder)
-    constrained_distances = [embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices]
+    constrained_distances = [
+        embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
+    ]
 
     (
         constrained_angles_indices,
@@ -245,27 +249,24 @@ def opt_operator(filename, embedder, logfunction=None):
     t_start = time.perf_counter()
 
     conformers, energies = refine_structures(
-                                              mol.atoms,
-                                              mol.coords,
-                                              calculator=embedder.options.calculator,
-                                              method=embedder.options.theory_level,
-                                              procs=embedder.procs,
-                                              charge=embedder.options.charge,
-                                              mult=embedder.options.mult,
-
-                                              constrained_indices=constrained_indices,
-                                              constrained_distances=constrained_distances,
-
-                                              constrained_angles_indices=constrained_angles_indices,
-                                              constrained_angles_values=constrained_angles_values,
-
-                                              constrained_dihedrals_indices=constrained_dihedrals_indices,
-                                              constrained_dihedrals_values=constrained_dihedrals_values,
-
-                                              loadstring='Optimizing conformer',
-                                              logfunction=lambda s:embedder.log(s, p=False),
-                                              debug=embedder.options.debug,
-                                              dispatcher=embedder.dispatcher)
+        mol.atoms,
+        mol.coords,
+        calculator=embedder.options.calculator,
+        method=embedder.options.theory_level,
+        procs=embedder.procs,
+        charge=embedder.options.charge,
+        mult=embedder.options.mult,
+        constrained_indices=constrained_indices,
+        constrained_distances=constrained_distances,
+        constrained_angles_indices=constrained_angles_indices,
+        constrained_angles_values=constrained_angles_values,
+        constrained_dihedrals_indices=constrained_dihedrals_indices,
+        constrained_dihedrals_values=constrained_dihedrals_values,
+        loadstring="Optimizing conformer",
+        logfunction=lambda s: embedder.log(s, p=False),
+        debug=embedder.options.debug,
+        dispatcher=embedder.dispatcher,
+    )
 
     energies, conformers = zip(*sorted(zip(energies, conformers), key=lambda x: x[0]))
     energies = np.array(energies)
@@ -277,28 +278,33 @@ def opt_operator(filename, embedder, logfunction=None):
     # getting the structures to reject (Rel Energy > 20 kcal/mol)
 
     if logfunction is not None:
-        s = 's' if len(conformers) > 1 else ''
-        s = f'Completed optimization on {len(conformers)} conformer{s}. ({time_to_string(time.perf_counter()-t_start)}, ~{time_to_string((time.perf_counter()-t_start)/len(conformers))} per structure).\n'
+        s = "s" if len(conformers) > 1 else ""
+        s = f"Completed optimization on {len(conformers)} conformer{s}. ({time_to_string(time.perf_counter() - t_start)}, ~{time_to_string((time.perf_counter() - t_start) / len(conformers))} per structure).\n"
 
         if max(rel_energies) > 20:
-            s += f'Discarded {len(conformers)-np.count_nonzero(mask)}/{len(conformers)} unstable conformers (Rel. E. > 20 kcal/mol)\n'
+            s += f"Discarded {len(conformers) - np.count_nonzero(mask)}/{len(conformers)} unstable conformers (Rel. E. > 20 kcal/mol)\n"
 
     conformers, energies, rel_energies = conformers[mask], energies[mask], rel_energies[mask]
     # applying the mask that rejects high energy confs
 
-    optname = filename[:-4] + '_opt.xyz'
-    with open(optname, 'w') as f:
+    optname = filename[:-4] + "_opt.xyz"
+    with open(optname, "w") as f:
         for i, conformer in enumerate(align_structures(conformers)):
-            write_xyz(mol.atoms, conformer, f, title=f'Optimized conformer {i} - E(kcal/mol) = {energies[i]:.3f} - Rel. E. = {rel_energies[i]:.3f} kcal/mol')
+            write_xyz(
+                mol.atoms,
+                conformer,
+                f,
+                title=f"Optimized conformer {i} - E(kcal/mol) = {energies[i]:.3f} - Rel. E. = {rel_energies[i]:.3f} kcal/mol",
+            )
 
-    logfunction(s+'\n')
-    logfunction(f'Wrote {len(conformers)} optimized structures to {optname}\n')
+    logfunction(s + "\n")
+    logfunction(f"Wrote {len(conformers)} optimized structures to {optname}\n")
 
     return optname
 
+
 def neb_operator(filename, embedder, attempts=3):
-    '''
-    '''
+    """ """
     embedder.t_start_run = time.perf_counter()
     data = read_xyz(filename)
     n_str = len(data.coords)
@@ -308,59 +314,62 @@ def neb_operator(filename, embedder, attempts=3):
         reagents, products = data.coords
         ts_guess = None
         mep_override = None
-        embedder.log('--> Two structures as input: using them as start and end points.')
+        embedder.log("--> Two structures as input: using them as start and end points.")
 
     elif n_str == 3:
         reagents, ts_guess, products = data.coords
         mep_override = None
-        embedder.log('--> Three structures as input: using them as start, TS guess and end points.')
+        embedder.log("--> Three structures as input: using them as start, TS guess and end points.")
 
     else:
         reagents, *_, products = data.coords
-        ts_guess = data.coords[n_str//2]
+        ts_guess = data.coords[n_str // 2]
         mep_override = data.coords
-        embedder.log(f'--> {n_str} structures as input: casting {n_images} images from these as the NEB MEP guess.')
+        embedder.log(
+            f"--> {n_str} structures as input: casting {n_images} images from these as the NEB MEP guess."
+        )
 
-    from firecode.ase_manipulations import ase_neb 
+    from firecode.ase_manipulations import ase_neb
 
-    title = filename[:-4] + '_NEB'
+    title = filename[:-4] + "_NEB"
 
     # do preopt unless user specifies not to
     if not (hasattr(embedder.options.neb, "preopt") and not embedder.options.neb.preopt):
-
-        embedder.log(f'--> Performing NEB TS optimization. Preoptimizing start/end structures from {filename}\n'
-                     f'Theory level is {embedder.options.theory_level}/{embedder.options.solvent or "vacuum"} via {embedder.options.calculator}')
+        embedder.log(
+            f"--> Performing NEB TS optimization. Preoptimizing start/end structures from {filename}\n"
+            f"Theory level is {embedder.options.theory_level}/{embedder.options.solvent or 'vacuum'} via {embedder.options.calculator}"
+        )
 
         reagents, reag_energy, _ = optimize(
-                                            data.atoms,
-                                            reagents,
-                                            embedder.options.calculator,
-                                            method=embedder.options.theory_level,
-                                            charge=embedder.options.charge,
-                                            mult=embedder.options.mult,
-                                            procs=embedder.procs,
-                                            solvent=embedder.options.solvent,
-                                            title='reagents',
-                                            logfunction=embedder.log,
-                                            dispatcher=embedder.dispatcher,
-                                            debug=embedder.options.debug,
-                                            )
+            data.atoms,
+            reagents,
+            embedder.options.calculator,
+            method=embedder.options.theory_level,
+            charge=embedder.options.charge,
+            mult=embedder.options.mult,
+            procs=embedder.procs,
+            solvent=embedder.options.solvent,
+            title="reagents",
+            logfunction=embedder.log,
+            dispatcher=embedder.dispatcher,
+            debug=embedder.options.debug,
+        )
 
         products, prod_energy, _ = optimize(
-                                            data.atoms,
-                                            products,
-                                            embedder.options.calculator,
-                                            method=embedder.options.theory_level,
-                                            charge=embedder.options.charge,
-                                            mult=embedder.options.mult,
-                                            procs=embedder.procs,
-                                            solvent=embedder.options.solvent,
-                                            title='products',
-                                            logfunction=embedder.log,
-                                            dispatcher=embedder.dispatcher,
-                                            debug=embedder.options.debug,
-                                            )
-        
+            data.atoms,
+            products,
+            embedder.options.calculator,
+            method=embedder.options.theory_level,
+            charge=embedder.options.charge,
+            mult=embedder.options.mult,
+            procs=embedder.procs,
+            solvent=embedder.options.solvent,
+            title="products",
+            logfunction=embedder.log,
+            dispatcher=embedder.dispatcher,
+            debug=embedder.options.debug,
+        )
+
         if mep_override is not None:
             mep_override[0] = reagents
             mep_override[-1] = products
@@ -376,218 +385,235 @@ def neb_operator(filename, embedder, attempts=3):
     #     _, prod_energy, _ = ase_popt(embedder, products, data.atomnos, steps=0)
 
     for attempt in range(attempts):
-
         ts_coords, ts_energy, energies, exit_status = ase_neb(
-                                                                embedder,
-                                                                data.atoms,
-                                                                reagents,
-                                                                products,
-                                                                n_images=n_images,
-                                                                
-                                                                charge=embedder.options.charge,
-                                                                mult=embedder.options.mult,
-                                                                ts_guess= ts_guess,
-                                                                mep_input=mep_override,
-                                                                title=title,
-                                                                logfunction=embedder.log,
-                                                                write_plot=True,
-                                                                verbose_print=True
-                                                            )
+            embedder,
+            data.atoms,
+            reagents,
+            products,
+            n_images=n_images,
+            charge=embedder.options.charge,
+            mult=embedder.options.mult,
+            ts_guess=ts_guess,
+            mep_input=mep_override,
+            title=title,
+            logfunction=embedder.log,
+            write_plot=True,
+            verbose_print=True,
+        )
 
         if exit_status == "CONVERGED":
             break
 
-        elif exit_status == "MAX ITER" and attempt+2 < attempts:
-            mep_override = read_xyz(f'{title}_MEP_start_of_CI.xyz').coords
+        elif exit_status == "MAX ITER" and attempt + 2 < attempts:
+            mep_override = read_xyz(f"{title}_MEP_start_of_CI.xyz").coords
             reagents, *_, products = mep_override
-            embedder.log(f'--> Restarting NEB from checkpoint. Attempt {attempt+2}/3.\n')
-
+            embedder.log(f"--> Restarting NEB from checkpoint. Attempt {attempt + 2}/3.\n")
 
     e1 = ts_energy - reag_energy
     e2 = ts_energy - prod_energy
     dg1 = ts_energy - min(energies[:3])
     dg2 = ts_energy - min(energies[4:])
 
-    embedder.log(f'NEB completed, relative energy from start/end points (not barrier heights):\n'
-               f'  > E(TS)-E(start): {"+" if e1>=0 else "-"}{e1:.3f} kcal/mol\n'
-               f'  > E(TS)-E(end)  : {"+" if e2>=0 else "-"}{e2:.3f} kcal/mol\n')
-    
-    embedder.log(f'Barrier heights (based on lowest energy point on each side):\n'
-               f'  > E(TS)-E(left) : {"+" if dg1>=0 else "-"}{dg1:.3f} kcal/mol\n'
-               f'  > E(TS)-E(right): {"+" if dg2>=0 else "-"}{dg2:.3f} kcal/mol')
+    embedder.log(
+        f"NEB completed, relative energy from start/end points (not barrier heights):\n"
+        f"  > E(TS)-E(start): {'+' if e1 >= 0 else '-'}{e1:.3f} kcal/mol\n"
+        f"  > E(TS)-E(end)  : {'+' if e2 >= 0 else '-'}{e2:.3f} kcal/mol\n"
+    )
+
+    embedder.log(
+        f"Barrier heights (based on lowest energy point on each side):\n"
+        f"  > E(TS)-E(left) : {'+' if dg1 >= 0 else '-'}{dg1:.3f} kcal/mol\n"
+        f"  > E(TS)-E(right): {'+' if dg2 >= 0 else '-'}{dg2:.3f} kcal/mol"
+    )
 
     if not (e1 > 0 and e2 > 0):
-        embedder.log('\nNEB failed, TS energy is lower than both the start and end points.\n')
+        embedder.log("\nNEB failed, TS energy is lower than both the start and end points.\n")
 
-    with open(f'{title}_TS.xyz', 'w') as f:
-        write_xyz(data.atoms, ts_coords, f, title='NEB TS - see log for relative energies')
+    with open(f"{title}_TS.xyz", "w") as f:
+        write_xyz(data.atoms, ts_coords, f, title="NEB TS - see log for relative energies")
 
 
 def mtd_search_operator(filename, embedder):
-    '''
-    Run a CREST metadynamic conformational search and return the output filename.
-    '''
-
-    assert crest_is_installed(), 'CREST 2 does not seem to be installed. Install it with: conda install -c conda-forge crest==2.*'
+    """Run a CREST metadynamic conformational search and return the output filename."""
+    assert crest_is_installed(), (
+        "CREST 2 does not seem to be installed. Install it with: conda install -c conda-forge crest==2.*"
+    )
 
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
     # load molecule to be optimized from embedder
 
-    if not hasattr(mol, 'charge'):
+    if not hasattr(mol, "charge"):
         mol.charge = 0
 
     if not embedder.options.let:
         if len(mol.coords) >= 20:
-            raise InputError('The mtd_search> operator was given more than 20 input structures. ' +
-                             'This would run >20 metadynamic conformational searches. If this was not a mistake, ' +
-                             'add the LET keyword an re-run the job.')
+            raise InputError(
+                "The mtd_search> operator was given more than 20 input structures. "
+                + "This would run >20 metadynamic conformational searches. If this was not a mistake, "
+                + "add the LET keyword an re-run the job."
+            )
 
     logfunction = embedder.log
     constrained_indices = _get_internal_constraints(filename, embedder)
-    constrained_distances = [embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices]
+    constrained_distances = [
+        embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
+    ]
 
-    (  
+    (
         constrained_angles_indices,
         constrained_angles_values,
         constrained_dihedrals_indices,
         constrained_dihedrals_values,
     ) = embedder._get_angle_dih_constraints()
 
-    logfunction(f'--> {filename}: Geometry optimization pre-mtd_search ({embedder.options.theory_level} via {embedder.options.calculator})')
+    logfunction(
+        f"--> {filename}: Geometry optimization pre-mtd_search ({embedder.options.theory_level} via {embedder.options.calculator})"
+    )
     return_char = "\n"
-    logfunction(f'    {len(constrained_indices)} constraints applied{": "+str(constrained_indices).replace(return_char, " ") if len(constrained_indices) > 0 else ""}')
-    
+    logfunction(
+        f"    {len(constrained_indices)} constraints applied{': ' + str(constrained_indices).replace(return_char, ' ') if len(constrained_indices) > 0 else ''}"
+    )
+
     for c, coords in enumerate(mol.coords.copy()):
-        logfunction(f"    Optimizing conformer {c+1}/{len(mol.coords)}")
+        logfunction(f"    Optimizing conformer {c + 1}/{len(mol.coords)}")
 
-        opt_coords, _, success = optimize(
-                                    mol.atoms,
-                                    coords,
-                                    calculator=embedder.options.calculator,
-                                    method=embedder.options.theory_level,
-                                    solvent=embedder.options.solvent,
-                                    charge=embedder.options.charge,
-                                    mult=embedder.options.mult,
-                                    procs=embedder.procs,
-                                    dispatcher=embedder.dispatcher,
+        opt_coords, _, success = (
+            optimize(
+                mol.atoms,
+                coords,
+                calculator=embedder.options.calculator,
+                method=embedder.options.theory_level,
+                solvent=embedder.options.solvent,
+                charge=embedder.options.charge,
+                mult=embedder.options.mult,
+                procs=embedder.procs,
+                dispatcher=embedder.dispatcher,
+                constrained_indices=constrained_indices,
+                constrained_distances=constrained_distances,
+                constrained_angles_indices=constrained_angles_indices,
+                constrained_angles_values=constrained_angles_values,
+                constrained_dihedrals_indices=constrained_dihedrals_indices,
+                constrained_dihedrals_values=constrained_dihedrals_values,
+                title=f"{filename.split('.')[0]}_conf{c + 1}",
+                debug=embedder.options.debug,
+            )
+            if embedder.options.optimization
+            else (coords, None, True)
+        )
 
-                                    constrained_indices=constrained_indices,
-                                    constrained_distances=constrained_distances,
-
-                                    constrained_angles_indices=constrained_angles_indices,
-                                    constrained_angles_values=constrained_angles_values,
-
-                                    constrained_dihedrals_indices=constrained_dihedrals_indices,
-                                    constrained_dihedrals_values=constrained_dihedrals_values,
-
-                                    title=f'{filename.split(".")[0]}_conf{c+1}',
-                                    debug=embedder.options.debug,
-
-                                ) if embedder.options.optimization else (coords, None, True)
-        
         exit_status = "" if success else "CRASHED"
-        
+
         if success:
             success = molecule_check(mol.atoms, coords, opt_coords)
             exit_status = "" if success else "SCRAMBLED"
 
         if not success:
-            dumpname = filename.split(".")[0] + f"_conf{c+1}_{exit_status}.xyz"
+            dumpname = filename.split(".")[0] + f"_conf{c + 1}_{exit_status}.xyz"
             with open(dumpname, "w") as f:
-                write_xyz(mol.atoms, opt_coords, f, title=f"{filename}, conformer {c+1}/{len(mol.coords)}, {exit_status}")
+                write_xyz(
+                    mol.atoms,
+                    opt_coords,
+                    f,
+                    title=f"{filename}, conformer {c + 1}/{len(mol.coords)}, {exit_status}",
+                )
 
-            logfunction(f"{filename}, conformer {c+1}/{len(mol.coords)} optimization {exit_status}. Inspect geometry at {dumpname}. Aborting run.")
+            logfunction(
+                f"{filename}, conformer {c + 1}/{len(mol.coords)} optimization {exit_status}. Inspect geometry at {dumpname}. Aborting run."
+            )
 
             raise FatalError(filename)
-        
+
         # update embedder structures after optimization
         mol.coords[c] = opt_coords
 
     logfunction()
 
-    # update mol and embedder graph after optimization 
+    # update mol and embedder graph after optimization
     mol.graph = graphize(mol.atoms, mol.coords[0])
     embedder.graphs = [m.graph for m in embedder.objects]
-    crest_method = getattr(embedder.options, "crestlevel", 'GFN2-XTB//GFN-FF')
+    crest_method = getattr(embedder.options, "crestlevel", "GFN2-XTB//GFN-FF")
 
-    max_workers = embedder.avail_cpus//2 or 1
-    logfunction(f'--> Performing {crest_method}' + (
-                f'{f"/{embedder.options.solvent.upper()}" if embedder.options.solvent is not None else ""} ' +
-                f'metadynamic conformational search on {filename} via CREST.\n' +
-                f'    (2 cores/thread, {max_workers} threads, {embedder.options.kcal_thresh} kcal/mol thr.)'))
+    max_workers = embedder.avail_cpus // 2 or 1
+    logfunction(
+        f"--> Performing {crest_method}"
+        + (
+            f"{f'/{embedder.options.solvent.upper()}' if embedder.options.solvent is not None else ''} "
+            + f"metadynamic conformational search on {filename} via CREST.\n"
+            + f"    (2 cores/thread, {max_workers} threads, {embedder.options.kcal_thresh} kcal/mol thr.)"
+        )
+    )
 
     if embedder.options.crestnci:
-        logfunction('--> CRESTNCI: Running crest in NCI mode (wall potential applied)')
-    
+        logfunction("--> CRESTNCI: Running crest in NCI mode (wall potential applied)")
+
     if len(mol.coords) > 1:
-        embedder.log('--> Requested conformational search on multimolecular file - will do\n' +
-                      'an individual search from each conformer (might be time-consuming).')
+        embedder.log(
+            "--> Requested conformational search on multimolecular file - will do\n"
+            + "an individual search from each conformer (might be time-consuming)."
+        )
 
     t_start = time.perf_counter()
     conformers = []
     for i, coords in enumerate(mol.coords):
-
         t_start_conf = time.perf_counter()
         try:
             conf_batch = crest_mtd_search(
-                                            mol.atoms,
-                                            coords,
+                mol.atoms,
+                coords,
+                constrained_indices=constrained_indices,
+                constrained_distances=constrained_distances,
+                constrained_angles_indices=constrained_angles_indices,
+                constrained_angles_values=constrained_angles_values,
+                constrained_dihedrals_indices=constrained_dihedrals_indices,
+                constrained_dihedrals_values=constrained_dihedrals_values,
+                solvent=embedder.options.solvent,
+                charge=mol.charge,
+                method=crest_method,
+                kcal=embedder.options.kcal_thresh,
+                ncimode=embedder.options.crestnci,
+                title=mol.rootname + "_mtd_csearch",
+                procs=2,
+                threads=max_workers,
+            )
 
-                                            constrained_indices=constrained_indices,
-                                            constrained_distances=constrained_distances,
-
-                                            constrained_angles_indices=constrained_angles_indices,
-                                            constrained_angles_values=constrained_angles_values,
-
-                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
-                                            constrained_dihedrals_values=constrained_dihedrals_values,
-
-                                            solvent=embedder.options.solvent,
-                                            charge=mol.charge,
-                                            method=crest_method,
-                                            kcal=embedder.options.kcal_thresh,
-                                            ncimode=embedder.options.crestnci,
-                                            title=mol.rootname+"_mtd_csearch",
-                                            procs=2,
-                                            threads=max_workers,
-                                        )
-            
         # if the run errors out, we retry with XTB2
         except CalledProcessError:
-            logfunction('--> Metadynamics run failed with GFN2-XTB//GFN-FF, retrying with just GFN2-XTB (slower but more stable)')
+            logfunction(
+                "--> Metadynamics run failed with GFN2-XTB//GFN-FF, retrying with just GFN2-XTB (slower but more stable)"
+            )
             conf_batch = crest_mtd_search(
-                                            mol.atoms,
-                                            coords,
-
-                                            constrained_indices=constrained_indices,
-                                            constrained_distances=constrained_distances,
-
-                                            constrained_angles_indices=constrained_angles_indices,
-                                            constrained_angles_values=constrained_angles_values,
-
-                                            constrained_dihedrals_indices=constrained_dihedrals_indices,
-                                            constrained_dihedrals_values=constrained_dihedrals_values,
-                                            
-                                            solvent=embedder.options.solvent,
-                                            charge=mol.charge,
-                                            method='GFN2-XTB', # try with XTB2
-                                            kcal=embedder.options.kcal_thresh,
-                                            ncimode=embedder.options.crestnci,
-                                            title=mol.rootname+"_mtd_csearch",
-                                            procs=2,
-                                            threads=max_workers,
-                                        )
+                mol.atoms,
+                coords,
+                constrained_indices=constrained_indices,
+                constrained_distances=constrained_distances,
+                constrained_angles_indices=constrained_angles_indices,
+                constrained_angles_values=constrained_angles_values,
+                constrained_dihedrals_indices=constrained_dihedrals_indices,
+                constrained_dihedrals_values=constrained_dihedrals_values,
+                solvent=embedder.options.solvent,
+                charge=mol.charge,
+                method="GFN2-XTB",  # try with XTB2
+                kcal=embedder.options.kcal_thresh,
+                ncimode=embedder.options.crestnci,
+                title=mol.rootname + "_mtd_csearch",
+                procs=2,
+                threads=max_workers,
+            )
 
         conformers.extend(conf_batch)
 
         elapsed = time.perf_counter() - t_start_conf
-        embedder.log(f'  Conformer {i+1:2}/{len(mol.coords):2} - generated {len(conf_batch)} structures in {time_to_string(elapsed)}')
+        embedder.log(
+            f"  Conformer {i + 1:2}/{len(mol.coords):2} - generated {len(conf_batch)} structures in {time_to_string(elapsed)}"
+        )
 
     conformers = np.concatenate(conformers)
     conformers = conformers.reshape(-1, mol.atomnos.shape[0], 3)
     # merging structures from each run in a single array
 
-    embedder.log(f'  MTD conformational search: Generated {len(conformers)} conformers in {time_to_string(time.perf_counter()-t_start)}')
+    embedder.log(
+        f"  MTD conformational search: Generated {len(conformers)} conformers in {time_to_string(time.perf_counter() - t_start)}"
+    )
     before = len(conformers)
 
     ### SIMILARITY PRUNING: TFD
@@ -598,49 +624,58 @@ def mtd_search_operator(filename, embedder):
     # conformers, _ = prune_by_moment_of_inertia(conformers, mol.atoms)
 
     ### RMSD
-    if len(conformers) < 5E4:
-        conformers, _ = prune_by_rmsd(conformers, mol.atoms, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
-    if len(conformers) < 1E3:
-        conformers, _ = prune_by_rmsd_rot_corr(conformers, mol.atoms, mol.graph, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog)
+    if len(conformers) < 5e4:
+        conformers, _ = prune_by_rmsd(
+            conformers, mol.atoms, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog
+        )
+    if len(conformers) < 1e3:
+        conformers, _ = prune_by_rmsd_rot_corr(
+            conformers,
+            mol.atoms,
+            mol.graph,
+            max_rmsd=embedder.options.rmsd,
+            debugfunction=embedder.debuglog,
+        )
 
-    embedder.log(f'  Discarded {before-len(conformers)} RMSD-similar structures ({len(conformers)} left)\n')
+    embedder.log(
+        f"  Discarded {before - len(conformers)} RMSD-similar structures ({len(conformers)} left)\n"
+    )
 
     ### PRINTOUT
-    with open(f'{mol.rootname}_mtd_confs.xyz', 'w') as f:
+    with open(f"{mol.rootname}_mtd_confs.xyz", "w") as f:
         for i, new_s in enumerate(conformers):
-            write_xyz(mol.atoms, new_s, f, title=f'Conformer {i}/{len(conformers)} from CREST MTD')
+            write_xyz(mol.atoms, new_s, f, title=f"Conformer {i}/{len(conformers)} from CREST MTD")
 
-    
     # check the structures again and warn if some look compenetrated
     embedder.check_objects_compenetration()
 
-    return f'{mol.rootname}_mtd_confs.xyz'
+    return f"{mol.rootname}_mtd_confs.xyz"
+
 
 def scan_operator(filename, embedder):
-    '''
-    Scan operator dispatcher:
+    """Scan operator dispatcher:
     2 indices: distance_scan
     4 indices: dihedral_scan
 
-    '''
+    """
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
 
-    assert len(mol.coords) == 1, 'The scan> operator works on a single .xyz geometry.'
-    assert len(mol.reactive_indices) in (2,4), 'The scan> operator needs two or four indices' + (
-                                              f'({len(mol.reactive_indices)} were provided)')
+    assert len(mol.coords) == 1, "The scan> operator works on a single .xyz geometry."
+    assert len(mol.reactive_indices) in (2, 4), "The scan> operator needs two or four indices" + (
+        f"({len(mol.reactive_indices)} were provided)"
+    )
 
     if len(mol.reactive_indices) == 2:
         return distance_scan(embedder)
-    
+
     elif len(mol.reactive_indices) == 4:
         return dihedral_scan(embedder)
 
-def distance_scan(embedder):
-    '''
-    Thought to approach or separate two reactive atoms, looking for the energy maximum.
-    Scan direction is inferred by the reactive index distance.
-    '''
 
+def distance_scan(embedder):
+    """Thought to approach or separate two reactive atoms, looking for the energy maximum.
+    Scan direction is inferred by the reactive index distance.
+    """
     embedder.t_start_run = time.perf_counter()
     mol = embedder.objects[0]
     t_start = time.perf_counter()
@@ -650,7 +685,7 @@ def distance_scan(embedder):
     coords = mol.coords[0]
 
     # getting the start distance between scan indices and start energy
-    d = norm_of(coords[i1]-coords[i2])
+    d = norm_of(coords[i1] - coords[i2])
 
     # deciding if moving atoms closer or further apart based on distance
     bonds = list(mol.graph.edges)
@@ -669,51 +704,48 @@ def distance_scan(embedder):
 
         # making sure step has the right sign
         step = 0.05 if target > d else -0.05
-        
-        max_iterations = round(abs(d-target) / abs(step))
-        embedder.log(f'--> {mol.rootname}: ({i1}-{i2}) final scan distance set to {target:.2f} A ({max_iterations} iterations)')
+
+        max_iterations = round(abs(d - target) / abs(step))
+        embedder.log(
+            f"--> {mol.rootname}: ({i1}-{i2}) final scan distance set to {target:.2f} A ({max_iterations} iterations)"
+        )
 
     # defining the maximum number of iterations
     elif step < 0:
-        smallest_d = 0.9*(pt.covalent_radius(s1)+
-                        pt.covalent_radius(s2))
-        max_iterations = round((d-smallest_d) / abs(step))
+        smallest_d = 0.9 * (pt.covalent_radius(s1) + pt.covalent_radius(s2))
+        max_iterations = round((d - smallest_d) / abs(step))
         # so that atoms are never forced closer than
         # a proportionally small distance between those two atoms.
 
     else:
-        max_d = 1.6*(pt.covalent_radius(s1)+
-                   pt.covalent_radius(s2))
-        max_iterations = round((max_d-d) / abs(step))
+        max_d = 1.6 * (pt.covalent_radius(s1) + pt.covalent_radius(s2))
+        max_iterations = round((max_d - d) / abs(step))
         # so that atoms are never spaced too far apart
 
     # logging to file and terminal
-    embedder.log(f'--> {mol.rootname} - Performing a distance scan {"approaching" if step < 0 else "separating"} indices {i1} ' +
-                 f'and {i2} - step size {round(step, 2)} A\n    Theory level is {embedder.options.theory_level}/{embedder.options.solvent or "vacuum"} ' +
-                 f'via {embedder.options.calculator}')
+    embedder.log(
+        f"--> {mol.rootname} - Performing a distance scan {'approaching' if step < 0 else 'separating'} indices {i1} "
+        + f"and {i2} - step size {round(step, 2)} A\n    Theory level is {embedder.options.theory_level}/{embedder.options.solvent or 'vacuum'} "
+        + f"via {embedder.options.calculator}"
+    )
 
     for i in range(max_iterations):
-
         t_start = time.perf_counter()
-           
-        coords, energy, _ = optimize(
-                                    mol.atoms,
-                                    coords,
-                                    
-                                    calculator=embedder.options.calculator,
-                                    ase_calc=embedder.dispatcher.ase_calc,
-                                    
-                                    constrained_indices=np.array([mol.reactive_indices]),
-                                    constrained_distances=(d,),
-                                    
-                                    solvent=embedder.options.solvent,
-                                    charge=embedder.options.charge,
-                                    mult=embedder.options.mult,
-                                    dispatcher=embedder.dispatcher,
 
-                                    title='temp',
-                                    debug=embedder.options.debug,
-                                    )
+        coords, energy, _ = optimize(
+            mol.atoms,
+            coords,
+            calculator=embedder.options.calculator,
+            ase_calc=embedder.dispatcher.ase_calc,
+            constrained_indices=np.array([mol.reactive_indices]),
+            constrained_distances=(d,),
+            solvent=embedder.options.solvent,
+            charge=embedder.options.charge,
+            mult=embedder.options.mult,
+            dispatcher=embedder.dispatcher,
+            title="temp",
+            debug=embedder.options.debug,
+        )
 
         if i == 0:
             e_0 = energy
@@ -724,12 +756,19 @@ def distance_scan(embedder):
         # print(f"------> target was {round(d, 3)} A, reached {round(norm_of(coords[mol.reactive_indices[0]]-coords[mol.reactive_indices[1]]), 3)} A")
         # saving the structure, distance and relative energy
 
-        embedder.log(f'Step {i+1:3}/{max_iterations:3} - d={d:.2f} Å    {energy-e_0:+.2f} kcal/mol - {time_to_string(time.perf_counter()-t_start)}')
+        embedder.log(
+            f"Step {i + 1:3}/{max_iterations:3} - d={d:.2f} Å    {energy - e_0:+.2f} kcal/mol - {time_to_string(time.perf_counter() - t_start)}"
+        )
 
         with open("temp_scan.xyz", "w") as f:
             for i, (s, d, e) in enumerate(zip(structures, dists, energies)):
-                write_xyz(mol.atoms, s, f, title=f'Scan point {i+1}/{len(structures)} ' +
-                        f'- d({i1}-{i2}) = {round(d, 3)} A - Rel. E = {round(e-min(energies), 2)} kcal/mol')
+                write_xyz(
+                    mol.atoms,
+                    s,
+                    f,
+                    title=f"Scan point {i + 1}/{len(structures)} "
+                    + f"- d({i1}-{i2}) = {round(d, 3)} A - Rel. E = {round(e - min(energies), 2)} kcal/mol",
+                )
 
         d += step
         # modify the target distance and reiterate
@@ -740,8 +779,8 @@ def distance_scan(embedder):
     plt.plot(
         dists,
         energies,
-        color='tab:red',
-        label='Scan energy',
+        color="tab:red",
+        label="Scan energy",
         linewidth=3,
     )
 
@@ -755,62 +794,76 @@ def distance_scan(embedder):
     plt.plot(
         d_opt,
         e_max,
-        color='gold',
-        label='Energy maximum (TS guess)',
-        marker='o',
+        color="gold",
+        label="Energy maximum (TS guess)",
+        marker="o",
         markersize=3,
     )
 
-    title = mol.rootname + ' distance scan'
+    title = mol.rootname + " distance scan"
     plt.legend()
     plt.title(title)
-    plt.xlabel(f'indices s{i1}-{i2} distance (A)')
+    plt.xlabel(f"indices s{i1}-{i2} distance (A)")
 
     if step < 0:
         plt.gca().invert_xaxis()
-        
-    plt.ylabel(f'Rel. E. (kcal/mol) - {embedder.options.theory_level}/{embedder.options.calculator}/{embedder.options.solvent}')
-    plt.savefig(f'{title.replace(" ", "_")}_plt.svg')
+
+    plt.ylabel(
+        f"Rel. E. (kcal/mol) - {embedder.options.theory_level}/{embedder.options.calculator}/{embedder.options.solvent}"
+    )
+    plt.savefig(f"{title.replace(' ', '_')}_plt.svg")
     # with open(f'{title.replace(" ", "_")}_plt.pickle', 'wb') as _f:
     #     pickle.dump(fig, _f)
 
-    ### Start structure writing 
+    ### Start structure writing
 
     # print all scan structures
-    with open(f'{mol.filename[:-4]}_scan.xyz', 'w') as f:
+    with open(f"{mol.filename[:-4]}_scan.xyz", "w") as f:
         for i, (s, d, e) in enumerate(zip(structures, dists, energies)):
-            write_xyz(mol.atoms, s, f, title=f'Scan point {i+1}/{len(structures)} ' +
-                      f'- d({i1}-{i2}) = {round(d, 2)} A - Rel. E = {round(e, 2)} kcal/mol')
+            write_xyz(
+                mol.atoms,
+                s,
+                f,
+                title=f"Scan point {i + 1}/{len(structures)} "
+                + f"- d({i1}-{i2}) = {round(d, 2)} A - Rel. E = {round(e, 2)} kcal/mol",
+            )
 
     # print the maximum on another file for convienience
-    with open(f'{mol.filename[:-4]}_scan_max.xyz', 'w') as f:
+    with open(f"{mol.filename[:-4]}_scan_max.xyz", "w") as f:
         s = structures[id_max]
         d = dists[id_max]
-        write_xyz(mol.atoms, s, f, title=f'Scan point {id_max+1}/{len(structures)} ' +
-                    f'- d({i1}-{i2}) = {round(d, 3)} A - Rel. E = {round(e_max, 3)} kcal/mol')
+        write_xyz(
+            mol.atoms,
+            s,
+            f,
+            title=f"Scan point {id_max + 1}/{len(structures)} "
+            + f"- d({i1}-{i2}) = {round(d, 3)} A - Rel. E = {round(e_max, 3)} kcal/mol",
+        )
 
-    embedder.log(f'\n--> Written {len(structures)} structures to {mol.filename[:-4]}_scan.xyz ({time_to_string(time.perf_counter() - t_start)})')
-    embedder.log(f'\n--> Written energy maximum to {mol.filename[:-4]}_scan_max.xyz\n')
+    embedder.log(
+        f"\n--> Written {len(structures)} structures to {mol.filename[:-4]}_scan.xyz ({time_to_string(time.perf_counter() - t_start)})"
+    )
+    embedder.log(f"\n--> Written energy maximum to {mol.filename[:-4]}_scan_max.xyz\n")
 
     # Log data to the embedder class
     mol.scan_data = (dists, energies)
 
-    return f'{mol.filename[:-4]}_scan.xyz'
+    return f"{mol.filename[:-4]}_scan.xyz"
+
 
 def crest_is_installed() -> bool:
-    '''
-    Returns True if a CREST installation is found.
+    """Returns True if a CREST installation is found.
     For now, only CREST 2 is supported.
 
-    '''
-    return (which('crest') is not None)
+    """
+    return which("crest") is not None
+
 
 def _get_lowest_calc(embedder=None):
-    '''
-    Returns the values for calculator,
+    """Returns the values for calculator,
     method and processors for the lowest
     theory level available from embedder or settings.
-    '''
+    """
     if embedder is None:
         if FF_OPT_BOOL:
             return (FF_CALC, DEFAULT_FF_LEVELS[FF_CALC], PROCS)
@@ -820,9 +873,9 @@ def _get_lowest_calc(embedder=None):
         return (embedder.options.ff_calc, embedder.options.ff_level, embedder.procs)
     return (embedder.options.calculator, embedder.options.theory_level, embedder.procs)
 
+
 def _get_internal_constraints(filename, embedder):
-    '''
-    '''
+    """ """
     mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
     # get embedder,objects index of molecule to get internal constraints of
 

@@ -10,7 +10,7 @@ readme = "README.md"
 description = "FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles"
 keywords = []
 authors = [{name = "Nicolò Tampellini", email = "nicolo.tampellini@yale.edu"}]
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.12, <3.13"
 dependencies = [
     "rdkit>=2025.9.3",
     "numpy",
@@ -52,13 +52,55 @@ pytest-cov = ">=7.0"
 ruff = ">=0.11"
 mypy = ">=1.18.2,<2"
 pre-commit = ">=4.2"
+fairchem-core = "*"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+aimnet = { version = "*", extras = ["ase"] }
 
 [tool.pixi.feature.dev.tasks]
 fmt = { cmd="ruff format ." }
 lint = { cmd="ruff check . --fix" }
 types = { cmd="mypy" }
-test = { cmd="pytest" }
+test = { cmd="pytest -s" }
+test_calc = { cmd="pytest -s -m calc" }
 all = { depends-on = ["fmt", "lint", "types", "test"] }
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "B",  # bugbear
+    "D",  # pydocstyle
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # pep8-naming conventions
+    "W",  # pycodestyle warnings
+    "C4", # comprehensions
+    "PL", # pylint
+    "PT", # flake8-pytest-style
+    "PIE", # misc lints
+    "PYI", # flake8-pyi
+    "TID", # tidy imports
+    "TCH", # type-checking imports
+    "RUF", # Ruff-specific rules
+    "RSE", # flake8-raise
+    "ICN001", # unconventional-import-alias
+]
+ignore = [
+    "N803", # Invalid-argument-name (non-lowercase)
+    "N806", # Non-lowercase variable in function
+    "N815", # Variable in class scope should not be mixedCase
+    "PLR0911", # Too many returns
+    "PLR0912", # Too many branches
+    "PLR0913", # Too many arguments to function call
+    "PLR0914", # Too many locals
+    "PLR0915", # Too many statements
+    "PLR1702", # Too many nested-blocks
+    "PLR2004", # Magic value comparison
+    "PT013", # Incorrect import of `pytest`
+]
 
 [project.scripts]
 firecode = "firecode.__main__:main"

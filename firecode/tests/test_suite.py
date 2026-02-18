@@ -1,0 +1,92 @@
+"""Tests for FIRECODE."""
+
+import os
+from pathlib import Path
+
+import pytest
+
+from firecode.embedder import Embedder
+from firecode.optimization_methods import Opt_func_dispatcher
+from firecode.utils import FolderContext, HiddenPrints, clean_directory, read_xyz
+
+HERE = Path(__file__).resolve().parent
+os.chdir(HERE)
+
+
+def run_firecode_input(name) -> None:
+    """Runs a FIRECODE input file and checks that it exits successfully."""
+    with FolderContext(name):
+        with pytest.raises(SystemExit) as result:
+            with HiddenPrints():
+                embedder = Embedder(f"{name}.txt", stamp=name)
+                embedder.run()
+
+        assert result.type == SystemExit
+        assert result.value.code == 0
+
+        clean_directory(
+            to_remove_startswith=["firecode"],
+            to_remove_endswith=[".log", ".out", ".svg"],
+            to_remove_contains=["clockwise"],
+        )
+
+
+@pytest.mark.embed
+def test_string() -> None:
+    """Tests a simple string embed."""
+    run_firecode_input("embed_string")
+
+
+@pytest.mark.embed
+def test_cyclical() -> None:
+    """Tests a simple cyclical embed."""
+    run_firecode_input("embed_cyclical")
+
+
+@pytest.mark.embed
+def test_trimolecular() -> None:
+    """Tests a simple trimolecular embed."""
+    run_firecode_input("embed_trimolecular")
+
+
+@pytest.mark.embed
+def test_dihedral() -> None:
+    """Tests a simple dihedral scan."""
+    run_firecode_input("scan_dihedral")
+
+
+def run_calculator_test(calculator) -> None:
+    """Tests a generic calculator."""
+    mol = read_xyz("C2H4.xyz")
+    dispatcher = Opt_func_dispatcher(calculator)
+    _, _, success = dispatcher.opt_func(
+        atoms=mol.atoms,
+        coords=mol.coords[0],
+        calculator=calculator,
+        maxiter=5,
+    )
+    assert success
+
+
+@pytest.mark.calc
+def test_calc_xtb() -> None:
+    """Tests the FIRECODE XTB calculator."""
+    run_calculator_test("XTB")
+
+
+@pytest.mark.calc
+def test_calc_tblite() -> None:
+    """Tests the ASE TBLITE calculator."""
+    run_calculator_test("TBLITE")
+
+
+@pytest.mark.calc
+def test_calc_aimnet2() -> None:
+    """Tests the ASE AIMNET2 calculator."""
+    run_calculator_test("AIMNET2")
+
+
+@pytest.mark.calc
+def test_calc_uma() -> None:
+    """Tests the ASE UMA calculator."""
+    run_calculator_test("UMA")
