@@ -19,29 +19,33 @@ along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
+
+
 class ZeroCandidatesError(Exception):
     """Raised at any time during run if all
     candidates are discarded.
     """
+
 
 class InputError(Exception):
     """Raised when reading the input file if
     something is wrong.
     """
 
+
 class TriangleError(Exception):
     """Raised from polygonize if it cannot build
     a triangle with the given side lengths.
     """
 
+
 class SegmentedGraphError(Exception):
-    """Thrown by Clustered CSearch when graph has more than one connected component.
-    """
+    """Thrown by Clustered CSearch when graph has more than one connected component."""
+
 
 class NoOrbitalError(Exception):
-    """Thrown when trying to access orbital data when they are not present
-    """
+    """Thrown when trying to access orbital data when they are not present"""
+
 
 class FatalError(Exception):
-    """Thrown when a molecule optimization crashed or scrambled fatally
-    """
+    """Thrown when a molecule optimization crashed or scrambled fatally"""

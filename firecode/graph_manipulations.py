@@ -19,6 +19,7 @@ along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
+
 from copy import deepcopy
 
 import numpy as np
@@ -34,9 +35,7 @@ from firecode.algebra import norm_of
 
 
 def _get_planar_angles(graph):
-    """Returns list of triplets that indicate angles.
-
-    """
+    """Returns list of triplets that indicate angles."""
     allpaths = []
     for node in graph:
         allpaths.extend(find_paths(graph, node, 2))
@@ -47,8 +46,7 @@ def _get_planar_angles(graph):
         i1, _, i3 = path
         t_id = tuple(sorted((i1, i3)))
 
-        if (t_id not in t_ids):
-
+        if t_id not in t_ids:
             triplets.append(path)
             t_ids.append(t_id)
 
@@ -56,6 +54,7 @@ def _get_planar_angles(graph):
     # Rejects (3,2,1) if (1,2,3) is present
 
     return np.array(triplets)
+
 
 def is_sigmatropic(mol, conf):
     """mol: Hypermolecule object
@@ -71,20 +70,16 @@ def is_sigmatropic(mol, conf):
     Used to set the mol.sigmatropic attribute, that affects orbital
     building (p or n lobes) for Ketone and Imine reactive atoms classes.
     """
-    sp2_types = (
-                'Ketone',
-                'Imine',
-                'sp2',
-                'sp',
-                'bent carbene'
-                )
+    sp2_types = ("Ketone", "Imine", "sp2", "sp", "bent carbene")
     if len(mol.reactive_indices) == 2:
-
         i1, i2 = mol.reactive_indices
         if norm_of(mol.coords[conf][i1] - mol.coords[conf][i2]) < 3:
-
-            if all([str(r_atom) in sp2_types for r_atom in mol.reactive_atoms_classes_dict[conf].values()]):
-
+            if all(
+                [
+                    str(r_atom) in sp2_types
+                    for r_atom in mol.reactive_atoms_classes_dict[conf].values()
+                ]
+            ):
                 paths = all_simple_paths(mol.graph, i1, i2)
 
                 for path in paths:
@@ -92,13 +87,14 @@ def is_sigmatropic(mol, conf):
 
                     full_sp2 = True
                     for index in path:
-                        if len(mol.graph.neighbors(index))-2 > 1:
+                        if len(mol.graph.neighbors(index)) - 2 > 1:
                             full_sp2 = False
                             break
 
                     if full_sp2:
                         return True
     return False
+
 
 def is_vicinal(mol):
     """A hypermolecule is considered vicinal when:
@@ -110,27 +106,29 @@ def is_vicinal(mol):
     building (BH4 or agostic-like behavior) for Sp3 and Single Bond reactive atoms classes.
     """
     vicinal_types = (
-                'sp3',
-                'Single Bond',
-                )
+        "sp3",
+        "Single Bond",
+    )
 
     if len(mol.reactive_indices) == 2:
-
         i1, i2 = mol.reactive_indices
 
-        if all([str(r_atom) in vicinal_types for r_atom in mol.reactive_atoms_classes_dict[0].values()]):
+        if all(
+            [str(r_atom) in vicinal_types for r_atom in mol.reactive_atoms_classes_dict[0].values()]
+        ):
             if i1 in mol.graph.neighbors(i2):
                 return True
 
     return False
 
+
 def is_sp_n(index, graph, n):
-    """Returns True if the sp_n value matches the input
-    """
+    """Returns True if the sp_n value matches the input"""
     sp_n = get_sp_n(index, graph)
     if sp_n == n:
         return True
     return False
+
 
 def get_sum_graph(graphs, extra_edges=None):
     """Creates a graph containing all graphs, added in
@@ -144,16 +142,16 @@ def get_sum_graph(graphs, extra_edges=None):
     for g in extra:
         n = len(out.nodes())
         for e1, e2 in g.edges():
-            out.add_edge(e1+n, e2+n)
+            out.add_edge(e1 + n, e2 + n)
 
         cum_atoms += list(get_node_attributes(g, "atoms").values())
 
-    out.is_single_molecule = (len(list(connected_components(out))) == 1)
+    out.is_single_molecule = len(list(connected_components(out))) == 1
 
     if extra_edges is not None:
         for e1, e2 in extra_edges:
             out.add_edge(e1, e2)
 
-    set_node_attributes(out, dict(enumerate(cum_atoms)), 'atoms')
+    set_node_attributes(out, dict(enumerate(cum_atoms)), "atoms")
 
     return out

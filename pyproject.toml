@@ -52,13 +52,17 @@ pytest-cov = ">=7.0"
 ruff = ">=0.11"
 mypy = ">=1.18.2,<2"
 pre-commit = ">=4.2"
+fairchem-core = "*"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+aimnet = { version = "*", extras = ["ase"] }
 
 [tool.pixi.feature.dev.tasks]
 fmt = { cmd="ruff format ." }
 lint = { cmd="ruff check . --fix" }
 types = { cmd="mypy" }
-test = { cmd="pytest" }
-test_s = { cmd="pytest -s" }
+test = { cmd="pytest -s" }
+test_calc = { cmd="pytest -s -m calc" }
 all = { depends-on = ["fmt", "lint", "types", "test"] }
 
 [tool.ruff]

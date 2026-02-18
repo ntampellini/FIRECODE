@@ -14,18 +14,18 @@ import os
 import sys
 
 # sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.join(os.path.abspath('..'), 'firecode'))
+sys.path.insert(0, os.path.join(os.path.abspath(".."), "firecode"))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'firecode'
-copyright = '2021-2026, Nicolò Tampellini'
-author = 'Nicolò Tampellini'
+project = "firecode"
+copyright = "2021-2026, Nicolò Tampellini"
+author = "Nicolò Tampellini"
 
 # The full version, including alpha/beta/rc tags
 
-release = '1.1.0'
+release = "1.1.0"
 # release='latest'
 
 # -- General configuration ---------------------------------------------------
@@ -36,12 +36,12 @@ release = '1.1.0'
 extensions = ["sphinx.ext.todo", "sphinx.ext.viewcode", "sphinx.ext.autodoc"]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -49,7 +49,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -57,9 +57,8 @@ html_theme = 'sphinx_rtd_theme'
 # html_static_path = ['_static']
 
 html_theme_options = {
-
-    'logo_only' : True,
+    "logo_only": True,
 }
 
-html_logo = 'images/logo.png'
-github_url = 'https://github.com/ntampellini/firecode'
+html_logo = "images/logo.png"
+github_url = "https://github.com/ntampellini/firecode"

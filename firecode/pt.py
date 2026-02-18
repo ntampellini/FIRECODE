@@ -19,6 +19,7 @@ along with this program. If not, see
 https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
+
 from dataclasses import dataclass
 
 from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
@@ -26,7 +27,6 @@ from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
 
 @dataclass
 class PeriodicTable:
-
     def covalent_radius(self, symbol):
         return RADII_TABLE[symbol]
 
@@ -35,5 +35,6 @@ class PeriodicTable:
 
     def number(self, symbol):
         return INDEX_TABLE[symbol]
+
 
 pt = PeriodicTable()
