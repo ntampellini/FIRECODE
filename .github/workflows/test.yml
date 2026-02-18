@@ -22,13 +22,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: prefix-dev/setup-pixi@v0.9.1
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
-          pixi-version: v0.56.0
+          pixi-version: v0.63.2
           cache: true
           environments: dev
 
-      - run: pixi install -e dev
+      - run: pixi install -e dev --locked
       # - run: pixi run fmt
       # - run: pixi run lint
       # - run: pixi run types
