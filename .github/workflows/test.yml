@@ -4,6 +4,7 @@ on:
   pull_request: {}
   push:
     branches: main
+    branches: feature/**
 
 jobs:
   test:
@@ -34,6 +35,7 @@ jobs:
       # - run: pixi run lint
       # - run: pixi run types
       - run: pixi run test -m codecov --cov --cov-report=xml:coverage.xml
+      - run: head -3 coverage.xml
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
