@@ -3,8 +3,9 @@ name: Test
 on:
   pull_request: {}
   push:
-    branches: main
-    branches: feature/**
+    branches:
+    - main
+    - feature/**
 
 jobs:
   test:
