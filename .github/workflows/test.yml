@@ -35,7 +35,7 @@ jobs:
       # - run: pixi run fmt
       # - run: pixi run lint
       # - run: pixi run types
-      - run: pixi run test_cov --cov --cov-report=xml:coverage.xml
+      - run: pixi run pytest -s -m codecov --cov=firecode --cov-report=xml:coverage.xml firecode/tests/test_suite.py
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
