@@ -6,6 +6,10 @@
 <!-- FINALSPLEVEL keyword? -->
  <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer-->
 
+## FIRECODE 1.5.2 🔥 (WIP)
+- Broken up installation into dedicated modules: minimal (`firecode`) and MLIPs (`firecode[aimnet2]`, `firecode[uma]`, `firecode[full]`)
+- Updated tests infrastructure and added CodeCov CI.
+
 ## FIRECODE 1.5.1 🔥 (February 17 2026)
 - Imports bugfixes.
 - Restructured setup to use [Pixi](https://pixi.prefix.dev/latest/).
@@ -69,7 +73,7 @@
 - Informative suggestions: keywords that are not understood can generate suggestion of known keywords to use instead.
 - Removed rmsd library dependency for local numba numpy implementation.
 - Increased similarity_refining thresholds for the maximum number of structures to be compared: 1E5 for RMSD and MOI, 1E4 for rotationally corrected RMSD. Added printouts in log if we skip a pruning stage because the ensemble is too large.
-- Fixed a bug in _get_rotation_mask that would rotate the wrong part of the molecule (spotted because prune_by_rmsd_rot_corr would not reject some molecules that it should have) 
+- Fixed a bug in _get_rotation_mask that would rotate the wrong part of the molecule (spotted because prune_by_rmsd_rot_corr would not reject some molecules that it should have)
 - Added a debug messages printout function for the Pruner class, which by default is set to embedder.debuglog
 - Added support for AIMNET2 Pytorch models, including GPU support, with the package aimnet2-firecode. If a solvent is specified, the ALPB ΔGsolv (XTB) is added to the vacuum SP EE.
 - Removed support for the THREADS keyword and command line setting, as the number of workers in every multithreaded parallelism is now automated.
@@ -99,10 +103,10 @@
 - Various small bugfixes/graphic restyling
 - Stuctures are optimized at embedder.options.theory_level before running the mtd_search> operator, and a FatalError is raised if they scramble during this process. This increases the robustness of the workflow by avoiding changes in the molecular graph if the input structure is bad.
 - Added a warning printout system to the Embedder class, via logging and appending strings to the embedder.warnings list.
-- Added a saturation and compenetration check for input molecules, that warns about potential bad geometries. 
+- Added a saturation and compenetration check for input molecules, that warns about potential bad geometries.
 
 ## 0.4.10 (February 24, 2024)
-- Reduced/summarized printouts for loose to tight optimization steps. 
+- Reduced/summarized printouts for loose to tight optimization steps.
 <!-- - Removed call to compenetration_refining() on input ensemble: it is usually already pruned for compenetration for embed runs, and other ensembles (for example from "refine> mtd>" runs coming from CREST) benefit from relaxing eventual clashes that are present. -->
 
 ## 0.4.9 (February 22, 2024)

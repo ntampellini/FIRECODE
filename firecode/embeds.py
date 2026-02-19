@@ -132,7 +132,7 @@ def string_embed(embedder):
         s = (
             "\n--> Cyclical embed did not find any suitable disposition of molecules.\n"
             + "    This is probably because the two molecules cannot find a correct interlocking pose.\n"
-            + "    Try expanding the conformational space with the csearch> operator or see the SHRINK keyword."
+            + "    Try expanding the conformational space with the firecode_search> operator or see the SHRINK keyword."
         )
         embedder.log(s, p=False)
         raise ZeroCandidatesError(s)

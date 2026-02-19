@@ -68,7 +68,7 @@ def operate(input_string, embedder):
         embedder.log(f'--> Dry run requested: skipping operator "{input_string}"')
         return filename
 
-    elif "csearch>" in input_string:
+    elif "firecode_search>" in input_string:
         outname = csearch_operator(filename, embedder)
 
     elif "opt>" in input_string:
