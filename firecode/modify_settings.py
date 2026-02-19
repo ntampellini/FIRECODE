@@ -52,16 +52,20 @@ def run_setup():
 
     #########################################################################################
 
-    properties["FF_CALC"] = inquirer.select(
+    selected_calc = inquirer.select(
         message="What Force Field calculator would you like to use?",
         choices=(
+            Choice(value=None, name="None (turn off FF optimization)"),
             Choice(value="XTB", name="XTB"),
-            Choice(value=None, name="None"),
         ),
-        default="XTB",
+        default=None,
     ).execute()
 
-    properties["FF_OPT_BOOL"] = properties["FF_CALC"] is not None
+    if selected_calc is not None:
+        properties["FF_CALC"] = selected_calc
+        properties["FF_OPT_BOOL"] = True
+    else:
+        properties["FF_OPT_BOOL"] = False
 
     properties["CALCULATOR"] = inquirer.select(
         message="What main calculator would you like to use?",
@@ -85,12 +89,13 @@ def run_setup():
 
     #########################################################################################
 
-    properties["PROCS"] = inquirer.text(
-        message=f"How many cores should {properties['CALCULATOR']} jobs run on?:",
-        default=str(properties["PROCS"]),
-        validate=lambda inp: inp.isdigit(),
-        filter=int,
-    ).execute()
+    if properties["CALCULATOR"] in ["ORCA", "XTB"]:
+        properties["PROCS"] = inquirer.text(
+            message=f"How many cores should {properties['CALCULATOR']} jobs run on?:",
+            default=str(properties["PROCS"]),
+            validate=lambda inp: inp.isdigit(),
+            filter=int,
+        ).execute()
 
     if properties["CALCULATOR"] == "ORCA":
         properties["MEM_GB"] = inquirer.text(
@@ -103,13 +108,14 @@ def run_setup():
     #########################################################################################
 
     rank = {
-        "ORCA": 1,
-        "XTB": 2,
+        "XTB": 1,
+        "TBLITE": 2,
         "AIMNET2": 3,
         "UMA": 4,
+        "ORCA": 5,
     }
 
-    q = "'"
+    q = '"'
 
     with open("settings.py", "r") as f:
         lines = f.readlines()
@@ -122,7 +128,8 @@ def run_setup():
             FF_OPT_BOOL = properties["FF_OPT_BOOL"]
 
         if "FF_CALC =" in line:
-            lines[_l] = "FF_CALC = " + q + str(properties["FF_CALC"]) + q + "\n"
+            _q = q if properties["FF_CALC"] is not None else ""
+            lines[_l] = "FF_CALC = " + _q + str(properties["FF_CALC"]) + _q + "\n"
             FF_CALC = properties["FF_CALC"]
 
         elif "CALCULATOR =" in line:
@@ -184,12 +191,13 @@ def run_setup():
     with open("settings.py", "w") as f:
         f.write("".join(lines))
 
-    print(r"\FIRECODE setup performed correctly.")
+    print("\nFIRECODE setup performed correctly.")
 
     ff = f"{FF_CALC}/{DEFAULT_FF_LEVELS[FF_CALC]}" if FF_OPT_BOOL else "Turned off"
     opt = f"{CALCULATOR}/{DEFAULT_LEVELS[CALCULATOR]}"
-    s = f"  FF      : {ff}\n  OPT     : {opt}\n  PROCS   : {PROCS}"
-    s += f"\n  MEM     : {MEM_GB} GB"
+
+    s = f"  FF OPT  : {ff}\n  OPT     : {opt}\n  PROCS   : {PROCS}"
+    s += f"\n  MEM     : {MEM_GB} GB\n"
 
     print(s)
 

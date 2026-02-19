@@ -27,7 +27,7 @@ FF_OPT_BOOL = False
 # Whether to run Force Field optimization
 # prior to the final one.
 
-FF_CALC = "XTB"
+FF_CALC = None
 # Calculator to perform Force Field optimizations.
 # Possibilites are:
 # 'XTB' : GFN-FF method
@@ -37,9 +37,9 @@ DEFAULT_FF_LEVELS = {
 }
 # Default levels used to run calculations, overridden by FFLEVEL keyword
 
-CALCULATOR = "XTB"
+CALCULATOR = "TBLITE"
 # Default calculator used to run geometry optimization.
-# Possibilites are:
+# Possibilites are (see default levels below)
 
 SINGLE_THREAD_BOOL = True
 # Enforce the use of a single thread in multimolecular optimization.
@@ -51,10 +51,10 @@ UMA_MODEL_PATH = "./uma-s-1p1.pt"
 
 DEFAULT_LEVELS = {
     "ORCA": "PM3",
-    "XTB": "GFN2-xTB",
+    "TBLITE": "GFN2-xTB",
     "AIMNET2": "wB97M-D3",
     "UMA": "OMOL",
-    "TBLITE": "GFN2-xTB",
+    "ORCA": "PM3",
 }
 # Default levels used to run calculations, overridden by LEVEL keyword
 
