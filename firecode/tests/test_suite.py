@@ -10,12 +10,10 @@ from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.utils import FolderContext, HiddenPrints, clean_directory, read_xyz
 
 HERE = Path(__file__).resolve().parent
-os.chdir(HERE)
-
 
 def run_firecode_input(name) -> None:
     """Runs a FIRECODE input file and checks that it exits successfully."""
-    with FolderContext(name):
+    with FolderContext(HERE / name):
         with pytest.raises(SystemExit) as result:
             with HiddenPrints():
                 embedder = Embedder(f"{name}.txt", stamp=name)
@@ -61,7 +59,7 @@ def test_dihedral() -> None:
 
 def run_calculator_test(calculator) -> None:
     """Tests a generic calculator."""
-    mol = read_xyz("C2H4.xyz")
+    mol = read_xyz(HERE / "C2H4.xyz")
     dispatcher = Opt_func_dispatcher(calculator)
     _, _, success = dispatcher.opt_func(
         atoms=mol.atoms,

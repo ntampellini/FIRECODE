@@ -20,22 +20,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
+      # - uses: actions/setup-python@v6
+      #   with:
+      #     python-version: ${{ matrix.python-version }}
 
       - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.63.2
           cache: true
           environments: dev
-          locked: false
+          # locked: false
+          locked: true
 
       - run: pixi install -e dev --locked
       # - run: pixi run fmt
       # - run: pixi run lint
       # - run: pixi run types
-      - run: pixi run pytest -s -m codecov --cov=firecode --cov-report=xml:coverage.xml firecode/tests/test_suite.py
+      - run: pixi run -e dev test_cov 
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
