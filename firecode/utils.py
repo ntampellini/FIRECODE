@@ -25,6 +25,7 @@ import re
 import shutil
 import sys
 import time
+from pathlib import Path
 from shutil import rmtree
 from subprocess import CalledProcessError, getoutput, run
 
@@ -669,16 +670,17 @@ class NewFolderContext:
     """
 
     def __init__(self, new_folder_name, delete_after=True):
-        self.new_folder_name = new_folder_name
+        self.new_folder_name = os.path.join(os.getcwd(), new_folder_name)
         self.delete_after = delete_after
 
     def __enter__(self):
         # create working folder and cd into it
-        if self.new_folder_name in os.listdir():
-            shutil.rmtree(os.path.join(os.getcwd(), self.new_folder_name))
+        shutil.rmtree(self.new_folder_name, ignore_errors=True)
 
-        os.mkdir(self.new_folder_name)
-        os.chdir(os.path.join(os.getcwd(), self.new_folder_name))
+        new_dir = Path(self.new_folder_name)
+        new_dir.mkdir()
+
+        os.chdir(self.new_folder_name)
 
     def __exit__(self, *args):
         # get out of working folder
@@ -686,7 +688,7 @@ class NewFolderContext:
 
         # and eventually delete it
         if self.delete_after:
-            shutil.rmtree(os.path.join(os.getcwd(), self.new_folder_name))
+            shutil.rmtree(self.new_folder_name)
 
 
 class FolderContext:

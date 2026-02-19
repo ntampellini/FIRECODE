@@ -2,13 +2,13 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from itertools import permutations
-from shutil import copy, rmtree
+from shutil import copy
 
 import numpy as np
 from prism_pruner.utils import time_to_string
 
 from firecode.errors import InputError, ZeroCandidatesError
-from firecode.utils import cartesian_product, suppress_stdout_stderr, timing_wrapper
+from firecode.utils import HiddenPrints, NewFolderContext, cartesian_product, timing_wrapper
 
 
 def multiembed_dispatcher(embedder):
@@ -93,57 +93,52 @@ def run_child_embedder(
 ):
     from firecode.embedder import Embedder, RunEmbedding
 
-    start_dir = os.getcwd()
     foldername = f"firecode_embed{i + 1}"
     (ix_1, ix_2), (iy_1, iy_2) = constrained_indices
 
-    # create a dedicated folder
-    if not os.path.isdir(os.path.join(os.getcwd(), foldername)):
-        os.mkdir(foldername)
+    parent_dir = os.getcwd()
 
-    # copy structure files into it
-    copy(os.path.join(os.getcwd(), mol1_name), os.path.join(os.getcwd(), foldername))
-    copy(os.path.join(os.getcwd(), mol2_name), os.path.join(os.getcwd(), foldername))
+    # work in a dedicated folder
+    with NewFolderContext(foldername, delete_after=not options.debug):
+        # copy structure files into it
+        copy("../" + mol1_name, mol1_name)
+        copy("../" + mol2_name, mol2_name)
 
-    os.chdir(foldername)
-    child_name = f"embed{i + 1}_input.txt"
+        child_name = f"embed{i + 1}_input.txt"
 
-    with open(child_name, "w") as f:
-        extra = ""
-        extra += " debug" if options.debug else ""
-        extra += " simpleorbitals" if options.simpleorbitals else ""
-        extra += f" shrink={options.shrink_multiplier}" if options.shrink else ""
+        with open(child_name, "w") as f:
+            extra = ""
+            extra += " debug" if options.debug else ""
+            extra += " simpleorbitals" if options.simpleorbitals else ""
+            extra += f" shrink={options.shrink_multiplier}" if options.shrink else ""
 
-        f.write(f"noopt rigid{extra}\n")
-        f.write(f"{mol1_name} {ix_1}x {iy_1}y\n")
-        f.write(f"{mol2_name} {ix_2}x {iy_2}y\n")
+            f.write(f"noopt rigid{extra}\n")
+            f.write(f"{mol1_name} {ix_1}x {iy_1}y\n")
+            f.write(f"{mol2_name} {ix_2}x {iy_2}y\n")
 
-    with suppress_stdout_stderr():
-        child_name = os.path.join(os.getcwd(), child_name)
-        child_embedder = Embedder(child_name, f"embed{i + 1}")
-        child_embedder = RunEmbedding(child_embedder)
+        with HiddenPrints():
+            child_name = os.path.join(os.getcwd(), child_name)
 
-        child_embedder._set_reactive_atoms_cumnums()
-        child_embedder.write_mol_info()
-        child_embedder.log(f"\n--> FIRECODE multiembed child process - arrangement {i + 1}")
-        child_embedder.t_start_run = time.perf_counter()
+            child_embedder = Embedder(child_name, stamp=f"embed{i + 1}")
+            child_embedder = RunEmbedding(child_embedder)
 
-        try:
-            child_embedder.generate_candidates()
-            child_embedder.compenetration_refining()
-            child_embedder.fitness_refining()
-            child_embedder.similarity_refining(rmsd=False, verbose=True)
-            child_embedder.write_structures("unoptimized", energies=False)
+            child_embedder._set_reactive_atoms_cumnums()
+            child_embedder.write_mol_info()
+            child_embedder.log(f"\n--> FIRECODE multiembed child process - arrangement {i + 1}")
+            child_embedder.t_start_run = time.perf_counter()
 
-        except ZeroCandidatesError:
-            child_embedder.structures = []
+            try:
+                child_embedder.generate_candidates()
+                child_embedder.compenetration_refining()
+                child_embedder.fitness_refining()
+                child_embedder.similarity_refining(rmsd=False, verbose=True)
+                child_embedder.write_structures("unoptimized", energies=False)
 
-        child_embedder.log(
-            f"\n--> Child process terminated ({time_to_string(time.perf_counter() - child_embedder.t_start_run, verbose=True)})"
-        )
+            except ZeroCandidatesError:
+                child_embedder.structures = []
 
-        os.chdir(start_dir)
-        if not options.debug:
-            rmtree(os.path.join(os.getcwd(), foldername))
+            child_embedder.log(
+                f"\n--> Child process terminated ({time_to_string(time.perf_counter() - child_embedder.t_start_run, verbose=True)})"
+            )
 
     return child_embedder.structures, child_embedder.constrained_indices

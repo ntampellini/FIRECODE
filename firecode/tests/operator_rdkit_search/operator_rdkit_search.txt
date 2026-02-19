@@ -1,0 +1,2 @@
+calc=xtb level=gfn-ff ffopt=off
+refine> rdkit_search> opt> butane.xyz
