@@ -24,8 +24,9 @@ import os
 
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
+from InquirerPy.validator import PathValidator
 
-from firecode.settings import DEFAULT_FF_LEVELS, DEFAULT_LEVELS
+from firecode.settings import DEFAULT_FF_LEVELS, DEFAULT_LEVELS, UMA_MODEL_PATH
 
 
 def run_setup():
@@ -44,6 +45,7 @@ def run_setup():
         "CALCULATOR": None,
         "NEW_DEFAULT": None,
         "NEW_COMMAND": None,
+        "UMA_MODEL_PATH": None,
         "PROCS": 4,
         "MEM_GB": 4,
     }
@@ -88,6 +90,13 @@ def run_setup():
     ).execute()
 
     #########################################################################################
+
+    if properties["CALCULATOR"] == "UMA":
+        properties["UMA_MODEL_PATH"] = inquirer.filepath(
+            message="Please specify the location of the UMA model:",
+            default=UMA_MODEL_PATH,
+            validate=PathValidator(is_file=True, message="Please specify a file"),
+        ).execute()
 
     if properties["CALCULATOR"] in ["ORCA", "XTB"]:
         properties["PROCS"] = inquirer.text(
@@ -188,6 +197,9 @@ def run_setup():
             lines[_l] = "MEM_GB = " + str(properties["MEM_GB"]) + "\n"
             MEM_GB = properties["MEM_GB"]
 
+        elif "UMA_MODEL_PATH =" in line:
+            lines[_l] = "UMA_MODEL_PATH = " + q + properties["UMA_MODEL_PATH"] + q + "\n"
+
     with open("settings.py", "w") as f:
         f.write("".join(lines))
 
@@ -196,8 +208,13 @@ def run_setup():
     ff = f"{FF_CALC}/{DEFAULT_FF_LEVELS[FF_CALC]}" if FF_OPT_BOOL else "Turned off"
     opt = f"{CALCULATOR}/{DEFAULT_LEVELS[CALCULATOR]}"
 
-    s = f"  FF OPT  : {ff}\n  OPT     : {opt}\n  PROCS   : {PROCS}"
-    s += f"\n  MEM     : {MEM_GB} GB\n"
+    s = f"  FF OPT    : {ff}\n  OPT       : {opt}\n  PROCS     : {PROCS}"
+    s += f"\n  MEM       : {MEM_GB} GB"
+
+    if properties["CALCULATOR"] == "UMA":
+        s += f"\n  UMA MODEL : {properties['UMA_MODEL_PATH']}"
+
+    s += "\n"
 
     print(s)
 

@@ -37,7 +37,7 @@ DEFAULT_FF_LEVELS = {
 }
 # Default levels used to run calculations, overridden by FFLEVEL keyword
 
-CALCULATOR = "TBLITE"
+CALCULATOR = "XTB"
 # Default calculator used to run geometry optimization.
 # Possibilites are (see default levels below)
 
@@ -46,11 +46,11 @@ SINGLE_THREAD_BOOL = True
 # Multithread optimization is only possible with XTB, TBLITE and ORCA calculators
 # but may suffer from performance issues on some machines.
 
-UMA_MODEL_PATH = "./uma-s-1p1.pt"
+UMA_MODEL_PATH = "(set with `firecode -s`)"
 # Path of UMA model to load, either relative (to firecode/calculators/) or absolute
 
 DEFAULT_LEVELS = {
-    "ORCA": "PM3",
+    "XTB": "GFN2-xTB",
     "TBLITE": "GFN2-xTB",
     "AIMNET2": "wB97M-D3",
     "UMA": "OMOL",

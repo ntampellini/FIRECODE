@@ -38,6 +38,6 @@ repos:
     name: pytest
     stages: [pre-commit, pre-push]
     language: system
-    entry: pixi run test
+    entry: pixi run -e dev pytest -s -m codecov
     types: [python]
     pass_filenames: false
