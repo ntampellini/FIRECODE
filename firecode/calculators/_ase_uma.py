@@ -42,7 +42,7 @@ def get_uma_calc(method="omol", logfunction=None):
         predictor = load_predict_unit(path, device="cuda" if gpu_bool else "cpu")
 
     except FileNotFoundError:
-        raise FileNotFoundError(f"UMA model at path {path} does not found.")
+        raise FileNotFoundError(f'Invalid path for UMA model: UMA_MODEL_PATH="{path}".')
 
     ase_calc = FAIRChemCalculator(predictor, task_name=method.lower())
     return ase_calc
