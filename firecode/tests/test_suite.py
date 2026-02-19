@@ -1,6 +1,5 @@
 """Tests for FIRECODE."""
 
-import os
 from pathlib import Path
 
 import pytest
@@ -66,20 +65,20 @@ def run_firecode_input(name) -> None:
         clean_directory(
             to_remove_startswith=["firecode"],
             to_remove_endswith=[".log", ".out", ".svg"],
-            to_remove_contains=["clockwise"],
+            to_remove_contains=["clockwise", "_scan", "_confs", "_opt"],
         )
 
 
 @pytest.mark.embed
 @pytest.mark.codecov
-def test_string() -> None:
+def test_embed_string() -> None:
     """Tests a simple string embed."""
     run_firecode_input("embed_string")
 
 
 @pytest.mark.embed
 @pytest.mark.codecov
-def test_cyclical() -> None:
+def test_embed_cyclical() -> None:
     """Tests a simple cyclical embed."""
     run_firecode_input("embed_cyclical")
 
@@ -90,11 +89,20 @@ def test_trimolecular() -> None:
     """Tests a simple trimolecular embed."""
     run_firecode_input("embed_trimolecular")
 
+
+# @pytest.mark.embed
+# @pytest.mark.codecov
+# def test_embed_multimolecular() -> None:
+#     """Tests a simple multimolecular embed."""
+#     run_firecode_input("embed_multimolecular")
+
+
 @pytest.mark.scan
 @pytest.mark.codecov
 def test_scan_linear() -> None:
     """Tests a simple linear scan."""
     run_firecode_input("scan_linear")
+
 
 @pytest.mark.scan
 @pytest.mark.codecov

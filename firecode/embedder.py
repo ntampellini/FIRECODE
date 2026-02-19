@@ -126,7 +126,7 @@ class Embedder:
 
         log_filename = f"firecode_{self.stamp}.log"
         self.logfile = open(log_filename, "a", buffering=1, encoding="utf-8")
-        logging.basicConfig(filename=log_filename, filemode="a")
+        logging.basicConfig(filename=log_filename, filemode="a", encoding="utf-8")
 
         try:
             self.write_banner_and_info()
@@ -441,32 +441,65 @@ class Embedder:
         self.pairings_dict = {i: {} for i, _ in enumerate(self.objects)}
 
         # removing constraint lines from mol_lines, saving constraints
-        mol_and_constr_lines = deepcopy(self.mol_lines)
+        mol_and_constr_lines = [line for line in self.mol_lines if line.strip() != ""]
         self.mol_lines = []
 
-        for line in mol_and_constr_lines:
+        # lines starting with a space are constraints or attributes
+        for _l, line in enumerate(mol_and_constr_lines):
             if line[0] == " ":
-                mol = self.objects[len(self.mol_lines) - 1]
-                try:
-                    parts = line.split()
-                    indices = [int(i) for i in parts[:-1]]
-
-                    # if value is auto, take current value
-                    if parts[-1] == "auto":
-                        if len(indices) == 3:
-                            target = point_angle(*mol.coords[0][np.array(indices)])
-                        elif len(indices) == 4:
-                            target = dihedral(mol.coords[0][np.array(indices)])
-                    else:
-                        target = float(parts[-1])
-
-                    c = Constraint(indices, target)
-                    mol.constraints.append(c)
-
-                except Exception:
-                    raise Exception(
-                        f'Error while parsing line "{line}". Constrain syntax: "i1 i2 i3 [i4] value".'
+                # reference molecule is the first found looking from this line upwards
+                mol_id = next(
+                    reversed(
+                        [i for i, __l in enumerate(mol_and_constr_lines[:_l]) if __l[0] != " "]
                     )
+                )
+
+                mol = self.objects[mol_id]
+                parts = line.split()
+                letter = parts[0].upper()
+
+                match letter:
+                    case "D":
+                        if len(parts) == 5:
+                            auto_target = True
+                            indices = [int(i) for i in parts[1:5]]
+
+                        elif len(parts) == 6:
+                            auto_target = False
+                            indices = [int(i) for i in parts[1:5]]
+                            target = float(parts[5])
+
+                        else:
+                            raise SyntaxError(
+                                f'Error while parsing line "{line}". Dihedral angle constraint syntax: "D i1 i2 i3 i4 [value/auto]".'
+                            )
+
+                    case "A":
+                        if len(parts) == 4:
+                            auto_target = True
+                            indices = [int(i) for i in parts[1:4]]
+
+                        elif len(parts) == 5:
+                            auto_target = False
+                            indices = [int(i) for i in parts[1:4]]
+                            target = float(parts[5])
+
+                        else:
+                            raise SyntaxError(
+                                f'Error while parsing line "{line}". Planar angle constraint syntax: "A i1 i2 i3 i4 [value/auto]".'
+                            )
+
+                # if value is auto, take current value
+                if auto_target:
+                    match letter:
+                        case "D":
+                            target = dihedral(mol.coords[0][np.array(indices)])
+                        case "A":
+                            target = point_angle(*mol.coords[0][np.array(indices)])
+
+                c = Constraint(indices, target)
+                mol.constraints.append(c)
+
             else:
                 self.mol_lines.append(line)
 
@@ -1266,11 +1299,7 @@ class Embedder:
                         self._set_custom_orbs(self.orb_string)
 
                     # updating global embedder if necessary
-                    if (
-                        operator in ("rsearch", "csearch")
-                        and self.options.noembed
-                        and len(self.objects) == 1
-                    ):
+                    if "search" in operator and self.options.noembed and len(self.objects) == 1:
                         self.structures = self.objects[0].coords
                         self.atomnos = self.objects[0].atomnos
                         self.atoms = self.objects[0].atoms
@@ -2642,7 +2671,7 @@ class RunEmbedding(Embedder):
                 self.log(s)
 
         for m, mol in enumerate(self.objects):
-            n = 0 if m == 0 else sum(self.ids[:i])
+            n = 0 if m == 0 else sum(self.ids[:m])
             if mol.constraints:
                 for constraint in mol.constraints:
                     ids = "-".join([str(i) for i in constraint.indices])
