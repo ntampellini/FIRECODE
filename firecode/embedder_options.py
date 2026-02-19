@@ -218,7 +218,7 @@ class Options:
 
         self.operators = []
         # this list will be filled with operator strings
-        # that need to be exectured before the run. i.e. ['csearch>mol.xyz']
+        # that need to be exectured before the run. i.e. ['firecode_search>mol.xyz']
 
         self.operators_dict = {}
         # Analogous dictionary that will contain the seuquences of operators for each molecule

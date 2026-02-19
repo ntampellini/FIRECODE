@@ -138,7 +138,7 @@ class Opt_func_dispatcher:
             "GFN2-XTB": "GFN2-xTB",
             "G-XTB": "g-xTB",
         }
-
+        method = method or DEFAULT_LEVELS["XTB"]
         method = synonyms.get(method.upper(), method)
         self.ase_calc = XTB(method=method, solvation=solvent)
 

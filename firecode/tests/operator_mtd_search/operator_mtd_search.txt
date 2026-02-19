@@ -1,0 +1,2 @@
+solvent=etoac crestnci
+mtd_search> dimer.xyz
