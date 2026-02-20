@@ -36,6 +36,7 @@ xtb = ">=6.6.0"
 xtb-python = "*"
 tblite = ">=0.3.0"
 tblite-python = "*"
+crest = "2.12.*"
 
 
 [tool.pixi.pypi-dependencies]
