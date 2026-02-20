@@ -6,6 +6,7 @@ on:
     branches:
     - main
     - feature/**
+    - bug/**
 
 jobs:
   test:
@@ -18,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # - uses: actions/setup-python@v6
       #   with:
@@ -37,6 +38,8 @@ jobs:
       # - run: pixi run lint
       # - run: pixi run types
       - run: pixi run -e dev test_cov
+
+      - run: pixi run -e dev coverage report 
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4

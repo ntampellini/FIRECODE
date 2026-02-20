@@ -36,6 +36,7 @@ xtb = ">=6.6.0"
 xtb-python = "*"
 tblite = ">=0.3.0"
 tblite-python = "*"
+crest = "2.12.*"
 
 
 [tool.pixi.pypi-dependencies]
@@ -63,7 +64,7 @@ lint = { cmd="ruff check . --fix" }
 types = { cmd="mypy" }
 test = { cmd="pytest -s" }
 test_calc = { cmd="pytest -s -m calc" }
-test_cov = { cmd="pytest -s -m codecov --cov=firecode --cov-report=xml:coverage.xml" }
+test_cov = { cmd="pytest -s -m codecov --cov=firecode --cov-report=xml:coverage.xml -v --tb=long" }
 all = { depends-on = ["fmt", "lint", "types", "test"] }
 
 [tool.ruff]
