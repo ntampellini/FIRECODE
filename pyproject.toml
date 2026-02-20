@@ -122,3 +122,6 @@ full = [
 
 [tool.coverage.run]
 relative_files = true
+
+[tool.coverage.report]
+relative_files = true
