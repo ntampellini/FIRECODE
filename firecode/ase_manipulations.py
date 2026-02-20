@@ -533,9 +533,7 @@ def ase_neb(
             with HiddenPrints():
                 opt.run(fmax=0.05, steps=400 + opt.nsteps)
 
-            # iterations = opt.nsteps
             exit_status = "CONVERGED" if opt.converged else "MAX ITER"
-        # success = True if exit_status == 'CONVERGED' else False
 
     except (PropertyNotImplementedError, CalculationFailed):
         if logfunction is not None:
@@ -563,8 +561,11 @@ def ase_neb(
 
     if mep_input is None:
         os.remove(f"{title}_MEP_guess.xyz")
-    ase_dump(f"{title}_MEP.xyz", atoms, images, energies)
-    # Save the converged MEP (minimum energy path) to an .xyz file
+
+    ase_dump(
+        f"{title}_MEP_{'converged' if opt.converged else 'max_iter'}.xyz", atoms, images, energies
+    )
+    # Save the final MEP (minimum energy path) to an .xyz file
 
     if write_plot:
         plt.figure()

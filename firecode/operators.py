@@ -310,7 +310,13 @@ def neb_operator(filename, embedder, attempts=3):
     embedder.t_start_run = time.perf_counter()
     data = read_xyz(filename)
     n_str = len(data.coords)
-    n_images = embedder.options.neb.images if hasattr(embedder.options.neb, "images") else 7
+
+    if hasattr(embedder.options.neb, "images"):
+        n_images = embedder.options.neb.images
+    elif hasattr(embedder.options, "images"):
+        n_images = embedder.options.images
+    else:
+        n_images = 7
 
     if n_str == 2:
         reagents, products = data.coords

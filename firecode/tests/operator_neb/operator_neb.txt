@@ -1,2 +1,2 @@
-calc=tblite level=gfn2-xtb
+calc=tblite level=gfn2-xtb images=5
 neb> anti_to_gauche.xyz

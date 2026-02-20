@@ -1551,8 +1551,10 @@ class Embedder:
                         f"\n--> Energies of output structures (first {show}, {self.options.theory_level}/{self.options.calculator}{f'/{self.options.solvent}' if self.options.solvent is not None else ''})\n"
                     )
 
-                    self.log(f"> # (total {len(self.structures)})     Rel. E.           RMSD")
-                    self.log("-------------------------------------------")
+                    self.log(
+                        f"> # (total {len(self.structures)})      Rel. E.           RMSD(best)"
+                    )
+                    self.log("-----------------------------------------------")
                     for i, energy in enumerate(self.energies - self.energies[0]):
                         rmsd_value = (
                             "(ref)"
@@ -1569,7 +1571,7 @@ class Embedder:
                         )
 
                         self.log(
-                            f"> Candidate {i + 1!s:2}  :  {energy:.2f} kcal/mol  :  {rmsd_value}"
+                            f"> Candidate {i + 1!s:2}     {energy:.2f} kcal/mol     {rmsd_value}"
                         )
 
                     if len(self.structures) > show:

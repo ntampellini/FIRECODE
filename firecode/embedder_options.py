@@ -68,21 +68,7 @@ keywords_dict = {
     "LEVEL": 1,  # Manually set the theory level to be used.
     # . Syntax: `LEVEL(PM7_EPS=6.15)
     "MULT": 1,  # Set global multiplicity.
-    "NEB": 1,  # Perform an automatical climbing image nudged elastic band (CI-NEB)
-    # TS search after the partial optimization step, inferring reagents
-    # and products for each generated TS pose. These are guessed by
-    # approaching the reactive atoms until they are at the right distance,
-    # and then partially constrained (reagents) or free (products) optimizations
-    # are carried out to get the start and end points for a CI-NEB TS search.
-    # For trimolecular assemblies, only the first imposed pairing (a)
-    # is approached - i.e. the C-C reactive distance in the example above.
-    # This NEB option is only really usable for those reactions in which two
-    # (or three) molecules are bound together (or strongly interacting) after
-    # the TS, with no additional species involved. For example, cycloaddition
-    # reactions are great candidates while atom transfer reactions
-    # (i.e. epoxidations) are not. Of course this implementation is not
-    # always reliable, and it is provided more as an experimenting tool
-    # than a definitive feature.
+    "NEB": 2,  # Base keyword to specify options for the neb> operator.
     "NEWBONDS": 1,  # Manually specify the maximum number of "new bonds" that a
     # TS structure can have to be retained and not to be considered
     # scrambled. Default is 1. Syntax: `NEWBONDS=1`
@@ -146,6 +132,8 @@ def kw_similarity_score(ref, kw):
 
 
 class Truthy_struct:
+    """Stub of a class with truthy behavior."""
+
     def __bool__(self):
         return True
 
@@ -433,7 +421,7 @@ class OptionSetter:
 
     def neb(self, options, *args):
         options.neb = Truthy_struct()
-        options.neb.images = 7
+        options.neb.images = options.images if hasattr(options, "images") else 7
         options.neb.preopt = False
 
         kw = self.keywords_simple[self.keywords.index("NEB")]
