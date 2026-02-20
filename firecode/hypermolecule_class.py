@@ -88,7 +88,7 @@ class Hypermolecule:
             r += f" {[str(atom) for atom in self.reactive_atoms_classes_dict[0].values()]}"
         return r
 
-    def __init__(self, filename, charge=0, mult=1, reactive_indices=None, debug_logfunction=None):
+    def __init__(self, filename, reactive_indices=None, charge=0, mult=1, debug_logfunction=None):
         """Initializing class properties: reading conformational ensemble file, aligning
         conformers to first and centering them in origin.
 
@@ -217,7 +217,7 @@ class Hypermolecule:
         return list(indices)
 
     def _inspect_reactive_atoms(self, override=None):
-        """Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict"""
+        """Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict."""
         self.reactive_atoms_classes_dict = {c: {} for c, _ in enumerate(self.coords)}
 
         for c, _ in enumerate(self.coords):

@@ -1,2 +1,2 @@
-solvent=etoac crestnci
-mtd_search> dimer.xyz
+calc=xtb level=gfn-ff solvent=etoac crestnci dist(A=1.4)
+refine> mtd_search> dimer.xyz 0A 3A

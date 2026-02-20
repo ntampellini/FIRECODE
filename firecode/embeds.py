@@ -467,7 +467,6 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
                         pivot = pivots[index]
 
-                        # ase_view(mol)
                         maxval = norms[index - 1] + norms[index - 2]
 
                         traj = (
@@ -565,7 +564,6 @@ def cyclical_embed(embedder, max_norm_delta=5):
                                 traj=traj,
                             )
 
-                            # ase_view(bent_mol)
                             embedder.objects[i] = bent_mol
 
                 # Repeating the previous polygonization steps with the bent molecules

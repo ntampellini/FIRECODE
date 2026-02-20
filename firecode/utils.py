@@ -342,32 +342,6 @@ def polygonize(lengths):
     return vertices_out
 
 
-def ase_view(mol):
-    """Display an Hypermolecule instance from the ASE GUI"""
-    from ase import Atoms
-    from ase.gui.gui import GUI
-    from ase.gui.images import Images
-
-    if hasattr(mol, "reactive_atoms_classes_dict"):
-        images = []
-
-        for c, coords in enumerate(mol.coords):
-            centers = np.vstack(
-                [atom.center for atom in mol.reactive_atoms_classes_dict[c].values()]
-            )
-            totalcoords = np.concatenate((coords, centers))
-            images.append(Atoms(mol.atoms, positions=totalcoords))
-
-    else:
-        images = [Atoms(mol.atoms, positions=coords) for coords in mol.coords]
-
-    try:
-        GUI(images=Images(images), show_bonds=True).run()
-    # except TclError:
-    except Exception:
-        print("--> GUI not available from command line interface. Skipping it.")
-
-
 def get_scan_peak_index(energies, max_thr=50, min_thr=0.1):
     """Returns the index of the energies iterable that
     corresponds to the most prominent peak.
@@ -699,7 +673,7 @@ class FolderContext:
         self.initial_folder = os.getcwd()
 
     def __enter__(self):
-        # move into folder
+        """Move into folder on entry."""
         if os.path.isdir(self.target_folder):
             os.chdir(self.target_folder)
 
@@ -707,5 +681,5 @@ class FolderContext:
             raise NotADirectoryError(self.target_folder)
 
     def __exit__(self, *args):
-        # get out of working folder
+        """Get out of working folder on exit."""
         os.chdir(self.initial_folder)

@@ -65,7 +65,7 @@ def run_firecode_input(name) -> None:
         clean_directory(
             to_remove_startswith=["firecode"],
             to_remove_endswith=[".log", ".out", ".svg"],
-            to_remove_contains=["clockwise", "_scan", "_confs", "_opt"],
+            to_remove_contains=["clockwise", "_scan", "_confs", "_opt", "_crest"],
         )
 
 

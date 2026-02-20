@@ -74,7 +74,7 @@ def operate(input_string, embedder):
     elif "opt>" in input_string:
         outname = opt_operator(filename, embedder, logfunction=embedder.log)
 
-    elif "csearch_hb>" in input_string:
+    elif "firecode_search_hb>" in input_string:
         outname = csearch_operator(filename, embedder, keep_hb=True)
 
     elif "rsearch>" in input_string:
@@ -436,14 +436,11 @@ def neb_operator(filename, embedder, attempts=3):
 def mtd_search_operator(filename, embedder):
     """Run a CREST metadynamic conformational search and return the output filename."""
     assert crest_is_installed(), (
-        "CREST 2 does not seem to be installed. Install it with: conda install -c conda-forge crest==2.*"
+        "CREST 2 does not seem to be installed. Install it with: mamba install -c conda-forge crest==2.12"
     )
 
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
     # load molecule to be optimized from embedder
-
-    if not hasattr(mol, "charge"):
-        mol.charge = 0
 
     if not embedder.options.let:
         if len(mol.coords) >= 20:
@@ -571,7 +568,7 @@ def mtd_search_operator(filename, embedder):
                 method=crest_method,
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.crestnci,
-                title=mol.rootname + "_mtd_csearch",
+                title=mol.rootname + "_crest",
                 procs=2,
                 threads=max_workers,
             )
@@ -595,7 +592,7 @@ def mtd_search_operator(filename, embedder):
                 method="GFN2-XTB",  # try with XTB2
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.crestnci,
-                title=mol.rootname + "_mtd_csearch",
+                title=mol.rootname + "_crest",
                 procs=2,
                 threads=max_workers,
             )
@@ -642,14 +639,14 @@ def mtd_search_operator(filename, embedder):
     )
 
     ### PRINTOUT
-    with open(f"{mol.rootname}_mtd_confs.xyz", "w") as f:
+    with open(f"{mol.rootname}_crest_confs.xyz", "w") as f:
         for i, new_s in enumerate(conformers):
             write_xyz(mol.atoms, new_s, f, title=f"Conformer {i}/{len(conformers)} from CREST MTD")
 
     # check the structures again and warn if some look compenetrated
     embedder.check_objects_compenetration()
 
-    return f"{mol.rootname}_mtd_confs.xyz"
+    return f"{mol.rootname}_crest_confs.xyz"
 
 
 def scan_operator(filename, embedder):

@@ -65,7 +65,6 @@ from firecode.settings import DEFAULT_LEVELS, PROCS
 from firecode.torsion_module import get_quadruplets
 from firecode.utils import (
     Constraint,
-    ase_view,
     auto_newline,
     cartesian_product,
     clean_directory,
@@ -183,9 +182,6 @@ class Embedder:
                             mol.write_hypermolecule()
                             self.debuglog(f"DEBUG: written hypermolecule file for ({mol.filename})")
                 self.log()
-
-            if self.options.check_structures:
-                self._inspect_structures()
 
         except Exception as e:
             logging.exception(e)
@@ -663,6 +659,12 @@ class Embedder:
                 )
 
             for i, mol in enumerate(self.objects):
+                # skip letters specifying internal constraints
+                if (self.pairings_dict[i].get(letter) is None) or (
+                    isinstance(self.pairings_dict[i][letter], tuple)
+                ):
+                    continue
+
                 for c, _ in enumerate(mol.coords):
                     r_index = self.pairings_dict[i].get(letter)
                     if r_index is None:
@@ -1281,13 +1283,10 @@ class Embedder:
 
                 # these operators do not need molecule substitution
                 elif operator not in ("pka"):
-                    # names = [mol.filename for mol in self.objects]
-                    # filename = self._extract_filename(input_string)
-                    # index = names.index(filename)
                     reactive_indices = self.objects[index].reactive_indices
 
                     # replacing the old molecule with the one post-operators
-                    self.objects[index] = Hypermolecule(outname, reactive_indices)
+                    self.objects[index] = Hypermolecule(outname, reactive_indices=reactive_indices)
 
                     # calculating where the new orbitals are
                     self.objects[index].compute_orbitals(
@@ -1299,7 +1298,11 @@ class Embedder:
                         self._set_custom_orbs(self.orb_string)
 
                     # updating global embedder if necessary
-                    if "search" in operator and self.options.noembed and len(self.objects) == 1:
+                    if (
+                        ("search" in operator or "mtd" in operator)
+                        and self.options.noembed
+                        and len(self.objects) == 1
+                    ):
                         self.structures = self.objects[0].coords
                         self.atomnos = self.objects[0].atomnos
                         self.atoms = self.objects[0].atoms
@@ -1329,19 +1332,6 @@ class Embedder:
         # remove pairing numbers/letters and newline chars
 
         return input_string
-
-    def _inspect_structures(self):
-        """ """
-
-        self.log("--> Structures check requested. Shutting down after last window is closed.\n")
-
-        for mol in self.objects:
-            ase_view(mol)
-
-        self.close_log_streams()
-        os.remove(f"firecode_{self.stamp}.log")
-
-        sys.exit(0)
 
     def scramble(self, array, sequence):
         return np.array([array[s] for s in sequence])
