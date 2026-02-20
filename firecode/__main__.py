@@ -29,7 +29,7 @@ install(show_locals=True)
 
 def main():
     usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
-    🔥 python -m firecode -cl "refine> mtd> mol.xyz"
+    🔥 python -m firecode -cl "refine> crest_search> mol.xyz"
     🔥 python -m firecode -c
     🔥 python -m firecode -o mol.xyz
 

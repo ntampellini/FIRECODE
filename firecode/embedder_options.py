@@ -525,16 +525,6 @@ class OptionSetter:
         kw = self.keywords_simple[self.keywords.index("FFCALC")]
         options.ff_calc = kw.split("=")[1]
 
-    def mtd(self, options, *args):
-        if options.calculator != "XTB":
-            raise SystemExit(
-                (
-                    "Metadynamics augmentation can only be run with the XTB calculator.\n"
-                    "Change it in settings.py or use the CALC=XTB keyword.\n"
-                )
-            )
-        options.metadynamics = True
-
     def solvent(self, options, *args):
         from firecode.solvents import solvent_synonyms
 

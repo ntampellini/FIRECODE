@@ -499,11 +499,13 @@ def ase_neb(
             if verbose_print and logfunction is not None:
                 logfunction(f"\n--> Running NEB through ASE ({embedder.options.theory_level})")
 
-            opt.run(fmax=0.2, steps=50)
+            with HiddenPrints():
+                opt.run(fmax=0.2, steps=50)
 
             # Phase 2: Medium steps, tighter convergence
             opt.maxstep = 0.1
-            opt.run(fmax=0.1, steps=50 + opt.nsteps)
+            with HiddenPrints():
+                opt.run(fmax=0.1, steps=50 + opt.nsteps)
 
             energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
             print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
@@ -511,7 +513,8 @@ def ase_neb(
 
             # Phase 3: Fine-tune before climbing
             opt.maxstep = 0.05
-            opt.run(fmax=0.075, steps=30 + opt.nsteps)
+            with HiddenPrints():
+                opt.run(fmax=0.075, steps=30 + opt.nsteps)
 
             energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
             print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
@@ -527,7 +530,8 @@ def ase_neb(
             opt.maxstep = 0.01
             neb.climb = True
 
-            opt.run(fmax=0.05, steps=400 + opt.nsteps)
+            with HiddenPrints():
+                opt.run(fmax=0.05, steps=400 + opt.nsteps)
 
             # iterations = opt.nsteps
             exit_status = "CONVERGED" if opt.converged else "MAX ITER"
@@ -1249,7 +1253,7 @@ def fsm_operator(embedder, optimize_endpoints=True):
     product = Atoms(mol.atoms, product)
     product = set_charge_and_mult_on_ase_atoms(product, charge, mult)
 
-    workdir = f"{mol.rootname}_freezing_string"
+    workdir = f"{mol.rootname}_FSM"
 
     with NewFolderContext(workdir, delete_after=False):
         # Initialize FSM string

@@ -566,14 +566,14 @@ def crest_mtd_search(
             #     s += f"{i+1},"
 
             for (c1, c2), cd in zip(constrained_indices, constrained_distances):
-                cd = "auto" if cd is None else cd
+                cd = "auto" if cd is None else round(cd, 3)
                 s += f"    distance: {c1 + 1}, {c2 + 1}, {cd}\n"
 
         if constrained_angles_indices is not None:
             assert len(constrained_angles_indices) == len(constrained_angles_values)
             s += "\n$constrain\n" if constrained_indices is None else ""
             for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
-                s += f"   angle: {a + 1}, {b + 1}, {c + 1}, {angle}\n"
+                s += f"   angle: {a + 1}, {b + 1}, {c + 1}, {angle:.3f}\n"
 
         if constrained_dihedrals_indices is not None:
             assert len(constrained_dihedrals_indices) == len(constrained_dihedrals_values)
@@ -581,7 +581,7 @@ def crest_mtd_search(
             for (a, b, c, d), angle in zip(
                 constrained_dihedrals_indices, constrained_dihedrals_values
             ):
-                s += f"   dihedral: {a + 1}, {b + 1}, {c + 1}, {d + 1}, {angle}\n"
+                s += f"   dihedral: {a + 1}, {b + 1}, {c + 1}, {d + 1}, {angle:.3f}\n"
 
         s += "\n$metadyn\n  atoms: "
 

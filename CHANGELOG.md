@@ -4,7 +4,14 @@
 <!-- - ... mep_relax> BETA
 - ... IMAGES kw, also implement it for neb>-->
 <!-- FINALSPLEVEL keyword? -->
- <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer-->
+ <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
+
+## FIRECODE 1.5.4 🔥 (WIP)
+- Refreshed constraints handling in operators.
+- Added non-inline constraints specification after a molecule line (only planar and dihedral angles for now). Syntax: "A/D i1 i2 i3 [i4] [auto/value]"
+- Clearer, more explicit printouts for all constraints at any step.
+- the mtd>/mtd_search> operator now has more explicit synonyms: crest> and crest_search>
+- Added tests for the crest_search>, neb> and fsm> operators.
 
 ## FIRECODE 1.5.3 🔥 (February 19 2026)
 - Fixes a bug with reactive_atoms_classes_dict and embedder.options.charge.

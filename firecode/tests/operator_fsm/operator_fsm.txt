@@ -1,0 +1,2 @@
+calc=tblite level=gfn2-xtb
+fsm> anti_to_gauche.xyz

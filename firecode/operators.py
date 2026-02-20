@@ -42,14 +42,6 @@ from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.settings import (
-    CALCULATOR,
-    DEFAULT_FF_LEVELS,
-    DEFAULT_LEVELS,
-    FF_CALC,
-    FF_OPT_BOOL,
-    PROCS,
-)
 from firecode.torsion_module import csearch, get_quadruplets
 from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
@@ -80,8 +72,10 @@ def operate(input_string, embedder):
     elif "rsearch>" in input_string:
         outname = csearch_operator(filename, embedder, mode=2)
 
-    elif any(string in input_string for string in ("mtd_search>", "mtd>")):
-        outname = mtd_search_operator(filename, embedder)
+    elif any(
+        string in input_string for string in ("mtd_search>", "mtd>", "crest>", "crest_search>")
+    ):
+        outname = crest_search_operator(filename, embedder)
 
     elif "rdkit_search>" in input_string:
         outname = rdkit_search_operator(filename, embedder)
@@ -172,7 +166,6 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
             + "an individual search from each conformer (might be time-consuming)."
         )
 
-    # calc, method, procs = _get_lowest_calc(embedder)
     conformers = []
 
     for i, coords in enumerate(data.coords):
@@ -241,10 +234,19 @@ def opt_operator(filename, embedder, logfunction=None):
         constrained_angles_values,
         constrained_dihedrals_indices,
         constrained_dihedrals_values,
-    ) = embedder._get_angle_dih_constraints()
+    ) = embedder._get_angle_dih_constraints(filename)
+
+    constr_str = embedder.get_str_all_constraints(filename)
+    n_constraints = (
+        len(constrained_indices)
+        + len(constrained_angles_indices)
+        + len(constrained_dihedrals_indices)
+    )
+    logfunction(
+        f"    {n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}"
+    )
 
     energies = []
-    # lowest_calc = _get_lowest_calc(embedder)
 
     t_start = time.perf_counter()
 
@@ -433,7 +435,7 @@ def neb_operator(filename, embedder, attempts=3):
         write_xyz(data.atoms, ts_coords, f, title="NEB TS - see log for relative energies")
 
 
-def mtd_search_operator(filename, embedder):
+def crest_search_operator(filename, embedder):
     """Run a CREST metadynamic conformational search and return the output filename."""
     assert crest_is_installed(), (
         "CREST 2 does not seem to be installed. Install it with: mamba install -c conda-forge crest==2.12"
@@ -445,7 +447,7 @@ def mtd_search_operator(filename, embedder):
     if not embedder.options.let:
         if len(mol.coords) >= 20:
             raise InputError(
-                "The mtd_search> operator was given more than 20 input structures. "
+                "The crest_search> operator was given more than 20 input structures. "
                 + "This would run >20 metadynamic conformational searches. If this was not a mistake, "
                 + "add the LET keyword an re-run the job."
             )
@@ -461,14 +463,19 @@ def mtd_search_operator(filename, embedder):
         constrained_angles_values,
         constrained_dihedrals_indices,
         constrained_dihedrals_values,
-    ) = embedder._get_angle_dih_constraints()
+    ) = embedder._get_angle_dih_constraints(filename)
 
     logfunction(
-        f"--> {filename}: Geometry optimization pre-mtd_search ({embedder.options.theory_level} via {embedder.options.calculator})"
+        f"--> {filename}: Geometry optimization pre-crest_search ({embedder.options.theory_level} via {embedder.options.calculator})"
     )
-    return_char = "\n"
+    constr_str = embedder.get_str_all_constraints(filename)
+    n_constraints = (
+        len(constrained_indices)
+        + len(constrained_angles_indices)
+        + len(constrained_dihedrals_indices)
+    )
     logfunction(
-        f"    {len(constrained_indices)} constraints applied{': ' + str(constrained_indices).replace(return_char, ' ') if len(constrained_indices) > 0 else ''}"
+        f"    {n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}"
     )
 
     for c, coords in enumerate(mol.coords.copy()):
@@ -568,7 +575,7 @@ def mtd_search_operator(filename, embedder):
                 method=crest_method,
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.crestnci,
-                title=mol.rootname + "_crest",
+                title=mol.rootname + "_CREST",
                 procs=2,
                 threads=max_workers,
             )
@@ -592,7 +599,7 @@ def mtd_search_operator(filename, embedder):
                 method="GFN2-XTB",  # try with XTB2
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.crestnci,
-                title=mol.rootname + "_crest",
+                title=mol.rootname + "_CREST",
                 procs=2,
                 threads=max_workers,
             )
@@ -609,7 +616,7 @@ def mtd_search_operator(filename, embedder):
     # merging structures from each run in a single array
 
     embedder.log(
-        f"  MTD conformational search: Generated {len(conformers)} conformers in {time_to_string(time.perf_counter() - t_start)}"
+        f"  CREST conformational search: Generated {len(conformers)} conformers in {time_to_string(time.perf_counter() - t_start)}"
     )
     before = len(conformers)
 
@@ -781,11 +788,9 @@ def distance_scan(embedder):
         linewidth=3,
     )
 
-    # e_max = max(energies)
     id_max = get_scan_peak_index(energies)
     e_max = energies[id_max]
 
-    # id_max = energies.index(e_max)
     d_opt = dists[id_max]
 
     plt.plot(
@@ -856,23 +861,8 @@ def crest_is_installed() -> bool:
     return which("crest") is not None
 
 
-def _get_lowest_calc(embedder=None):
-    """Returns the values for calculator,
-    method and processors for the lowest
-    theory level available from embedder or settings.
-    """
-    if embedder is None:
-        if FF_OPT_BOOL:
-            return (FF_CALC, DEFAULT_FF_LEVELS[FF_CALC], PROCS)
-        return (CALCULATOR, DEFAULT_LEVELS[CALCULATOR], PROCS)
-
-    if embedder.options.ff_opt:
-        return (embedder.options.ff_calc, embedder.options.ff_level, embedder.procs)
-    return (embedder.options.calculator, embedder.options.theory_level, embedder.procs)
-
-
 def _get_internal_constraints(filename, embedder):
-    """ """
+    """Returns an array with distance constraints indices."""
     mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
     # get embedder,objects index of molecule to get internal constraints of
 

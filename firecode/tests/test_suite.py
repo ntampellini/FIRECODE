@@ -65,7 +65,7 @@ def run_firecode_input(name) -> None:
         clean_directory(
             to_remove_startswith=["firecode"],
             to_remove_endswith=[".log", ".out", ".svg"],
-            to_remove_contains=["clockwise", "_scan", "_confs", "_opt", "_crest"],
+            to_remove_contains=["clockwise", "_scan", "_confs", "_opt", "CREST", "NEB", "FSM"],
         )
 
 
@@ -116,3 +116,24 @@ def test_scan_dihedral() -> None:
 def test_operator_rdkit_search() -> None:
     """Tests the rdkit_search operator."""
     run_firecode_input("operator_rdkit_search")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_crest_search() -> None:
+    """Tests the crest_search operator."""
+    run_firecode_input("operator_crest_search")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_neb() -> None:
+    """Tests the neb operator."""
+    run_firecode_input("operator_neb")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_fsm() -> None:
+    """Tests the fsm operator."""
+    run_firecode_input("operator_fsm")

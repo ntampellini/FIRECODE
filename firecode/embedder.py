@@ -269,13 +269,14 @@ class Embedder:
 
         cite_ff = self.options.ff_opt and self.options.ff_calc == "XTB"
         cite_gfn2 = self.options.calculator in ("XTB", "TBLITE")
-        cite_crest = any(("mtd>" in op or "mtd_search>" in op) for op in self.options.operators)
+        cite_crest = any(("mtd" in op or "crest>" in op) for op in self.options.operators)
         cite_uma = self.options.calculator == "UMA"
         cite_aimnet2 = self.options.calculator == "AIMNET2"
         cite_aimnet2_nse = self.options.calculator == "AIMNET2" and self.options.mult != 1
 
+        s = ""
+
         if any((cite_ff, cite_gfn2, cite_crest)):
-            s = ""
             s += f"    GFN-FF : {references['GFN-FF']}\n" if cite_ff else ""
             s += f"    GFN2-XTB : {references['GFN2-XTB']}\n" if cite_gfn2 else ""
             s += f"    CREST : {references['CREST']}\n" if cite_crest else ""
@@ -283,6 +284,13 @@ class Embedder:
             s += f"    AIMNET2-NSE : {references['AIMNET2-NSE']}\n" if cite_aimnet2_nse else ""
             s += f"    UMA : {references['UMA']}\n" if cite_uma else ""
 
+        if any("neb>" in op for op in self.options.operators):
+            s += f"    NEB : {'\n          '.join(references['NEB'].split('\n'))}\n"
+
+        if any("fsm>" in op for op in self.options.operators):
+            s += f"    FSM : {'\n          '.join(references['FSM'].split('\n'))}\n"
+
+        if s != "":
             self.log(
                 f"\n--> Your run also makes use of this other software: please cite these references as well.\n{s}"
             )
@@ -478,7 +486,7 @@ class Embedder:
                         elif len(parts) == 5:
                             auto_target = False
                             indices = [int(i) for i in parts[1:4]]
-                            target = float(parts[5])
+                            target = float(parts[4])
 
                         else:
                             raise SyntaxError(
@@ -636,6 +644,41 @@ class Embedder:
                 emb_ids = [idx + cumulative_offset for idx in constraint.indices]
                 emb_constr = Constraint(emb_ids, constraint.value)
                 self.internal_angle_dih_constraints.append(emb_constr)
+
+    def get_str_all_constraints(self, filename: str | None = None) -> str:
+        """Return a string detailing all constraints associated with a molecule."""
+        s = ""
+
+        if filename is None:
+            # add distance constrains indices
+            for i1, i2 in self.constrained_indices[0]:
+                s += f"B({i1}-{i2}) "
+
+            # only add planar angle and dihedral constraints if
+            # there is a single molecule - if so, read them from there
+            if len(self.objects) == 1:
+                for constraint in self.objects[0].constraints:
+                    s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
+
+        else:
+            for i, hypmol in enumerate(self.objects):
+                if hypmol.filename == filename:
+                    # add distance constrains indices
+                    for _, ids in self.pairings_dict[i].items():
+                        if isinstance(ids, tuple):
+                            i1, i2 = ids
+                            s += f"B({i1}-{i2}) "
+
+                    # add planar and dihedral angle internal constraints
+                    for constraint in hypmol.constraints:
+                        s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
+
+                    break
+
+        if s != "":
+            return "[" + s[:-1] + "]"
+
+        return s
 
     def _set_custom_orbs(self, orb_string):
         """Update the reactive_atoms classes with the user-specified orbital distances.
@@ -1032,9 +1075,10 @@ class Embedder:
 
         return int(candidates)
 
-    def _get_angle_dih_constraints(self):
-        """Gets angle and dihedral constraints in a list format
-        from the self.internal_angle_dih_constraints attribute.
+    def _get_angle_dih_constraints(self, filename=None):
+        """Gets angle and dihedral constraints for a molecule or for the whole embed.
+
+        If filename is None, it will return the angle and dihedral constraints of the overall embed.
 
         """
         (
@@ -1044,14 +1088,26 @@ class Embedder:
             constrained_dihedrals_values,
         ) = [], [], [], []
 
-        for constraint in self.internal_angle_dih_constraints:
-            if constraint.type == "A":
-                constrained_angles_indices.append(constraint.indices)
-                constrained_angles_values.append(constraint.value)
+        if filename is None:
+            for constraint in self.internal_angle_dih_constraints:
+                if constraint.type == "A":
+                    constrained_angles_indices.append(constraint.indices)
+                    constrained_angles_values.append(constraint.value)
 
-            elif constraint.type == "D":
-                constrained_dihedrals_indices.append(constraint.indices)
-                constrained_dihedrals_values.append(constraint.value)
+                elif constraint.type == "D":
+                    constrained_dihedrals_indices.append(constraint.indices)
+                    constrained_dihedrals_values.append(constraint.value)
+        else:
+            for hypmol in self.objects:
+                if hypmol.filename == filename:
+                    for constraint in hypmol.constraints:
+                        if constraint.type == "A":
+                            constrained_angles_indices.append(constraint.indices)
+                            constrained_angles_values.append(constraint.value)
+                        elif constraint.type == "D":
+                            constrained_dihedrals_indices.append(constraint.indices)
+                            constrained_dihedrals_values.append(constraint.value)
+                    break
 
         return (
             constrained_angles_indices,
@@ -1276,7 +1332,6 @@ class Embedder:
             for operator in operators:
                 input_string = f"{operator}> {self.objects[index].filename}"
                 outname = operate(input_string, self)
-                # operator = input_string.split('>')[0]
 
                 if operator == "refine":
                     self._set_embedder_structures_from_mol()
@@ -1284,9 +1339,15 @@ class Embedder:
                 # these operators do not need molecule substitution
                 elif operator not in ("pka"):
                     reactive_indices = self.objects[index].reactive_indices
+                    constraints = self.objects[index].constraints
+                    charge = self.objects[index].charge
+                    mult = self.objects[index].mult
 
                     # replacing the old molecule with the one post-operators
-                    self.objects[index] = Hypermolecule(outname, reactive_indices=reactive_indices)
+                    self.objects[index] = Hypermolecule(
+                        outname, reactive_indices=reactive_indices, charge=charge, mult=mult
+                    )
+                    self.objects[index].constraints = constraints
 
                     # calculating where the new orbitals are
                     self.objects[index].compute_orbitals(
@@ -2090,9 +2151,20 @@ class RunEmbedding(Embedder):
             "TBLITE": int(self.avail_cpus // 4),
         }[self.options.calculator]
 
+        # get number of constraints for this run
+        constr_str = self.get_str_all_constraints()
+        if constr_str == "":
+            n_constr = 0
+        else:
+            n_constr = len(constr_str[1:-1].split())
+            if only_fixed_constraints:
+                n_constr -= len(
+                    [letter for letter in self.pairings_table.keys() if letter.islower()]
+                )
+
         self.log(
             f"--> {task} ({self.options.theory_level}{f'/{self.options.solvent}' if self.options.solvent is not None else ''}"
-            + f" level via {self.options.calculator}, {max_workers} thread{'s' if max_workers > 1 else ''})"
+            + f" level via {self.options.calculator}, {max_workers} thread{'s' if max_workers > 1 else ''}) - [{n_constr} constraints]"
         )
 
         self.energies.fill(0)
@@ -2111,19 +2183,20 @@ class RunEmbedding(Embedder):
                 )
 
                 if only_fixed_constraints:
-                    constraints = np.array(
+                    distance_constraints = np.array(
                         [value for key, value in self.pairings_table.items() if key.isupper()]
                     )
 
                 else:
-                    constraints = (
+                    distance_constraints = (
                         np.concatenate([self.constrained_indices[i], self.internal_constraints])
                         if len(self.internal_constraints) > 0
                         else self.constrained_indices[i]
                     )
 
                 pairing_dists = [
-                    self.get_pairing_dists_from_constrained_indices(_c) for _c in constraints
+                    self.get_pairing_dists_from_constrained_indices(_c)
+                    for _c in distance_constraints
                 ]
 
                 (
@@ -2143,7 +2216,7 @@ class RunEmbedding(Embedder):
                     charge=self.options.charge,
                     maxiter=maxiter,
                     conv_thr=conv_thr,
-                    constrained_indices=constraints,
+                    constrained_indices=distance_constraints,
                     constrained_distances=pairing_dists,
                     constrained_angles_indices=constrained_angles_indices,
                     constrained_angles_values=constrained_angles_values,
@@ -2179,7 +2252,7 @@ class RunEmbedding(Embedder):
 
                 # assert that the structure did not scramble during optimization
                 if self.options.scramble_check and self.exit_status[i]:
-                    constraints = (
+                    distance_constraints = (
                         np.concatenate([self.constrained_indices[i], self.internal_constraints])
                         if len(self.internal_constraints) > 0
                         else self.constrained_indices[i]
@@ -2188,7 +2261,7 @@ class RunEmbedding(Embedder):
                     self.exit_status[i] = scramble_check(
                         self.atoms,
                         new_structure,
-                        excluded_atoms=constraints.ravel(),
+                        excluded_atoms=distance_constraints.ravel(),
                         mols_graphs=self.graphs,
                         max_newbonds=0,
                     )
@@ -2343,8 +2416,19 @@ class RunEmbedding(Embedder):
         else:
             solvent_line = "vacuum"
 
+        # get number of constraints for this run
+        constr_str = self.get_str_all_constraints()
+        if constr_str == "":
+            n_constr = 0
+        else:
+            n_constr = len(constr_str[1:-1].split())
+            if only_fixed_constraints:
+                n_constr -= len(
+                    [letter for letter in self.pairings_table.keys() if letter.islower()]
+                )
+
         self.log(
-            f"--> {task} ({self.options.theory_level}/{solvent_line}) level via {self.options.calculator}, single thread"
+            f"--> {task} ({self.options.theory_level}/{solvent_line}) level via {self.options.calculator}, single thread - [{n_constr} constraints]"
         )
 
         self.energies.fill(0)
@@ -2642,7 +2726,7 @@ class RunEmbedding(Embedder):
                         f" (to be shrinked to {round(dist / self.options.shrink_multiplier, 3)} A)"
                     )
 
-                s = f"    {i + 1}. {letter} - {kind}\n"
+                s = f'    {i + 1}. "{letter}" - {kind}\n'
 
                 for mol_id, d in self.pairings_dict.items():
                     atom_id = d.get(letter)
@@ -2661,22 +2745,23 @@ class RunEmbedding(Embedder):
                 self.log(s)
 
         for m, mol in enumerate(self.objects):
-            n = 0 if m == 0 else sum(self.ids[:m])
             if mol.constraints:
+                n = 0 if m == 0 else sum(self.ids[:m])
+                warn = " (will not be enforced after embedding!)" if len(self.objects) > 1 else ""
                 for constraint in mol.constraints:
                     ids = "-".join([str(i) for i in constraint.indices])
                     cum_ids = "-".join([str(i + n) for i in constraint.indices])
                     elements = "-".join([mol.atoms[i] for i in constraint.indices])
-                    t, uom = {
-                        "B": ("Bond", " Å"),
-                        "A": ("Angle", "°"),
-                        "D": ("Dihedral", "°"),
+                    t, uom, figs = {
+                        # "B": ("Bond", " Å", 2),
+                        "A": ("Angle", "°", 1),
+                        "D": ("Dihedral", "°", 1),
                     }[constraint.type]
                     self.log(
-                        f"--> Additional constraint ({mol.filename}): {t} - {elements} -> {round(constraint.value, 3)}{uom}"
+                        f"--> Additional constraint ({mol.filename}): {t} - {elements} -> {constraint.value:.{figs}f}{uom}{warn}"
                     )
                     self.log(f"    Molecular ids:  {ids}")
-                    self.log(f"    Cumulative ids: {cum_ids}")
+                    self.log(f"    Cumulative ids: {cum_ids}\n")
 
         self.log()
 
@@ -2802,24 +2887,13 @@ class RunEmbedding(Embedder):
                             self.force_field_refining(conv_thr="loose")
 
                         # self.log(f"--> Performing {self.options.calculator} FF optimization (tight convergence, fixed constraints only, step 2/2)\n")
-                        self.force_field_refining(conv_thr="tight", only_fixed_constraints=True)
+                        self.force_field_refining(conv_thr="tight")
 
                     if not (
                         self.options.ff_opt and self.options.theory_level == self.options.ff_level
                     ):
                         # If we just optimized at a (FF) level and the final
                         # optimization level is the same, avoid repeating it
-
-                        if self.options.calculator == "ORCA":
-                            # Perform stepwise pruning of the ensemble for more expensive theory levels
-
-                            self.log("--> Performing ORCA optimization (3 iterations, step 1/3)\n")
-                            self.optimization_refining(maxiter=3)
-
-                            self.log("--> Performing ORCA optimization (5 iterations, step 2/3)\n")
-                            self.optimization_refining(maxiter=5)
-
-                            self.log("--> Performing ORCA optimization (convergence, step 3/3)\n")
 
                         if len(self.structures) > 500:
                             self.optimization_refining(conv_thr="loose")
