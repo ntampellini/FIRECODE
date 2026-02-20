@@ -27,7 +27,7 @@
 
 </p>
 
-FIRECODE is a computational chemistry workflow driver for the generation, optimization and refinement of conformational ensembles, also implementing some transition state ultilities.
+FIRECODE is a computational chemistry workflow driver for the generation, optimization and refinement of conformational ensembles, also implementing some transition state utilities.
 
 It implements flexible and customizable workflows for conformer generation (via [CREST](https://github.com/crest-lab/crest), [RDKit](https://github.com/rdkit/rdkit)), double-ended TS search ([NEB](https://ase-lib.org/ase/neb.html) via [ASE](https://github.com/rosswhitfield/ase), [ML-FSM](https://github.com/thegomeslab/ML-FSM)), and (constrained) ensemble optimization through popular calculators like [XTB](https://github.com/grimme-lab/xtb), [TBLITE](https://github.com/tblite/tblite), [ORCA](https://www.orcasoftware.de/tutorials_orca/), and Pytorch Neural Network models ([AIMNET2](https://github.com/isayevlab/AIMNet2), [UMA](https://huggingface.co/facebook/UMA)) via [ASE](https://github.com/rosswhitfield/ase).
 
