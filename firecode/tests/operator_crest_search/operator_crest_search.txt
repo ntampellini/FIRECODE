@@ -1,6 +1,5 @@
-calc=xtb solvent=chloroform crestnci dist(a=1.4,b=1.2)
-#refine> crest_search> dimer.xyz 0AB 3A 1B
-refine> crest_search> dimer.xyz 0ab 3a 1b
+calc=xtb solvent=chloroform crestnci dist(A=1.4, B=1.2)
+refine> crest_search> dimer.xyz 0AB 3A 1B
     D 4 3 0 1 0.0
     D 4 3 0 2
     A 3 0 1 123.0
