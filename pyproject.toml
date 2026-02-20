@@ -125,3 +125,6 @@ relative_files = true
 
 [tool.coverage.report]
 relative_files = true
+
+[tool.coverage.xml]
+output = "coverage.xml"
