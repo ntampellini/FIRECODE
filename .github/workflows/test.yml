@@ -39,6 +39,8 @@ jobs:
       # - run: pixi run types
       - run: pixi run -e dev test_cov
 
+      - run: pixi run -e dev coverage report 
+
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
