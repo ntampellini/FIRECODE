@@ -41,7 +41,7 @@ jobs:
 
       - run: pixi run -e dev coverage report 
 
-      - RUN: head -5 coverage.xml
+      - run: head -5 coverage.xml
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v5
