@@ -1786,8 +1786,8 @@ packages:
   timestamp: 1771219337187
 - pypi: ./
   name: firecode
-  version: 1.5.2
-  sha256: 92d78b5d22c155a03dea3f14b4b71e33976435bd7a4b48eaf794b676c1ac4ffc
+  version: 1.5.3
+  sha256: 4bf11e915abf84e354f6f0da90d1d1f9afef71da2004d41aa8fa71b8feea5973
   requires_dist:
   - rdkit>=2025.9.3
   - numpy

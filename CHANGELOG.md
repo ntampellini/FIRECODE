@@ -6,7 +6,10 @@
 <!-- FINALSPLEVEL keyword? -->
  <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer-->
 
-## FIRECODE 1.5.2 🔥 (WIP)
+## FIRECODE 1.5.3 🔥 (February 19 2026)
+- Fixes a bug with reactive_atoms_classes_dict and embedder.options.charge.
+
+## FIRECODE 1.5.2 🔥 (February 18 2026)
 - Broken up installation into dedicated modules: minimal (`firecode`) and MLIPs (`firecode[aimnet2]`, `firecode[uma]`, `firecode[full]`)
 - Updated tests infrastructure and added CodeCov CI.
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "firecode"
 license = "LGPL-3.0-or-later"
-version = "1.5.2"
+version = "1.5.3"
 readme = "README.md"
 description = "FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles"
 keywords = []
