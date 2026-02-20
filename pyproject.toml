@@ -121,5 +121,4 @@ full = [
 ]
 
 [tool.coverage.run]
-source = ["firecode"]
 relative_files = true
