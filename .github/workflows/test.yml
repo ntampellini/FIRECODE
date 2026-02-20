@@ -6,6 +6,7 @@ on:
     branches:
     - main
     - feature/**
+    - bug/**
 
 jobs:
   test:
