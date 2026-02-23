@@ -8,5 +8,6 @@ FIRECODE - Filtering Refiner and Embedder for Conformationally Dense Ensembles
    installation
    usage
    operators_keywords
+   embeddings
    examples
    license

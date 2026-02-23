@@ -6,10 +6,10 @@ Operators and keywords
 Operators
 +++++++++
 
-Molecule files can be preceded by *operators*, like
-``opt> molecule.xyz``. They operate on the input file before it is
-fed to FIRECODE embeddings, or modify the behavior of the program to
-use some of its functionalities, without running a full embedding.
+Molecule files can be preceded by **operators**, *i.e.*
+``refine> opt> molecule.xyz``. They operate on the input file in "inside out" order,
+as mathematical operators. In the example above, ``opt>`` is executed first, and the resulting
+output is piped to ``refine>``. All non-terminating operators can be chained.
 Here is a list of the currently available operators:
 
 -  ``opt>`` - Performs an optimization of all conformers of a molecule before
@@ -17,57 +17,63 @@ Here is a list of the currently available operators:
    coordinates. This operator is constraint-aware and will perform constrained
    optimizations obeying the distances provided with DIST.
 
--  ``csearch>`` - Performs a diversity-based, torsionally-clustered conformational
-   search on the specified input structure. Only the bonds that do not brake imposed
-   constraints are rotated (see examples). Generates a new ``molecule_confs.xyz``
-   file with the unoptimized conformers.
-
--  ``csearch_hb>`` - Analogous to ``csearch>``, but recognizes the hydrogen bonds present
-   in the input structure and only rotates bonds that keep those hydrogen bonds in place.
-   Useful to restrict the conformational space that is explored, and ensures that the final
-   poses possess those initial hydrogen bonds.
-
--  ``rsearch>`` - Performs a random torsion-based conformational
-   search on the specified input structure (fast but not the most accurate). Only the bonds that do not brake imposed
-   constraints are rotated (see examples). Generates a new ``molecule_confs.xyz``
-   file with the unoptimized conformers.
-
--  ``mtd_search>``/ ``mtd>`` - Performs a metadynamics-based conformational
-   search on the specified input structure through `CREST <https://crest-lab.github.io/crest-docs/>`__
-   (slower but best). It is letter constraints-aware
-   and will constrain the specified distances. Generates a new ``molecule_mtd_confs.xyz``
+-  ``crest_search>``/ ``crest>``/ ``mtd_search>``/ ``mtd>`` - Performs a metadynamics-based conformational
+   search on the specified input structure through `CREST <https://crest-lab.github.io/crest-docs/>`__.
+   The operator is constraints-aware
+   and will constrain the specified distances (both "fixed" and not). Generates a new ``mol_crest_confs.xyz``
    file with the crest-optimized conformers. The default level is GFN2//GFN-FF (see CREST docs).
-   It is also possible to pass a charge attribute for the molecule via molecule-line 'charge' attribute.
+   Charge and multiplicity are passed from the molecule or keyword line.
    
    ::
    
        mtd> molecule.xyz 4A 8A charge=-1
 
--  ``neb>`` - Runs a NEB (Nudged Elastic Band) procedure on external structures. Useful 
-   if working with calculators that do not natively integrate such methods (*i.e.* Gaussian). 
-   The implementation is a climbing image nudged elastic band (CI-NEB) TS search with 7 moving images.  
-   The operator should be used on a file that contains two or three structures, that will be interpolated as the
-   start, end and optional transition state guess for the NEB optimization. Alternatively, an odd number of
-   structures can be used as a starting point, overriding interpolation.
+-  ``rdkit_search>`` - Performs a conformational search with the `ETKDGv3 algorithm <https://pubs.acs.org/doi/10.1021/acs.jcim.0c00025>`__.
+   via RDKit. Generates a new ``mol_rdkit_confs.xyz`` file with the generated conformers.
+
+-  ``refine>`` - Acts on a multimolecular input file, pruning similar structures and optimizing it
+   at the chosen theory level. Soft, non-fixed constraints ("interactions") are enforced during a 
+   first loose optimization, and subsequently relaxed.
+
+-  ``neb>`` - Runs a NEB (Nudged Elastic Band) procedure on the provided structures.
+   The implementation is a climbing image nudged elastic band (CI-NEB) TS search.  
+   The operator should be used on a single file that contains two or more structures.
+   The first and last structures will be used as start and endpoints. If three are provided, the intermediate
+   structure will be used as a TS guess in the interpolation. If more are provided, they will all be used
+   in place of (or to aid) interpolation to reach the desired number of images
+   (set with the ``IMAGES=n`` or NEB(IMAGES=n) keywords). Default is 7.
    
-   A graph with the energy of each image is written, along with the MEP guess 
-   and the converged MEP. It is also possible to provide three structures, that will be used as start,
-   end and transition state guess, respectively.
+-  ``scan>`` - Runs a scan of the desired distance or dihedral angle, based on the number of indices provided.
+   For distance scans, the atomic indices will be approached if they are not bound, and separated if they are.
+   This could be chained with, for example, a NEB calculation, where the scan trajectory will be used as a starting
+   point for a NEB calculation.
 
--  ``autoneb>`` - Analogous to the ``neb>`` operator, but automatically builds a MEP guess from a single structure.
-   At the moment, it is only able to do so for atropisomeric 7-member rings inversions.
+   ::
 
--  ``refine>`` - Reads the (multimolecular) input file and treats it as an ensemble generated
-   during a FIRECODE embedding. That is the ensemble is pruned removing similar structure, optimized
-   at the theory level(s) chosen and again pruned for similarity.
+       neb> scan> mol.xyz 3 4
 
-All non-terminating operators can be nested:
+   For dihedral scans, the dihedral is rotated the full 360° in both clockwise and counterclockwise directions.
+   Maxima above a certain threshold (set with ``KCAL=n``) are scanned again in smaller steps. All maxima for the second mode accurate 
+   scan are saved to firecode_maxima_mol.xyz. The optimized geometries for the initial scans are saved with the relative 
+   names. This version of the ``scan>`` operator is terminating and cannot be chained.
 
-::
+Deprecated:
 
-   refine> rsearch> opt> mol.xyz
-   
-In this case, they are executed from the inner to the outer, i.e. from right to left.
+-  ``firecode_search>`` - Performs a diversity-based, torsionally-clustered conformational
+   search on the specified input structure. Only the bonds that do not brake imposed
+   constraints are rotated (see examples). Generates a new ``molecule_confs.xyz``
+   file with the unoptimized conformers.
+
+-  ``firecode_search_hb>`` - Analogous to ``csearch>``, but recognizes the hydrogen bonds present
+   in the input structure and only rotates bonds that keep those hydrogen bonds in place.
+   Useful to restrict the conformational space that is explored, and ensures that the final
+   poses possess those initial hydrogen bonds.
+
+-  ``firecode_random_search>`` - Performs a random torsion-based conformational
+   search on the specified input structure (fast but inaccurate). Only the bonds that do not brake imposed
+   constraints are rotated (see examples). Generates a new ``molecule_confs.xyz``
+   file with the unoptimized conformers.
+
 
 Keywords
 ++++++++
