@@ -22,7 +22,6 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 import os
 import time
-import warnings
 from copy import deepcopy
 from shutil import rmtree
 from subprocess import getoutput
@@ -33,7 +32,7 @@ from ase import Atoms
 from ase.calculators.calculator import CalculationFailed, PropertyNotImplementedError
 from ase.constraints import FixInternals
 from ase.mep import DyNEB
-from ase.optimize import BFGS, LBFGS
+from ase.optimize import FIRE, LBFGS
 from ase.thermochemistry import IdealGasThermo
 from ase.vibrations import Vibrations
 from prism_pruner.algebra import dihedral, get_alignment_matrix, normalize
@@ -57,7 +56,14 @@ from firecode.utils import (
 )
 
 
-class Spring:
+class ASEConstraint:
+    """Base class stub."""
+
+    def __init__(self):
+        pass
+
+
+class Spring(ASEConstraint):
     """ASE Custom Constraint Class
     Adds an harmonic force between a pair of atoms.
     Spring constant is very high to achieve tight convergence,
@@ -90,7 +96,7 @@ class Spring:
         return f"Spring - ids:{self.i1}/{self.i2} - d_eq:{self.d_eq}, k:{self.k}"
 
 
-class HalfSpring:
+class HalfSpring(ASEConstraint):
     """ASE Custom Constraint Class
     Adds an harmonic force between a pair of atoms,
     only if those two atoms are at least d_max
@@ -125,7 +131,7 @@ class HalfSpring:
         return f"Halfspring - ids:{self.i1}/{self.i2} - d_max:{self.d_max}, d_eq:{self.d_eq}, k:{self.k}"
 
 
-class PlanarAngleSpring:
+class PlanarAngleSpring(ASEConstraint):
     """ASE Custom Constraint Class
     Adds an harmonic force among a triad of atoms.
     Spring constant is dinamycally adjusted to achieve tight convergence,
@@ -199,7 +205,7 @@ class PlanarAngleSpring:
         return f"PlanarAngleSpring - ids:{self.i1}/{self.i2}/{self.i3} - eq_angle:{self.eq_angle}"
 
 
-class DihedralSpring:
+class DihedralSpring(ASEConstraint):
     """ASE Custom Constraint Class
     Adds a harmonic force to control a dihedral angle between four atoms.
     Improved handling of stiff bonds and out-of-plane rotations.
@@ -389,8 +395,9 @@ def ase_neb(
     ts_guess=None,
     n_images=7,
     mep_input=None,
+    climbing_image=True,
     title="temp",
-    optimizer=LBFGS,
+    optimizer=FIRE,
     logfunction=None,
     write_plot=False,
     verbose_print=False,
@@ -423,12 +430,15 @@ def ase_neb(
 
             if logfunction is not None:
                 logfunction(
-                    f"--> NEB: Picking the most different {n_images} images from the {len(mep_input)} structures input."
+                    f"--> NEB: Picking the most separated {n_images} images from the {len(mep_input)} structures input."
                 )
                 s = ", ".join(
                     [str(i) if i in picked_indices else "_" for i, _ in enumerate(mep_input)]
                 )
                 logfunction(f"[{s}]")
+
+        else:
+            raise NotImplementedError
 
         neb = DyNEB(
             images, fmax=0.05, climb=False, method="eb", scale_fmax=1, allow_shared_calculator=True
@@ -483,55 +493,63 @@ def ase_neb(
     )
     for _, image in enumerate(images):
         image.calc = ase_calc
-        image.info.update({"charge": charge, "spin": mult})
+        image = set_charge_and_mult_on_ase_atoms(image, charge=charge, mult=mult)
 
     t_start = time.perf_counter()
+    neb_logfile_name = "neb_opt.log"
 
-    # Set the optimizer and optimize
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            # ignore runtime warnings from the NEB module:
-            # if something went wrong, we will deal with it later
+        # remove old neb log if present
+        try:
+            os.remove(neb_logfile_name)
+        except FileNotFoundError:
+            pass
 
-        with optimizer(neb, maxstep=0.2, logfile="neb_opt.log" if verbose_print else None) as opt:
+        with optimizer(
+            neb, maxstep=0.2, logfile=neb_logfile_name if verbose_print else None
+        ) as opt:
             # Phase 1: Fast initial relaxation with large steps
             if verbose_print and logfunction is not None:
                 logfunction(f"\n--> Running NEB through ASE ({embedder.options.theory_level})")
 
             with HiddenPrints():
+                opt.logfile.write(f"--> Step 1: fmax=0.2, maxstep={opt.maxstep}\n")
                 opt.run(fmax=0.2, steps=50)
 
             # Phase 2: Medium steps, tighter convergence
             opt.maxstep = 0.1
             with HiddenPrints():
+                opt.logfile.write(f"--> Step 2: fmax=0.1, maxstep={opt.maxstep}\n")
                 opt.run(fmax=0.1, steps=50 + opt.nsteps)
 
-            energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
             print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
+            energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
             ase_dump(f"{title}_MEP_temp_pre_CI.xyz", atoms, neb.images, energies)
 
             # Phase 3: Fine-tune before climbing
             opt.maxstep = 0.05
             with HiddenPrints():
-                opt.run(fmax=0.075, steps=30 + opt.nsteps)
+                opt.logfile.write(f"--> Step 3: fmax=0.05, maxstep={opt.maxstep}\n")
+                opt.run(fmax=0.05, steps=200 + opt.nsteps)
 
             energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
             print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
             ase_dump(f"{title}_MEP_temp_pre_CI.xyz", atoms, neb.images, energies)
 
-            # Phase 4: Climbing image with small steps
-            if verbose_print and logfunction is not None:
-                logfunction("--> Activating Climbing Image")
+            if climbing_image:
+                # Phase 4: Climbing image with small steps
+                if verbose_print and logfunction is not None:
+                    logfunction("--> Activating Climbing Image")
 
-            energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
-            ase_dump(f"{title}_MEP_start_of_CI.xyz", atoms, neb.images, energies)
+                energies = [image.get_total_energy() * EV_TO_KCAL for image in images]
+                ase_dump(f"{title}_MEP_start_of_CI.xyz", atoms, neb.images, energies)
 
-            opt.maxstep = 0.01
-            neb.climb = True
+                opt.maxstep = 0.01
+                neb.climb = True
 
-            with HiddenPrints():
-                opt.run(fmax=0.05, steps=400 + opt.nsteps)
+                with HiddenPrints():
+                    opt.logfile.write(f"--> Step 4 (CI): fmax=0.05, maxstep={opt.maxstep}\n")
+                    opt.run(fmax=0.05, steps=400 + opt.nsteps)
 
             exit_status = "CONVERGED" if opt.converged else "MAX ITER"
 
@@ -544,7 +562,10 @@ def ase_neb(
                 ase_dump(f"{title}_MEP_crashed.xyz", atoms, neb.images)
             except Exception():
                 pass
-        return None, None, None, False
+
+        energies = [0 for image in images]
+        ts_id = energies.index(max(energies))
+        return images[ts_id].get_positions(), energies[ts_id], energies, "CRASHED"
 
     except KeyboardInterrupt:
         exit_status = "ABORTED BY USER"
@@ -717,7 +738,7 @@ def PreventScramblingConstraint(graph, atoms, double_bond_protection=False, fix_
     return FixInternals(dihedrals_deg=dihedrals_deg, angles_deg=angles_deg, bonds=bonds, epsilon=1)
 
 
-def set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult):
+def set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult) -> Atoms:
     # update charge and mult
     ase_atoms.info.update({"charge": charge, "spin": mult})
 
@@ -975,7 +996,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title="temp", traj=
             ]
         )
 
-        opt = BFGS(atoms, maxstep=0.2, logfile=None, trajectory=None)
+        opt = LBFGS(atoms, maxstep=0.2, logfile=None, trajectory=None)
 
         try:
             with suppress_stdout_stderr():

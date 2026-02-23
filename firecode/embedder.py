@@ -20,7 +20,6 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
-import io
 import logging
 import os
 import pickle
@@ -33,6 +32,7 @@ from copy import deepcopy
 from getpass import getuser
 from importlib.metadata import version
 from itertools import groupby
+from string import ascii_lowercase
 from typing import List, Tuple
 
 import numpy as np
@@ -76,9 +76,6 @@ from firecode.utils import (
 )
 
 norm_of = np.linalg.norm
-
-# Set the standard output to UTF-8
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", write_through=True)
 
 
 class Embedder:
@@ -438,12 +435,22 @@ class Embedder:
                     for r_atom in mol.reactive_atoms_classes_dict[c].values():
                         r_atom.cumnum = r_atom.index + cumulative_offset
 
-    def _read_pairings(self):
-        """Reads atomic pairings to be respected from the input file, if any are present."""
-        parsed = []
-        unlabeled_list = []
-        self.pairings_dict = {i: {} for i, _ in enumerate(self.objects)}
+    def temporary_constraints_present(self) -> bool:
+        """Returns whether the Embedder or any Hypermolecule object has a non-fixed constraint."""
+        # check if we have at least one distance constraint associated with a lowercase letter
+        if len([letter for letter in self.pairings_table.keys() if letter.islower()]) > 0:
+            return True
 
+        # if not, we might still have a non-fixed angle or dihedral constraint
+        for mol in self.objects:
+            for constraint in mol.constraints:
+                if not constraint.fixed:
+                    return True
+
+        return False
+
+    def _parse_constraint_lines(self):
+        """Parse lines starting with an empty space, indicating constraints."""
         # removing constraint lines from mol_lines, saving constraints
         mol_and_constr_lines = [line for line in self.mol_lines if line.strip() != ""]
         self.mol_lines = []
@@ -459,7 +466,27 @@ class Embedder:
                 )
 
                 mol = self.objects[mol_id]
-                parts = line.split()
+                parts = line.split("#")[0].split()
+
+                # save constraint properties
+                constr_props = dict()
+
+                values_dict = {
+                    "true": True,
+                    "1": True,
+                    "yes": True,
+                    "false": False,
+                    "0": False,
+                    "no": False,
+                }
+
+                for part in deepcopy(parts):
+                    if "=" in part:
+                        name, value = part.split("=")
+                        value = values_dict.get(value, value)
+                        constr_props[name] = value
+                        parts.remove(part)
+
                 letter = parts[0].upper()
 
                 match letter:
@@ -469,9 +496,12 @@ class Embedder:
                             indices = [int(i) for i in parts[1:5]]
 
                         elif len(parts) == 6:
-                            auto_target = False
                             indices = [int(i) for i in parts[1:5]]
-                            target = float(parts[5])
+                            if parts[5] == "auto":
+                                auto_target = True
+                            else:
+                                auto_target = False
+                                target = float(parts[5])
 
                         else:
                             raise SyntaxError(
@@ -484,14 +514,40 @@ class Embedder:
                             indices = [int(i) for i in parts[1:4]]
 
                         elif len(parts) == 5:
-                            auto_target = False
                             indices = [int(i) for i in parts[1:4]]
-                            target = float(parts[4])
+                            if parts[4] == "auto":
+                                auto_target = True
+                            else:
+                                auto_target = False
+                                target = float(parts[4])
 
                         else:
                             raise SyntaxError(
                                 f'Error while parsing line "{line}". Planar angle constraint syntax: "A i1 i2 i3 i4 [value/auto]".'
                             )
+
+                    case "B":
+                        if len(parts) == 3:
+                            auto_target = True
+                            indices = [int(i) for i in parts[1:3]]
+
+                        elif len(parts) == 4:
+                            indices = [int(i) for i in parts[1:3]]
+                            if parts[3] == "auto":
+                                auto_target = True
+                            else:
+                                auto_target = False
+                                target = float(parts[3])
+
+                        else:
+                            raise SyntaxError(
+                                f'Error while parsing line "{line}". Planar angle constraint syntax: "A i1 i2 i3 i4 [value/auto]".'
+                            )
+
+                    case _:
+                        raise SyntaxError(
+                            f'Error while parsing line "{line}". Constraint type "{letter}" not understood (B: bond, A: angle, D: dihedral)'
+                        )
 
                 # if value is auto, take current value
                 if auto_target:
@@ -500,12 +556,31 @@ class Embedder:
                             target = dihedral(mol.coords[0][np.array(indices)])
                         case "A":
                             target = point_angle(*mol.coords[0][np.array(indices)])
+                        case "B":
+                            i1, i2 = indices
+                            target = np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2])
 
                 c = Constraint(indices, target)
+
+                # set constraint attributes
+                for key, value in constr_props.items():
+                    setattr(c, key, value)
+                    self.log(f"--> Set property of Constraint[{' '.join(parts)}]: {key}={value}")
+
                 mol.constraints.append(c)
 
             else:
                 self.mol_lines.append(line)
+
+        return self.mol_lines
+
+    def _read_pairings(self):
+        """Reads atomic pairings/coinstraints to be respected from the input file, if any are present."""
+        parsed = []
+        unlabeled_list = []
+        self.pairings_dict = {i: {} for i, _ in enumerate(self.objects)}
+
+        self.mol_lines = self._parse_constraint_lines()
 
         # now i is also the molecule index in self.objects and we can parse inter-file pairings/constraints
         for i, line in enumerate(self.mol_lines):
@@ -533,8 +608,7 @@ class Embedder:
 
             self.log()
 
-            unlabeled = []
-            pairings = []
+            pairings, unlabeled = [], []
 
             for fragment in fragments:
                 if not fragment.lower().islower():  # if all we have is a number
@@ -546,10 +620,23 @@ class Embedder:
                     for letter in letters:
                         pairings.append([int(index), letter])
 
+            # adding distance constraints from mol.constraints
+            for constr in self.objects[0].constraints:
+                if constr.type == "B":
+                    i1, i2 = constr.indices
+                    used_letters = (p[1].lower() for p in pairings)
+                    letter = next((_l for _l in ascii_lowercase if _l not in used_letters))
+
+                    if constr.fixed:
+                        letter = letter.upper()
+
+                    pairings.append([i1, letter])
+                    pairings.append([i2, letter])
+
             # appending pairing to dict before
             # calculating their cumulative index
             # If a pairing is already present, add the number
-            # (refine>/REFINE runs)
+            # (refine> runs)
             for index, letter in pairings:
                 if self.pairings_dict[i].get(letter) is not None:
                     prev = self.pairings_dict[i][letter]
@@ -641,9 +728,10 @@ class Embedder:
         for i, mol in enumerate(self.objects):
             cumulative_offset = int(sum(self.ids[:i])) if i > 0 else 0
             for constraint in mol.constraints:
-                emb_ids = [idx + cumulative_offset for idx in constraint.indices]
-                emb_constr = Constraint(emb_ids, constraint.value)
-                self.internal_angle_dih_constraints.append(emb_constr)
+                if constraint.type in ("D", "A"):
+                    emb_ids = [idx + cumulative_offset for idx in constraint.indices]
+                    emb_constr = Constraint(emb_ids, constraint.value)
+                    self.internal_angle_dih_constraints.append(emb_constr)
 
     def get_str_all_constraints(self, filename: str | None = None) -> str:
         """Return a string detailing all constraints associated with a molecule."""
@@ -658,7 +746,8 @@ class Embedder:
             # there is a single molecule - if so, read them from there
             if len(self.objects) == 1:
                 for constraint in self.objects[0].constraints:
-                    s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
+                    if constraint.type in ("D", "A"):
+                        s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
 
         else:
             for i, hypmol in enumerate(self.objects):
@@ -671,7 +760,8 @@ class Embedder:
 
                     # add planar and dihedral angle internal constraints
                     for constraint in hypmol.constraints:
-                        s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
+                        if constraint.type in ("D", "A"):
+                            s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
 
                     break
 
@@ -1075,7 +1165,7 @@ class Embedder:
 
         return int(candidates)
 
-    def _get_angle_dih_constraints(self, filename=None):
+    def _get_angle_dih_constraints(self, filename=None, only_fixed_constraints=False):
         """Gets angle and dihedral constraints for a molecule or for the whole embed.
 
         If filename is None, it will return the angle and dihedral constraints of the overall embed.
@@ -1091,22 +1181,26 @@ class Embedder:
         if filename is None:
             for constraint in self.internal_angle_dih_constraints:
                 if constraint.type == "A":
-                    constrained_angles_indices.append(constraint.indices)
-                    constrained_angles_values.append(constraint.value)
+                    if (not only_fixed_constraints) or constraint.fixed:
+                        constrained_angles_indices.append(constraint.indices)
+                        constrained_angles_values.append(constraint.value)
 
                 elif constraint.type == "D":
-                    constrained_dihedrals_indices.append(constraint.indices)
-                    constrained_dihedrals_values.append(constraint.value)
+                    if (not only_fixed_constraints) or constraint.fixed:
+                        constrained_dihedrals_indices.append(constraint.indices)
+                        constrained_dihedrals_values.append(constraint.value)
         else:
             for hypmol in self.objects:
                 if hypmol.filename == filename:
                     for constraint in hypmol.constraints:
                         if constraint.type == "A":
-                            constrained_angles_indices.append(constraint.indices)
-                            constrained_angles_values.append(constraint.value)
+                            if (not only_fixed_constraints) or constraint.fixed:
+                                constrained_angles_indices.append(constraint.indices)
+                                constrained_angles_values.append(constraint.value)
                         elif constraint.type == "D":
-                            constrained_dihedrals_indices.append(constraint.indices)
-                            constrained_dihedrals_values.append(constraint.value)
+                            if (not only_fixed_constraints) or constraint.fixed:
+                                constrained_dihedrals_indices.append(constraint.indices)
+                                constrained_dihedrals_values.append(constraint.value)
                     break
 
         return (
@@ -1882,7 +1976,7 @@ class RunEmbedding(Embedder):
                     constrained_angles_values,
                     constrained_dihedrals_indices,
                     constrained_dihedrals_values,
-                ) = self._get_angle_dih_constraints()
+                ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
                 process = executor.submit(
                     timing_wrapper,
@@ -2206,7 +2300,7 @@ class RunEmbedding(Embedder):
                     constrained_angles_values,
                     constrained_dihedrals_indices,
                     constrained_dihedrals_values,
-                ) = self._get_angle_dih_constraints()
+                ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
                 process = executor.submit(
                     timing_wrapper,
@@ -2467,7 +2561,7 @@ class RunEmbedding(Embedder):
                 constrained_angles_values,
                 constrained_dihedrals_indices,
                 constrained_dihedrals_values,
-            ) = self._get_angle_dih_constraints()
+            ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
             result = timing_wrapper(
                 self.dispatcher.opt_func,
@@ -2692,10 +2786,8 @@ class RunEmbedding(Embedder):
 
         self.log("--> Input structures & reactive indices data:\n" + head)
 
-    def write_options(self):
+    def write_constr_options(self):
         """Writes information about the firecode parameters used in the calculation, if applicable to the run."""
-        ######################################################################################################## PAIRINGS
-
         if not self.pairings_table:
             if all([len(mol.reactive_indices) == 2 for mol in self.objects]):
                 self.log("--> No atom pairings imposed. Computing all possible dispositions.\n")
@@ -2755,7 +2847,7 @@ class RunEmbedding(Embedder):
                     cum_ids = "-".join([str(i + n) for i in constraint.indices])
                     elements = "-".join([mol.atoms[i] for i in constraint.indices])
                     t, uom, figs = {
-                        # "B": ("Bond", " Å", 2),
+                        "B": ("Bond", " Å", 2),
                         "A": ("Angle", "°", 1),
                         "D": ("Dihedral", "°", 1),
                     }[constraint.type]
@@ -2767,8 +2859,8 @@ class RunEmbedding(Embedder):
 
         self.log()
 
-        ######################################################################################################## EMBEDDING/CALC OPTIONS
-
+    def write_run_options(self):
+        """Writes information about the firecode parameters used in the run, if applicable."""
         self.log("--> Calculation options used were:")
         for line in str(self.options).split("\n"):
             if self.embed in ("monomolecular", "string", "refine") and line.split()[0] in (
@@ -2833,6 +2925,7 @@ class RunEmbedding(Embedder):
     def run(self):
         """Run the firecode program."""
         self.write_mol_info()
+        self.write_constr_options()
 
         if self.embed is None:
             self.log("--> No embed or refinement requested, exiting.\n")
@@ -2855,7 +2948,7 @@ class RunEmbedding(Embedder):
 
             self.log("--> Large embed: RIGID keyword added for efficiency (override with LET)")
 
-        self.write_options()
+        self.write_run_options()
 
         if not hasattr(self, "t_start_run"):
             self.t_start_run = time.perf_counter()
@@ -2881,14 +2974,11 @@ class RunEmbedding(Embedder):
                     if self.options.ff_opt:
                         # perform safe optimization only for embeds
                         if len(self.objects) > 1 and self.options.ff_calc == "XTB":
-                            # self.log(f"--> Performing {self.options.calculator} FF pre-optimization (loose convergence, molecular and pairing constraints)\n")
                             self.force_field_refining(conv_thr="loose", prevent_scrambling=True)
 
-                        if len(self.structures) > 500:
-                            # self.log(f"--> Performing {self.options.calculator} FF optimization (loose convergence, pairing constraints, step 1/2)\n")
+                        elif len(self.structures) > 500 or self.temporary_constraints_present():
                             self.force_field_refining(conv_thr="loose")
 
-                        # self.log(f"--> Performing {self.options.calculator} FF optimization (tight convergence, fixed constraints only, step 2/2)\n")
                         self.force_field_refining(conv_thr="tight")
 
                     if not (
@@ -2897,9 +2987,9 @@ class RunEmbedding(Embedder):
                         # If we just optimized at a (FF) level and the final
                         # optimization level is the same, avoid repeating it
 
-                        if len(self.structures) > 500:
+                        if len(self.structures) > 500 or self.temporary_constraints_present():
                             self.optimization_refining(conv_thr="loose")
-                            # final uncompromised optimization (with fixed constraints and interactions active)
+                            # final partial optimization (with both fixed constraints and interactions enforced)
 
                         self.optimization_refining(conv_thr="tight", only_fixed_constraints=True)
                         # final uncompromised optimization (with only fixed constraints active)

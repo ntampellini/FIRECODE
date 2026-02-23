@@ -606,7 +606,7 @@ class Metal:
         v1 = self.vectors[0]
         # v1 connects first bonded atom to the metal itself
 
-        neighbor_of_neighbor_index = mol.graph.neighbors(neighbors_indices[0])[0]
+        neighbor_of_neighbor_index = list(mol.graph.neighbors(neighbors_indices[0]))[0]
         v2 = mol.coords[conf][neighbor_of_neighbor_index] - self.coord
         # v2 connects first neighbor of the first neighbor to the metal itself
 
@@ -629,6 +629,33 @@ class Metal:
             self.center = (self.orb_vecs * orb_dim) + self.coord
 
 
+class SingleAtom:
+    def __repr__(self):
+        return "SingleAtom"
+
+    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+        """ """
+        self.index = i
+        self.symbol = mol.atoms[i]
+
+        self.neighbors_symbols = []
+        self.coord = mol.coords[conf][i]
+        self.other = mol.coords[conf][i] + np.array([0, 0, 1], dtype=float)
+        self.orb_vecs = np.array([normalize(self.coord - self.other)])
+        self.orb_vers = normalize(self.orb_vecs[0])
+
+        if update:
+            if orb_dim is None:
+                key = self.symbol + " " + str(self).split(" (")[0]
+                orb_dim = orb_dim_dict.get(key)
+
+                if orb_dim is None:
+                    orb_dim = norm_of(self.coord - self.other)
+                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
+
+            self.center = orb_dim * self.orb_vecs + self.coord
+
+
 # Keys are made of atom symbol and number of bonds that it makes
 atom_type_dict = {
     "H1": Single,
@@ -636,21 +663,21 @@ atom_type_dict = {
     "B4": Sp3,
     "C1": Single,  # deprotonated terminal alkyne. What if it is a carbylidene? Very rare by the way...
     "C2": Sp_or_carbene,  # sp if straight, carbene if bent
-    "C3": Sp2,  # double ball
-    "C4": Sp3,  # one ball, on the back of the leaving group. If we can't tell which one it is, we ask user
+    "C3": Sp2,  # double lobe
+    "C4": Sp3,  # one lobe, on the back of the leaving group. If we can't tell which one it is, we ask user
     "N1": Single,
-    "N2": Imine,  # one ball on free side
-    "N3": Sp2,  # double ball
+    "N2": Imine,  # one lobe on free side
+    "N3": Sp2,  # double lobe
     "N4": Sp3,  # leaving group
-    "O1": Ketone,  # two balls 120° apart. Also for alkoxides, good enough
-    "O2": Ether,  # or alcohol, two balls about 109,5° apart
-    "P2": Imine,  # one ball on free side
-    "P3": Sp2,  # double ball
+    "O1": Ketone,  # two lobes 120° apart. Also for alkoxides, good enough
+    "O2": Ether,  # or alcohol, two lobes about 109,5° apart
+    "P2": Imine,  # one lobe on free side
+    "P3": Sp2,  # double lobe
     "P4": Sp3,  # leaving group
     "S1": Ketone,
     "S2": Ether,
-    "S3": Sp2,  # Not sure if this can be valid, but it's basically treating it as a bent carbonyl, should work
-    #  'S3' : Sulphoxide, # Should we consider this? Or just ok with Sp2()?
+    "S3": Sp2,  # basically treating it as a bent carbonyl
+    #  'S3' : Sulfoxide, # Should we consider this? Or just ok with Sp2()?
     "S4": Sp3,
     "F1": Single,
     "Cl1": Single,
@@ -665,6 +692,7 @@ atom_type_dict = {
     "Imine": Imine,
     "Sp_or_carbene": Sp_or_carbene,
     "Metal": Metal,
+    "X0": SingleAtom,
 }
 
 metals = (
@@ -697,6 +725,10 @@ def get_atom_type(graph, index, override=None):
         return atom_type_dict[override]
 
     nb = list(graph.neighbors(index))
+
+    if not nb:
+        return atom_type_dict["X0"]
+
     code = graph.nodes[index]["atoms"] + str(len(nb))
     try:
         return atom_type_dict[code]

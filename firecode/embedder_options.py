@@ -79,6 +79,9 @@ keywords_dict = {
     "REFINE": 1,  # Same as calling refine> on a single file
     "RIGID": 1,  # Does not apply to "string" embeds. Avoid
     # bending structures to better build TSs.
+    "RMSD": 1,  # RMSD threshold (Angstroms) for structure pruning. The smaller,
+    # the more retained structures. Default is 0.5 A.
+    # Syntax: `RMSD=n`, where n is a number.
     "ROTRANGE": 1,  # Does not apply to "string" embeds. Manually specify the rotation
     # range to be explored around the structure pivot.
     # Default is 120. Syntax: `ROTRANGE=120`
@@ -99,9 +102,6 @@ keywords_dict = {
     # twelve 20 degrees turns.
     "SUPRAFAC": 1,  # Only retain suprafacial orbital configurations in cyclical TSs.
     # Thought for Diels-Alder and other cycloaddition reactions.
-    "RMSD": 1,  # RMSD threshold (Angstroms) for structure pruning. The smaller,
-    # the more retained structures. Default is 0.5 A.
-    # Syntax: `RMSD=n`, where n is a number.
 }
 
 
@@ -170,8 +170,6 @@ class Options:
         if self.ff_opt:
             self.ff_level = DEFAULT_FF_LEVELS[FF_CALC]
 
-        self.neb = False
-        self.ts = False
         self.crestnci = False
         self.shrink = False
         self.shrink_multiplier = 1
@@ -212,7 +210,7 @@ class Options:
         # enforce the use of a single thread in multimolecular optimization
 
     def __repr__(self):
-        d = {var: self.__getattribute__(var) for var in dir(self) if var[0:2] != "__"}
+        d = {var: self.__getattribute__(var) for var in dir(self) if var[0] != "_"}
 
         repr_if_true = (
             "bypass",
@@ -221,7 +219,6 @@ class Options:
             "debug",
             "let",
             "metadynamics",
-            "neb",
             "ts",
             "ff_opt",
             "noembed",
@@ -254,9 +251,18 @@ class Options:
         if not FF_OPT_BOOL:
             d.pop("ff_calc")
 
-        padding = 1 + max([len(var) for var in d])
+        padding = 1 + max([len(key) for key in d.keys()])
 
-        return "\n".join([f"{var}{' ' * (padding - len(var))}: {d[var]}" for var in d])
+        return "\n".join(
+            [f"{key}{' ' * (padding - len(key))}: {value}" for key, value in d.items()]
+        )
+
+    def _init_neb_options(self):
+        """Initialize NEB options."""
+        self.neb = Truthy_struct()
+        self.neb.n_images = self.images if hasattr(self, "images") else 7
+        self.neb.preopt = True
+        self.neb.climbing_image = True
 
 
 class OptionSetter:
@@ -420,9 +426,7 @@ class OptionSetter:
         options.max_newbonds = int(kw.split("=")[1])
 
     def neb(self, options, *args):
-        options.neb = Truthy_struct()
-        options.neb.images = options.images if hasattr(options, "images") else 7
-        options.neb.preopt = False
+        options._init_neb_options()
 
         kw = self.keywords_simple[self.keywords.index("NEB")]
         neb_options_string = kw[4:-1].lower().replace(" ", "")
@@ -430,17 +434,18 @@ class OptionSetter:
 
         if neb_options_string != "":
             for piece in neb_options_string.split(","):
-                s = piece.split("=")
-                if s[0].lower() == "images":
-                    options.neb.images = int(s[1])
-                elif s[0].lower() == "preopt":
-                    if s[1].lower() == "true":
-                        options.neb.preopt = True
+                kw_name, value = piece.split("=")
+                if kw_name == "images":
+                    options.neb.n_images = int(value)
+                elif piece == "preopt=false":
+                    options.neb.preopt = False
+                elif piece == "ci=false":
+                    options.neb.climbing_image = False
                 else:
                     raise SyntaxError(
                         (
                             f"Syntax error in NEB keyword -> NEB({neb_options_string}). "
-                            + "Correct syntax looks like: NEB(images=7,preopt=true)"
+                            + "Correct syntax looks like: NEB(images=7, preopt=true, ci=false)"
                         )
                     )
 

@@ -34,7 +34,7 @@ from firecode.algebra import point_angle
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.pt import pt
 from firecode.settings import CALCULATOR
-from firecode.solvents import epsilon_dict
+from firecode.solvents import epsilon_dict, solvent_synonyms
 from firecode.units import EH_TO_KCAL
 from firecode.utils import Constraint, read_xyz, write_xyz
 
@@ -45,7 +45,7 @@ class Optimizer:
             choices = (
                 Choice(value=("AIMNET2", "wB97M-D3"), name="AIMNet2/wB97M-D3"),
                 Choice(value=("TBLITE", "GFN2-xTB"), name="GFN2-xTB (TBLITE)"),
-                # Choice(value=('XTB', 'g-xTB'), name='g-xTB (XTB)'),
+                # Choice(value=('TBLITE', 'g-xTB'), name='g-xTB (TBLITE)'),
                 Choice(value=("XTB", "GFN-FF"), name="GFN-FF (XTB)"),
                 Choice(value=("UMA", "OMOL"), name="UMA/OMol25"),
                 Choice(value=("ORCA", "B97-3c"), name="ORCA/B97-3c"),
@@ -58,11 +58,17 @@ class Optimizer:
             ).execute()
 
         if solvent is None:
+            solvents = (
+                list(epsilon_dict.keys())
+                + list(solvent_synonyms.keys())
+                + [Choice(value=None, name="vacuum")]
+            )
             solvent = inquirer.fuzzy(
                 message="Which solvent would you like to use?",
-                choices=list(epsilon_dict.keys()) + [Choice(value=None, name="vacuum")],
+                choices=solvents,
                 default="toluene",
-                validate=lambda x: (x in epsilon_dict) or x is None,
+                validate=lambda x: (x in solvents) or x is None,
+                filter=solvent_synonyms.get(solvent, solvent),
             ).execute()
 
         self.calc = calc

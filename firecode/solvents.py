@@ -108,7 +108,6 @@ solvent_synonyms = {
 }
 
 new_theory_level = {
-    "MOPAC": lambda theory_level, solvent: f"EPS={epsilon_dict[solvent]}",
     "ORCA": lambda theory_level, solvent: f"! CPCM\n%cpcm\nepsilon {epsilon_dict[solvent]}\nend",
     # 'XTB':lambda theory_level, _: '',
 }
