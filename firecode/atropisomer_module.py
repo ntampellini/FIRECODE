@@ -33,11 +33,10 @@ from prism_pruner.graph_manipulations import graphize
 from prism_pruner.pruner import prune_by_rmsd
 from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.ase_manipulations import ase_neb
 from firecode.errors import ZeroCandidatesError
 from firecode.optimization_methods import optimize
 from firecode.units import EV_TO_KCAL
-from firecode.utils import clean_directory, loadbar, molecule_check, write_xyz
+from firecode.utils import clean_directory, loadbar, write_xyz
 
 
 def ase_torsion_TSs(
@@ -224,10 +223,6 @@ def ase_torsion_TSs(
                     s = "s" if len(sub_peaks_indices) > 1 else ""
                     msg = f"Found {len(sub_peaks_indices)} sub-peak{s}."
 
-                    if embedder.options.neb:
-                        tag = "NEB TS"
-                        msg += f"Performing {tag} optimization{s}."
-
                     print(msg)
 
                     if logfile is not None:
@@ -246,31 +241,8 @@ def ase_torsion_TSs(
                                 markersize=3,
                             )
 
-                        if embedder.options.neb:
-                            loadbar_title = f"  > NEB TS opt on sub-peak {s + 1}/{len(sub_peaks_indices)}, {direction[1:]}"
-                            drctn = "clkws" if direction == "_clockwise" else "ccws"
-
-                            print(loadbar_title)
-
-                            optimized_geom, energy, success = ase_neb(
-                                embedder,
-                                atoms,
-                                sub_structures[sub_peak - 2],
-                                sub_structures[(sub_peak + 1) % len(sub_structures)],
-                                charge=embedder.options.charge,
-                                mult=embedder.options.mult,
-                                n_images=5,
-                                title=f"{title}_NEB_peak_{p + 1}_sub-peak_{s + 1}_{drctn}",
-                                logfunction=embedder.log,
-                            )
-
-                            if success and molecule_check(atoms, coords, optimized_geom):
-                                ts_structures.append(optimized_geom)
-                                energies.append(energy)
-
-                        else:
-                            ts_structures.append(sub_structures[sub_peak])
-                            energies.append(sub_energies[sub_peak])
+                        ts_structures.append(sub_structures[sub_peak])
+                        energies.append(sub_energies[sub_peak])
 
                         print()
 

@@ -1,2 +1,2 @@
-calc=tblite level=gfn2-xtb images=5
+calc=tblite level=gfn2-xtb neb(images=5, preopt=false)
 neb> anti_to_gauche.xyz

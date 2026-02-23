@@ -69,7 +69,7 @@ def operate(input_string, embedder):
     elif "firecode_search_hb>" in input_string:
         outname = csearch_operator(filename, embedder, keep_hb=True)
 
-    elif "rsearch>" in input_string:
+    elif "firecode_rsearch>" in input_string:
         outname = csearch_operator(filename, embedder, mode=2)
 
     elif any(
@@ -112,7 +112,7 @@ def operate(input_string, embedder):
                 data.atoms,
                 data.coords,
                 title=embedder.stamp + "_safe",
-                n_images=embedder.options.images if hasattr(embedder.options, "images") else None,
+                n_images=embedder.options.neb.n_images,
                 logfunction=embedder.log,
                 write_plot=True,
                 verbose_print=True,
@@ -311,12 +311,8 @@ def neb_operator(filename, embedder, attempts=3):
     data = read_xyz(filename)
     n_str = len(data.coords)
 
-    if hasattr(embedder.options.neb, "images"):
-        n_images = embedder.options.neb.images
-    elif hasattr(embedder.options, "images"):
-        n_images = embedder.options.images
-    else:
-        n_images = 7
+    if not hasattr(embedder.options, "neb"):
+        embedder.options._init_neb_options()
 
     if n_str == 2:
         reagents, products = data.coords
@@ -334,63 +330,61 @@ def neb_operator(filename, embedder, attempts=3):
         ts_guess = data.coords[n_str // 2]
         mep_override = data.coords
         embedder.log(
-            f"--> {n_str} structures as input: casting {n_images} images from these as the NEB MEP guess."
+            f"--> {n_str} structures as input: casting {embedder.options.neb.n_images} images from these as the NEB MEP guess."
         )
 
     from firecode.ase_manipulations import ase_neb
 
     title = filename[:-4] + "_NEB"
+    ci_str = "-CI" if embedder.options.neb.climbing_image else ""
 
-    # do preopt unless user specifies not to
-    if not (hasattr(embedder.options.neb, "preopt") and not embedder.options.neb.preopt):
-        embedder.log(
-            f"--> Performing NEB TS optimization. Preoptimizing start/end structures from {filename}\n"
-            f"Theory level is {embedder.options.theory_level}/{embedder.options.solvent or 'vacuum'} via {embedder.options.calculator}"
-        )
+    # preopt unless user specifies not to
+    embedder.log(
+        f"--> Performing NEB{ci_str} optimization.\n"
+        f"Theory level is {embedder.options.theory_level}/{embedder.options.solvent or 'vacuum'} via {embedder.options.calculator}"
+    )
 
-        reagents, reag_energy, _ = optimize(
-            data.atoms,
-            reagents,
-            embedder.options.calculator,
-            method=embedder.options.theory_level,
-            charge=embedder.options.charge,
-            mult=embedder.options.mult,
-            procs=embedder.procs,
-            solvent=embedder.options.solvent,
-            title="reagents",
-            logfunction=embedder.log,
-            dispatcher=embedder.dispatcher,
-            debug=embedder.options.debug,
-        )
+    if embedder.options.neb.preopt:
+        embedder.log(f"Preoptimizing start/end structures from {filename}")
 
-        products, prod_energy, _ = optimize(
-            data.atoms,
-            products,
-            embedder.options.calculator,
-            method=embedder.options.theory_level,
-            charge=embedder.options.charge,
-            mult=embedder.options.mult,
-            procs=embedder.procs,
-            solvent=embedder.options.solvent,
-            title="products",
-            logfunction=embedder.log,
-            dispatcher=embedder.dispatcher,
-            debug=embedder.options.debug,
-        )
+    else:
+        embedder.log(f"Getting energy of start/end structures from {filename}")
 
-        if mep_override is not None:
-            mep_override[0] = reagents
-            mep_override[-1] = products
+    reagents, reag_energy, _ = optimize(
+        data.atoms,
+        reagents,
+        embedder.options.calculator,
+        method=embedder.options.theory_level,
+        maxiter=750 if embedder.options.neb.preopt else 1,
+        charge=embedder.options.charge,
+        mult=embedder.options.mult,
+        procs=embedder.procs,
+        solvent=embedder.options.solvent,
+        title="reagents",
+        logfunction=embedder.log,
+        dispatcher=embedder.dispatcher,
+        debug=embedder.options.debug,
+    )
 
-    # else:
-    #     embedder.log(f'--> Performing NEB TS optimization. Structures from {filename}\n'
-    #                  f'Theory level is {embedder.options.theory_level} via {embedder.options.calculator}')
+    products, prod_energy, _ = optimize(
+        data.atoms,
+        products,
+        embedder.options.calculator,
+        method=embedder.options.theory_level,
+        maxiter=750 if embedder.options.neb.preopt else 1,
+        charge=embedder.options.charge,
+        mult=embedder.options.mult,
+        procs=embedder.procs,
+        solvent=embedder.options.solvent,
+        title="products",
+        logfunction=embedder.log,
+        dispatcher=embedder.dispatcher,
+        debug=embedder.options.debug,
+    )
 
-    #     print('Getting start point energy...', end='\r')
-    #     _, reag_energy, _ = ase_popt(embedder, reagents, data.atomnos, steps=0)
-
-    #     print('Getting end point energy...', end='\r')
-    #     _, prod_energy, _ = ase_popt(embedder, products, data.atomnos, steps=0)
+    if mep_override is not None:
+        mep_override[0] = reagents
+        mep_override[-1] = products
 
     for attempt in range(attempts):
         ts_coords, ts_energy, energies, exit_status = ase_neb(
@@ -398,11 +392,12 @@ def neb_operator(filename, embedder, attempts=3):
             data.atoms,
             reagents,
             products,
-            n_images=n_images,
+            n_images=embedder.options.neb.n_images,
             charge=embedder.options.charge,
             mult=embedder.options.mult,
             ts_guess=ts_guess,
             mep_input=mep_override,
+            climbing_image=embedder.options.neb.climbing_image,
             title=title,
             logfunction=embedder.log,
             write_plot=True,
@@ -415,7 +410,28 @@ def neb_operator(filename, embedder, attempts=3):
         elif exit_status == "MAX ITER" and attempt + 2 < attempts:
             mep_override = read_xyz(f"{title}_MEP_start_of_CI.xyz").coords
             reagents, *_, products = mep_override
-            embedder.log(f"--> Restarting NEB from checkpoint. Attempt {attempt + 2}/3.\n")
+            embedder.log(f"--> Restarting NEB from checkpoint. Attempt {attempt + 2}/{attempts}.\n")
+
+        elif exit_status == "CRASHED":
+            if attempt + 1 < attempts:
+                embedder.log(
+                    f"--> NEB optimization crashed. Attempting a restart using inner structures as starting points, attempt {attempt + 2}/3."
+                )
+                crashed_mep = read_xyz(f"{title}_MEP_crashed.xyz").coords
+
+                reag_id = int(len(crashed_mep) // 4) + attempt
+                reag_id = min(reag_id, (len(crashed_mep) // 2) - 1)
+                reagents = crashed_mep[reag_id]
+
+                prod_id = len(crashed_mep) - reag_id - 1
+                products = crashed_mep[prod_id]
+
+                embedder.log(
+                    f"    Attempting restart using structure {reag_id + 1}/{len(crashed_mep)} "
+                    + f"as reagents and {prod_id + 1}/{len(crashed_mep)} as products.\n"
+                )
+            else:
+                raise FatalError("NEB optimization crashed.")
 
     e1 = ts_energy - reag_energy
     e2 = ts_energy - prod_energy
@@ -757,14 +773,18 @@ def distance_scan(embedder):
             debug=embedder.options.debug,
         )
 
+        if energy is None:
+            embedder.log(f"--> Optimization crashed at step {i + 1}/{max_iterations}.")
+            break
+
         if i == 0:
             e_0 = energy
 
+        # saving the structure, distance and relative energy
         energies.append(energy - e_0)
         dists.append(d)
         structures.append(coords)
         # print(f"------> target was {round(d, 3)} A, reached {round(norm_of(coords[mol.reactive_indices[0]]-coords[mol.reactive_indices[1]]), 3)} A")
-        # saving the structure, distance and relative energy
 
         embedder.log(
             f"Step {i + 1:3}/{max_iterations:3} - d={d:.2f} Å    {energy - e_0:+.2f} kcal/mol - {time_to_string(time.perf_counter() - t_start)}"
@@ -780,8 +800,8 @@ def distance_scan(embedder):
                     + f"- d({i1}-{i2}) = {round(d, 3)} A - Rel. E = {round(e - min(energies), 2)} kcal/mol",
                 )
 
-        d += step
         # modify the target distance and reiterate
+        d += step
 
     ### Start the plotting sequence
 
@@ -820,8 +840,6 @@ def distance_scan(embedder):
         f"Rel. E. (kcal/mol) - {embedder.options.theory_level}/{embedder.options.calculator}/{embedder.options.solvent}"
     )
     plt.savefig(f"{title.replace(' ', '_')}_plt.svg")
-    # with open(f'{title.replace(" ", "_")}_plt.pickle', 'wb') as _f:
-    #     pickle.dump(fig, _f)
 
     ### Start structure writing
 

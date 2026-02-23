@@ -167,33 +167,6 @@ class Hypermolecule:
                 # Since now we have mol.sigmatropic and mol.sigmastar,
                 # We can update, that is set the reactive_atom.center attribute
 
-    def _set_reactive_indices(self, filename):
-        """Manually set the molecule reactive atoms from the ASE GUI, imposing
-        constraints on the desired atoms.
-
-        """
-        from ase import Atoms
-        from ase.gui.gui import GUI
-        from ase.gui.images import Images
-
-        data = read_xyz(filename)
-        coords = data.coords[0]
-        atoms = Atoms(data.atoms, positions=coords)
-
-        while atoms.constraints == []:
-            print(
-                (
-                    "\nPlease, manually select the reactive atom(s) for molecule %s."
-                    "\nRotate with right click and select atoms by clicking. Multiple selections can be done by Ctrl+Click."
-                    "\nWith desired atom(s) selected, go to Tools -> Constraints -> Constrain, then close the GUI."
-                )
-                % (filename)
-            )
-
-            GUI(images=Images([atoms]), show_bonds=True).run()
-
-        return list(atoms.constraints[0].get_indices())
-
     def get_alignment_indices(self):
         """Return the indices to align the molecule to, given a list of
         atoms that should be reacting. List is composed by reactive atoms
@@ -301,15 +274,6 @@ class Hypermolecule:
         self.weights = np.array(self.weights).flatten()
         self.weights = np.array([weights / np.sum(weights) for weights in self.weights])
         self.weights = flatten(self.weights)
-
-        self.dimensions = (
-            max([coord[0] for coord in self.hypermolecule])
-            - min([coord[0] for coord in self.hypermolecule]),
-            max([coord[1] for coord in self.hypermolecule])
-            - min([coord[1] for coord in self.hypermolecule]),
-            max([coord[2] for coord in self.hypermolecule])
-            - min([coord[2] for coord in self.hypermolecule]),
-        )
 
     def write_hypermolecule(self):
         """ """

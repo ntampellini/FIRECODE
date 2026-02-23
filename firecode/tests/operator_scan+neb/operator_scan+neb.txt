@@ -1,0 +1,2 @@
+calc=xtb solvent=toluene
+neb> scan> SN2.xyz 0 5 charge=-1

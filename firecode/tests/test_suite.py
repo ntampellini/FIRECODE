@@ -65,7 +65,16 @@ def run_firecode_input(name) -> None:
         clean_directory(
             to_remove_startswith=["firecode"],
             to_remove_endswith=[".log", ".out", ".svg"],
-            to_remove_contains=["clockwise", "_scan", "_confs", "_opt", "CREST", "NEB", "FSM"],
+            to_remove_contains=[
+                "clockwise",
+                "_confs",
+                "_scan_max.xyz",
+                "_scan.xyz",
+                "_opt",
+                "CREST",
+                "NEB",
+                "FSM",
+            ],
         )
 
 
@@ -97,18 +106,25 @@ def test_trimolecular() -> None:
 #     run_firecode_input("embed_multimolecular")
 
 
-@pytest.mark.scan
+@pytest.mark.operator
 @pytest.mark.codecov
 def test_scan_linear() -> None:
     """Tests a simple linear scan."""
-    run_firecode_input("scan_linear")
+    run_firecode_input("operator_scan_linear")
 
 
-@pytest.mark.scan
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_scan_plus_neb() -> None:
+    """Tests a linear scan followed by a NEB."""
+    run_firecode_input("operator_scan+neb")
+
+
+@pytest.mark.operator
 @pytest.mark.codecov
 def test_scan_dihedral() -> None:
     """Tests a simple dihedral scan."""
-    run_firecode_input("scan_dihedral")
+    run_firecode_input("operator_scan_dihedral")
 
 
 @pytest.mark.operator

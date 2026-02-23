@@ -41,9 +41,12 @@ jobs:
 
       - run: pixi run -e dev coverage report 
 
+      - run: head -5 coverage.xml
+
       - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+          disable_search: true

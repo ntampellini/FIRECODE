@@ -45,7 +45,7 @@ from firecode.units import EH_TO_KCAL
 class Constraint:
     """Constraint class with indices, type and value attributes."""
 
-    def __init__(self, indices, value=None):
+    def __init__(self, indices, value: int | None = None, fixed: bool = True):
         self.indices = indices
 
         self.type = {
@@ -55,6 +55,7 @@ class Constraint:
         }[len(indices)]
 
         self.value = value
+        self.fixed = fixed
 
 
 class suppress_stdout_stderr(object):
