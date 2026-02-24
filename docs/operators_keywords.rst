@@ -28,7 +28,7 @@ Here is a list of the currently available operators:
    
        mtd> molecule.xyz 4A 8A charge=-1
 
--  ``rdkit_search>`` - Performs a conformational search with the `ETKDGv3 algorithm <https://pubs.acs.org/doi/10.1021/acs.jcim.0c00025>`__.
+-  ``rdkit_search>`` - Performs a conformational search with the `ETKDGv3 algorithm <https://pubs.acs.org/doi/10.1021/acs.jcim.0c00025>`__
    via RDKit. Generates a new ``mol_rdkit_confs.xyz`` file with the generated conformers.
 
 -  ``refine>`` - Acts on a multimolecular input file, pruning similar structures and optimizing it
@@ -57,7 +57,7 @@ Here is a list of the currently available operators:
    scan are saved to firecode_maxima_mol.xyz. The optimized geometries for the initial scans are saved with the relative 
    names. This version of the ``scan>`` operator is terminating and cannot be chained.
 
-Deprecated:
+Deprecated (legacy):
 
 -  ``firecode_search>`` - Performs a diversity-based, torsionally-clustered conformational
    search on the specified input structure. Only the bonds that do not brake imposed
@@ -75,38 +75,24 @@ Deprecated:
    file with the unoptimized conformers.
 
 
-Keywords
-++++++++
+General keywords
+++++++++++++++++
 
 Keywords are case-insensitive and are divided by at least one blank space.
 Some of them are self-sufficient (*i.e.* ``NCI``), while some others require an
-additional input (*i.e.* ``STEPS=10`` or ``DIST(a=1.8,b=2,c=1.34)``). In
-the latter case, whitespaces are NOT allowed inside the parenthesis.
-Floating point numbers are to be expressed with points like ``3.14``,
-while commas are only used to divide keyword arguments where more than
+additional input (*i.e.* ``STEPS=10`` or ``DIST(a=1.8, b=2, c=1.34)``). 
+Commas are used to divide keyword arguments where more than
 one is accepted, like in ``DIST``.
 
--  **BYPASS** - Debug keyword. Used to skip all pruning steps and
-   directly output all the embedded geometries.
-
--  **CALC** - Overrides default calculator in ``settings.py``.
-   (Gaussian, ORCA, XTB, Syntax: ``CALC=ORCA``
+-  **CALC** - Overrides default calculator in ``settings.py``. 
+   Available calculators are ORCA, XTB, TBLITE, AIMNET2 and UMA. Syntax: ``CALC=ORCA``
 
 -  **CHARGE** - Specify the charge to be used in optimizations.
 
--  **CHECK** - Visualize the input molecules through the ASE GUI, to
-   check orbital positions or conformers reading faults. *(not available
-   from CLI)*
+-  **CONFS** - Override the maximum number of conformers to be considered 
+   for the refinement or embedding of each molecule (default is 1000). Syntax: ``CONFS=10000``
 
--  **CLASHES** - Manually specify the max number of clashes and/or
-   the distance threshold at which two atoms are considered clashing.
-   The more forgiving (higher number, smaller dist), the more structures will reach the geometry
-   optimization step. Default values are num=0 and dist=1.5 (A). Syntax: ``CLASHES(num=3,dist=1.2)``
-
--  **CONFS** - Override the maximum number of conformers to be used for
-   the embed of each molecule (default is 1000). Syntax: ``CONFS=10000``
-
--  **CRESTNCI** - mtd>/mtd_search> runs: passes the "--nci" argument to CREST, running
+-  **CRESTNCI** - crest_search> runs: passes the "--nci" argument to CREST, running
    it in non-covalent interaction mode, *i.e.* applying a wall potential to prevent
    unconstrained non-covalent complexes to evaporate during the metadynamics.
 
@@ -116,30 +102,19 @@ one is accepted, like in ``DIST``.
    "hypermolecule" ``.xyz`` files for the first conformer of each
    structure, with dummy atoms (X) in each FIRECODE "orbital" position.
 
--  **DEEP** - Performs a deeper search, retaining more starting
-   points for calculations and smaller turning angles. Equivalent to
-   ``THRESH=0.3 STEPS=72 CLASHES=(num=1,dist=1.3)``. **Use with care!**
-
 -  **DIST** - Manually imposed distance between specified atom
-   pairs, in Angstroms. Syntax uses parenthesis and commas:
-   ``DIST(a=2.345,b=3.67,c=2.1)``
+   pairs, in Angstroms. Syntax uses parenthesis and commas. Spaces are tolerated:
+   ``DIST(a=2.345, b=3.67, c=2.1)``
 
 -  **DRYRUN** - Skips lenghty operations (operators, embedding, refining)
    but retains other functions and printouts. Useful for debugging and
    checking purposes.
 
-.. -  **ENANTIOMERS** - Do not discard enantiomeric structures.
-
--  **EZPROT** - Preserve the E or Z configuration of double bonds
-   (C=C and C=N) during the embed. Likely to be useful only for
-   monomolecular embeds, where molecular distortion is often important, and
-   undesired isomerization processes can occur.
-
 -  **FFCALC** - Overrides default force field calculator in ``settings.py``.
-   Values can be ``OB``, ``Gaussian``, ``XTB``. Syntax: ``FFCALC=OB``
+   Value can only be ``XTB`` or None. Syntax: ``FFCALC=XTB``
 
 -  **FFLEVEL** - Manually set the theory level to be used for force field
-   calculations. Default is UFF for Openbabel and Gaussian, GFN-FF for XTB.
+   calculations. Default is GFN-FF for XTB. Support for other FF calculators has been discontinued.  
    Standard values can be modified by running the module with the -s flag
    (>>> python -m firecode -s).
 
@@ -148,39 +123,21 @@ one is accepted, like in ``DIST``.
 
 -  **IMAGES** - Number of images to be used in NEB, ``neb>`` and ``mep_relax>`` jobs.
 
--  **KCAL** - In refinements, trim output structures to a given value of relative energy
+-  **KCAL** - In refinements (``refine>``), trim output structures to a given value of relative energy from the most stable
    (in kcal/mol, default is 10). In ``scan>`` runs, sets the threshold to consider a local
    energy maxima for further refinement. Syntax: ``KCAL=n``.
 
 -  **LET** - Overrides safety checks that prevent the program from
-   running too large calculations, and avoids efficiency-oriented trimming
-   when writing large files to disk (DEBUG keyword).
+   running calculations that seem too large and likely erroneous. Also avoids efficiency-oriented 
+   trimming when writing large files to disk (DEBUG keyword).
 
--  **LEVEL** - Manually set the theory level to be used. Default is
-   PM7 for MOPAC, PM3 for ORCA, PM6 for Gaussian and GFN2-xTB for XTB.
-   White spaces, if needed, can be expressed with underscores. Be careful
-   to use the syntax of your calculator, as ORCA requires a space between method
-   and basis set, while Gaussian a forward slash. Syntax (ORCA):
-   ``LEVEL(B3LYP_def2-TZVP)``. Standard values can be modified by running the
-   module with the -s flag (>>> python -m firecode -s).
+-  **LEVEL** - Manually set the theory level to be used.
+   White spaces, if needed, can be expressed in input files with underscores. Syntax (ORCA):
+   ``LEVEL(B3LYP_def2-TZVP)``. Defaults can be found in settings.py, and can be modified by running 
+   the module with the -s flag (``>>> firecode -s``).
    .. Here ( should be written as [ in input, or it will crash (temporary fix?)
 
-.. -  **MTD** - Augments the conformational sampling of transition
-..    state candidates through the `XTB metadynamics
-..    implementation <https://xtb-docs.readthedocs.io/en/latest/mtd.html>`__
-..    (XTB calculator only, experimental).
-
-.. -  **NCI** - Estimate and print non-covalent interactions present in
-..    the generated poses (experimental).
-
--  **NEB** - Perform an automatic climbing image nudged elastic
-   band (CI-NEB) TS search after the partial optimization step,
-   inferring reagents and products for each generated TS pose. For scan>
-   runs, scan points around the energy maxima are used.
-
--  **NOOPT** - Skip the optimization steps, directly writing
-   structures to file after compenetration and similarity pruning.
-   Dihedral embeds: performs rigid scans instead of relaxed ones.
+-  **NEB** - Set NEB options. Syntax and default values: ``NEB(images=7, preopt=true, ci=true)``.
 
 -  **ONLYREFINED** - Discard structures that do not successfully
    refine bonding distances. Set by default with the ``SHRINK`` keyword
@@ -193,29 +150,42 @@ one is accepted, like in ``DIST``.
    higher level (non-force field) calculation, overriding the value in
    ``settings.py``. Syntax: ``PROCS=32``
 
--  **REFINE** - Same as calling ``refine>`` on a multimolecular file. 
-   The program does not embed structures, but uses the input ensemble
-   as a starting point as if it came out of a FIRECODE embedding.
+-  **RMSD** - RMSD threshold (Angstroms) for structure pruning.
+   The smaller, the more retained structures (default is 0.25 A). 
+   Syntax: ``THRESH=n``
 
+
+Embedding-specific keywords (legacy)
+++++++++++++++++++++++++++++++++++++
+
+-  **BYPASS** - Debug keyword. Used to skip all pruning steps and
+   directly output all the embedded geometries.
+   
+-  **CLASHES** - Manually specify the max number of clashes and/or
+   the distance threshold at which two atoms are considered clashing.
+   The more forgiving (higher number, smaller dist), the more structures will reach the geometry
+   optimization step. Default values are num=0 and dist=1.5 (A). Syntax: ``CLASHES(num=3,dist=1.2)``
+   
+-  **DEEP** - Performs a deeper search, retaining more starting
+   points for calculations and smaller turning angles. Equivalent to
+   ``THRESH=0.3 STEPS=72 CLASHES=(num=1,dist=1.3)``. **Use with care!**
+
+-  **EZPROT** - Preserve the E or Z configuration of double bonds
+   (C=C and C=N) during the embed. Likely to be useful only for
+   monomolecular embeds, where molecular distortion is often important, and
+   undesired isomerization processes can occur.
+ 
+-  **NOOPT** - Skip the optimization steps, directly writing
+   structures to file after compenetration and similarity pruning.
+   Dihedral embeds: performs rigid scans instead of relaxed ones.
+   
 -  **RIGID** - Only applies to "cyclical"/"chelotropic" embeds.
    Avoid bending structures to better build TSs.
-
--  **RMSD** - RMSD threshold (Angstroms) for structure pruning.
-   The smaller, the more retained structures (default is 0.5 A).
-   Two structures are pruned if they have an RMSD value smaller than
-   this threshold and the maximum deviation value smaller than double
-   this threshold. For smaller systems, a value of 0.3 is better suited, and
-   it is set by default for embeds of less than 50 atoms. For dihedral
-   embeds, the default value is 0.2 A. Syntax: ``THRESH=n``, where n is
-   a number.
 
 -  **ROTRANGE** - Only applies to "cyclical"/"chelotropic" embeds.
    Manually specify the rotation range to be explored around the
    structure pivot. Default is 45. Syntax: ``ROTRANGE=90``
-
--  **SADDLE** - After embed and refinement, optimize structures to the 
-   closest first order saddle point using the `Sella <https://github.com/zadorlab/sella>`__ library through ASE.
-
+   
 -  **SHRINK** - Exaggerate orbital dimensions during embed, scaling
    them by a specified factor. If used as a single keyword (``SHRINK``),
    orbital dimensions are scaled by a factor of one and a half. A syntax
