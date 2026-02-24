@@ -4,7 +4,6 @@ site/
 .vscode/
 .mypy_cache/
 firecode.egg-info/
-docs/
 
 firecode/calculators/uma-s-1p1.pt
 coverage.xml

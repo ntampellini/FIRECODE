@@ -295,17 +295,6 @@ class OptionSetter:
                 + "\n"
             )
 
-    def refine(self, options, *args):
-        if len(self.embedder.objects) > 1:
-            raise SystemExit(
-                (
-                    "REFINE keyword can only be used with one multimolecular file per run, "
-                    f"in .xyz format. ({len(self.embedder.objects)} files found in input)"
-                )
-            )
-
-        options.noembed = True
-
     def _refine_operator_routine(self):
         if len(self.embedder.objects) > 1:
             raise SystemExit(
@@ -349,7 +338,7 @@ class OptionSetter:
         options.dryrun = True
 
     def suprafac(self, options, *args):
-        options.suprafac = True
+        options.suprafacial = True
 
     def deep(self, options, *args):
         options.options.rmsd = 0.1

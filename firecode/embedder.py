@@ -3024,13 +3024,7 @@ class RunEmbedding(Embedder):
                 self.optimization_refining()
                 self.similarity_refining()
 
-            ##################### POST FIRECODE - NEB, VMD
-
-            # if (self.options.optimization or self.options.ff_opt) and not self.options.bypass:
-            #     self.write_vmd()
-
-            # if self.options.neb:
-            #     self.hyperneb_refining()
+            ##################### POST FIRECODE - NEB
 
             self.log_warnings()
             self.normal_termination()
