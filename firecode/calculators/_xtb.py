@@ -26,7 +26,8 @@ from subprocess import STDOUT, CalledProcessError, check_call
 
 import numpy as np
 
-from firecode.algebra import norm_of, normalize
+
+from firecode.algebra import normalize
 from firecode.graph_manipulations import get_sum_graph
 from firecode.units import EH_TO_KCAL
 from firecode.utils import NewFolderContext, clean_directory, read_xyz, write_xyz
@@ -127,7 +128,7 @@ def xtb_opt(
                     else:
                         continue
 
-                    d = norm_of(coords[b] - coords[a])
+                    d = np.linalg.norm(coords[b] - coords[a])
                     delta = d - target_d
 
                     if abs(delta) > recursive_stepsize:
@@ -156,10 +157,10 @@ def xtb_opt(
                             constrained_angles_values=constrained_angles_values,
                         )
 
-                    d = norm_of(coords[b] - coords[a])
+                    d = np.linalg.norm(coords[b] - coords[a])
                     delta = d - target_d
                     coords[b] -= normalize(coords[b] - coords[a]) * delta
-                    # print(f"--------> moved atoms from {round(d, 3)} A to {round(norm_of(coords[b] - coords[a]), 3)} A")
+                    # print(f"--------> moved atoms from {round(d, 3)} A to {round(np.linalg.norm(coords[b] - coords[a]), 3)} A")
 
             except RecursionError:
                 with open(f"{title}_crashed.xyz", "w") as f:

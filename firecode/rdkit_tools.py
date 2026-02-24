@@ -20,10 +20,12 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from collections import defaultdict
 from itertools import permutations, product
 from time import perf_counter
-from typing import List, Tuple, Union
+from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
 from prism_pruner.algebra import dihedral
@@ -35,10 +37,11 @@ from rdkit.Chem import AllChem, rdDetermineBonds
 from firecode.algebra import point_angle
 from firecode.utils import write_xyz
 
-norm_of = np.linalg.norm
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
 
 
-def rdkit_search_operator(filename, embedder, attempts=1000):
+def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 1000) -> str:
     embedder.log(
         f"--> Performing an RDKit ETKDGv3 conformational search on {filename} ({attempts} attempts)"
     )
@@ -52,12 +55,12 @@ def rdkit_search_operator(filename, embedder, attempts=1000):
 
     # Add hydrogens after sanitization so valence is known
     rdkit_mol = Chem.AddHs(rdkit_mol)
-    rdkit_atoms = np.array([atom.GetSymbol() for atom in rdkit_mol.GetAtoms()])
+    rdkit_atoms = np.array([atom.GetSymbol() for atom in rdkit_mol.GetAtoms()])  # type: ignore[no-untyped-call]
 
     t_start = perf_counter()
 
     # Generate conformers
-    conf_ids = AllChem.EmbedMultipleConfs(
+    conf_ids = AllChem.EmbedMultipleConfs(  # type: ignore[attr-defined]
         rdkit_mol,
         numConfs=embedder.options.max_confs,
         numThreads=0,  # Use all available threads
@@ -385,15 +388,15 @@ def convert_constraint_with_smarts(self, coords, atomnos, smarts):
     """
     match_indices_list = match_smarts_pattern((coords, atomnos), smarts)
 
-    if self.type == "B":
+    if self.type_ == "B":
         a, b = self.indices
         deltas = [
-            abs(norm_of(coords[match[a]] - coords[match[b]]) - self.value)
+            abs(np.linalg.norm(coords[match[a]] - coords[match[b]]) - self.value)
             for match in match_indices_list
         ]
         best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
-    if self.type == "A":
+    if self.type_ == "A":
         a, b, c = self.indices
         deltas = [
             abs(point_angle(coords[match[a]], coords[match[b]], coords[match[c]]) - self.value)
@@ -401,7 +404,7 @@ def convert_constraint_with_smarts(self, coords, atomnos, smarts):
         ]
         best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
-    if self.type == "D":
+    if self.type_ == "D":
         a, b, c, d = self.indices
         deltas = [
             abs(

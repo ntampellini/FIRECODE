@@ -2,7 +2,7 @@
 <!-- - Introduced compatibility of SADDLE and NEB keywords for scan> runs with both 2 indices (distance scans) and 4 indices (distance scans) -->
 
 <!-- - ... mep_relax> BETA
-- ... IMAGES kw, also implement it for neb>-->
+
 <!-- FINALSPLEVEL keyword? -->
  <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
 
@@ -14,6 +14,7 @@
 - the mtd>/mtd_search> operator now has more explicit synonyms: crest> and crest_search>
 - Added tests for the crest_search>, neb> and fsm> operators, as well as a "neb> scan>" chain.
 - Updated documentation: usage and operators (`neb>`, `fsm>`, `rdkit_search>`, `crest_search>`, ...) as well as keywords (general vs. legacy).
+- Started to type annotate the codebase.
 
 ## FIRECODE 1.5.3 🔥 (February 19 2026)
 - Fixes a bug with reactive_atoms_classes_dict and embedder.options.charge.

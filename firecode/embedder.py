@@ -43,7 +43,7 @@ from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, time_to_string
 from psutil import virtual_memory
 
-from firecode.algebra import point_angle
+from firecode.algebra import point_angle, count_clashes
 from firecode.calculators._xtb import xtb_opt, xtb_pre_opt
 from firecode.embedder_options import Options, OptionSetter, keywords_dict
 from firecode.embeds import (
@@ -56,13 +56,11 @@ from firecode.errors import InputError, NoOrbitalError, ZeroCandidatesError
 from firecode.graph_manipulations import get_sum_graph
 from firecode.hypermolecule_class import Hypermolecule, Pivot, align_by_moi
 from firecode.multiembed import multiembed_dispatcher
-from firecode.numba_functions import compenetration_check, count_clashes, prune_conformers_tfd
 from firecode.operators import operate
 from firecode.optimization_methods import Opt_func_dispatcher, fitness_check
 from firecode.parameters import orb_dim_dict
 from firecode.references import references
 from firecode.settings import DEFAULT_LEVELS, PROCS
-from firecode.torsion_module import get_quadruplets
 from firecode.utils import (
     Constraint,
     auto_newline,
@@ -73,9 +71,8 @@ from firecode.utils import (
     scramble_check,
     timing_wrapper,
     write_xyz,
+    compenetration_check,
 )
-
-norm_of = np.linalg.norm
 
 
 class Embedder:
@@ -83,7 +80,7 @@ class Embedder:
     options and initialize the calculation
     """
 
-    def __init__(self, filename, stamp=None, procs=None):
+    def __init__(self, filename: str, stamp: str | None = None, procs: int | None = None):
         """Initialize the Embedder object by reading the input filename (.txt).
         Sets the Option dataclass properties to default and then updates them
         with the user-requested keywords, if there are any.
@@ -184,23 +181,23 @@ class Embedder:
             logging.exception(e)
             raise e
 
-    def log(self, string="", p=True):
+    def log(self, string: str = "", p: bool = True) -> None:
         if p:
             print(string)
         string += "\n"
         self.logfile.write(string)
 
-    def debuglog(self, string=""):
+    def debuglog(self, string: str = "") -> None:
         if self.options.debug:
             string += "\n"
             # self.logfile.write(string)
             self.debug_logfile.write(string)
 
-    def warn(self, string):
+    def warn(self, string: str) -> None:
         self.warnings.append(string)
         self.log(string)
 
-    def write_banner_and_info(self):
+    def write_banner_and_info(self) -> None:
         """Write banner to log file, containing program and run info"""
         banner = """
                  .           .           *             *
@@ -257,7 +254,7 @@ class Embedder:
 
         self.log(banner)
 
-    def _print_references(self):
+    def _print_references(self) -> None:
         """Print relevant literature references based on the run settings"""
         self.log(
             "\n--> If you use FIRECODE in your publication, please cite this reference in the main text:\n"
@@ -622,7 +619,7 @@ class Embedder:
 
             # adding distance constraints from mol.constraints
             for constr in self.objects[0].constraints:
-                if constr.type == "B":
+                if constr.type_ == "B":
                     i1, i2 = constr.indices
                     used_letters = (p[1].lower() for p in pairings)
                     letter = next((_l for _l in ascii_lowercase if _l not in used_letters))
@@ -728,7 +725,7 @@ class Embedder:
         for i, mol in enumerate(self.objects):
             cumulative_offset = int(sum(self.ids[:i])) if i > 0 else 0
             for constraint in mol.constraints:
-                if constraint.type in ("D", "A"):
+                if constraint.type_ in ("D", "A"):
                     emb_ids = [idx + cumulative_offset for idx in constraint.indices]
                     emb_constr = Constraint(emb_ids, constraint.value)
                     self.internal_angle_dih_constraints.append(emb_constr)
@@ -746,8 +743,10 @@ class Embedder:
             # there is a single molecule - if so, read them from there
             if len(self.objects) == 1:
                 for constraint in self.objects[0].constraints:
-                    if constraint.type in ("D", "A"):
-                        s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
+                    if constraint.type_ in ("D", "A"):
+                        s += (
+                            f"{constraint.type_}({'-'.join((str(i) for i in constraint.indices))}) "
+                        )
 
         else:
             for i, hypmol in enumerate(self.objects):
@@ -760,8 +759,8 @@ class Embedder:
 
                     # add planar and dihedral angle internal constraints
                     for constraint in hypmol.constraints:
-                        if constraint.type in ("D", "A"):
-                            s += f"{constraint.type}({'-'.join((str(i) for i in constraint.indices))}) "
+                        if constraint.type_ in ("D", "A"):
+                            s += f"{constraint.type_}({'-'.join((str(i) for i in constraint.indices))}) "
 
                     break
 
@@ -828,7 +827,7 @@ class Embedder:
                     if letter.isupper() and letter not in self.pairing_dists:
                         coords = self.objects[mol_id].coords[0]
                         i1, i2 = ids
-                        dist = norm_of(coords[i1] - coords[i2])
+                        dist = np.linalg.norm(coords[i1] - coords[i2])
                         self.pairing_dists[letter] = dist
 
     def _set_pivots(self, mol):
@@ -858,7 +857,7 @@ class Embedder:
             # the "suprafaciality" to the pivots used, preventing the embed of
             # impossible bonding structures
             if hasattr(mol, "sp3_sigmastar") and mol.sp3_sigmastar:
-                pivots_lengths = [norm_of(pivot.pivot) for pivot in mol.pivots[c]]
+                pivots_lengths = [np.linalg.norm(pivot.pivot) for pivot in mol.pivots[c]]
                 shortest_length = min(pivots_lengths)
                 mask = np.array([(i - shortest_length) < 1e-5 for i in pivots_lengths])
                 mol.pivots[c] = mol.pivots[c][mask]
@@ -1005,7 +1004,7 @@ class Embedder:
                         )
                         for c, _ in enumerate(mol.coords):
                             for index, atom in mol.reactive_atoms_classes_dict[c].items():
-                                orb_dim = norm_of(atom.center[0] - atom.coord)
+                                orb_dim = np.linalg.norm(atom.center[0] - atom.coord)
                                 atom.init(mol, index, update=True, orb_dim=orb_dim + 0.2, conf=c)
                     # Slightly enlarging orbitals for chelotropic embeds, or they will
                     # be generated a tad too close to each other for how the cyclical embed works
@@ -1180,12 +1179,12 @@ class Embedder:
 
         if filename is None:
             for constraint in self.internal_angle_dih_constraints:
-                if constraint.type == "A":
+                if constraint.type_ == "A":
                     if (not only_fixed_constraints) or constraint.fixed:
                         constrained_angles_indices.append(constraint.indices)
                         constrained_angles_values.append(constraint.value)
 
-                elif constraint.type == "D":
+                elif constraint.type_ == "D":
                     if (not only_fixed_constraints) or constraint.fixed:
                         constrained_dihedrals_indices.append(constraint.indices)
                         constrained_dihedrals_values.append(constraint.value)
@@ -1193,11 +1192,11 @@ class Embedder:
             for hypmol in self.objects:
                 if hypmol.filename == filename:
                     for constraint in hypmol.constraints:
-                        if constraint.type == "A":
+                        if constraint.type_ == "A":
                             if (not only_fixed_constraints) or constraint.fixed:
                                 constrained_angles_indices.append(constraint.indices)
                                 constrained_angles_values.append(constraint.value)
-                        elif constraint.type == "D":
+                        elif constraint.type_ == "D":
                             if (not only_fixed_constraints) or constraint.fixed:
                                 constrained_dihedrals_indices.append(constraint.indices)
                                 constrained_dihedrals_values.append(constraint.value)
@@ -1329,6 +1328,8 @@ class Embedder:
             and self.embed_graph.is_single_molecule
         ):
             t_start = time.perf_counter()
+
+            from firecode.torsion_module import get_quadruplets, prune_conformers_tfd
 
             quadruplets = get_quadruplets(self.embed_graph)
             if len(quadruplets) > 0:
@@ -1602,8 +1603,8 @@ class Embedder:
 
         return self.outname
 
-    def write_quote(self):
-        """Reads the quote file and writes one in the logfile"""
+    def write_quote(self) -> None:
+        """Reads the quote file and writes one in the logfile."""
         from firecode.quotes import load_quotes
 
         quote, author = random.choice(load_quotes()).values()
@@ -1613,7 +1614,7 @@ class Embedder:
         if author != "":
             self.log(f"    - {author}\n")
 
-    def run(self):
+    def run(self) -> None:
         """Run the embedding."""
         try:
             RunEmbedding(self).run()
@@ -2753,7 +2754,7 @@ class RunEmbedding(Embedder):
             if hasattr(mol, "reactive_atoms_classes_dict"):
                 descs = [
                     atom.symbol
-                    + f"({atom!s} type, {round(norm_of(atom.center[0] - atom.coord), 3)} A, "
+                    + f"({atom!s} type, {round(np.linalg.norm(atom.center[0] - atom.coord), 3)} A, "
                     + f"{len(atom.center)} center{'s' if len(atom.center) != 1 else ''})"
                     for atom in mol.reactive_atoms_classes_dict[0].values()
                 ]
@@ -2850,7 +2851,7 @@ class RunEmbedding(Embedder):
                         "B": ("Bond", " Å", 2),
                         "A": ("Angle", "°", 1),
                         "D": ("Dihedral", "°", 1),
-                    }[constraint.type]
+                    }[constraint.type_]
                     self.log(
                         f"--> Additional constraint ({mol.filename}): {t} - {elements} -> {constraint.value:.{figs}f}{uom}{warn}"
                     )

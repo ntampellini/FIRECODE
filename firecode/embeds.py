@@ -20,7 +20,10 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
 import numpy as np
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
@@ -29,10 +32,10 @@ from firecode.algebra import align_vec_pair
 from firecode.ase_manipulations import ase_bend
 from firecode.errors import TriangleError, ZeroCandidatesError
 from firecode.graph_manipulations import get_sum_graph
-from firecode.numba_functions import compenetration_check, get_torsion_fingerprint, tfd_similarity
-from firecode.torsion_module import get_quadruplets
+from firecode.typing import Array2D_float
 from firecode.utils import (
     cartesian_product,
+    compenetration_check,
     loadbar,
     polygonize,
     pretty_num,
@@ -40,14 +43,19 @@ from firecode.utils import (
     rotation_matrix_from_vectors,
 )
 
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
 
-def string_embed(embedder):
+
+def string_embed(embedder: Embedder) -> Array2D_float:
     """Return poses: return embedded structures, ready to be refined
     Algorithm used is the "string" algorithm (see docs).
     """
     assert len(embedder.objects) == 2
 
-    def is_new_structure(coords, quadruplets, lru_cache, cache_size=5):
+    from firecode.torsion_module import get_quadruplets, get_torsion_fingerprint, tfd_similarity
+
+    def is_new_structure(coords: Array1D_float, quadruplets, lru_cache, cache_size=5) -> bool:
         """Checks if the torsion fingerprint of a structure is
         similar to the ones present in lru_cache. If the
         structure is new, updates the cache.
@@ -394,13 +402,6 @@ def cyclical_embed(embedder, max_norm_delta=5):
         # used as molecular cache for ase_bend
         # keys are tuples with: ((identifier, pivot.index, target_pivot_length), obtained with:
         # (np.sum(original_mol.coords[0]), tuple(sorted(pivot.index)), round(threshold,3))
-
-    # if not embedder.options.let:
-    #     for mol in embedder.objects:
-    #         if len(mol.coords) > 10:
-    #             mol.coords = most_diverse_conformers(10, mol.coords)
-    #             embedder.log(f'Using only the most diverse 10 conformers of molecule {mol.filename} (override with LET keyword)')
-    # Do not keep more than 10 conformations, unless LET keyword is provided
 
     conf_number = [len(mol.coords) for mol in embedder.objects]
     conf_indices = cartesian_product(*[np.array(range(i)) for i in conf_number])

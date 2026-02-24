@@ -40,7 +40,7 @@ from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, get_double_bonds_indices, time_to_string
 
-from firecode.algebra import norm_of, point_angle
+from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import DEFAULT_LEVELS
 from firecode.units import EH_TO_EV, EH_TO_KCAL, EV_TO_KCAL, EV_TO_WAVENUMS
@@ -82,7 +82,7 @@ class Spring(ASEConstraint):
         direction = atoms.positions[self.i2] - atoms.positions[self.i1]
         # vector connecting atom1 to atom2
 
-        spring_force = self.k * (norm_of(direction) - self.d_eq)
+        spring_force = self.k * (np.linalg.norm(direction) - self.d_eq)
         # absolute spring force (float). Positive if spring is overstretched.
 
         spring_force = np.clip(spring_force, -50, 50)
@@ -116,8 +116,8 @@ class HalfSpring(ASEConstraint):
         direction = atoms.positions[self.i2] - atoms.positions[self.i1]
         # vector connecting atom1 to atom2
 
-        if norm_of(direction) > self.d_max:
-            spring_force = self.k * (norm_of(direction) - self.d_eq)
+        if np.linalg.norm(direction) > self.d_max:
+            spring_force = self.k * (np.linalg.norm(direction) - self.d_eq)
             # absolute spring force (float). Positive if spring is overstretched.
 
             spring_force = np.clip(spring_force, -50, 50)
@@ -161,8 +161,8 @@ class PlanarAngleSpring(ASEConstraint):
         v23 = p3 - p2  # Vector from atom 2 to 3
 
         # Get bond lengths
-        r1 = norm_of(v21)
-        r3 = norm_of(v23)
+        r1 = np.linalg.norm(v21)
+        r3 = np.linalg.norm(v23)
 
         # Calculate current angle
         current_angle = point_angle(p1, p2, p3)
@@ -174,7 +174,7 @@ class PlanarAngleSpring(ASEConstraint):
 
         # Normal to the plane
         normal = np.cross(e21, e23)
-        if norm_of(normal) > 1e-10:  # Check if atoms aren't collinear
+        if np.linalg.norm(normal) > 1e-10:  # Check if atoms aren't collinear
             normal = normalize(normal)
 
             # Calculate perpendicular directions in the plane
@@ -256,7 +256,7 @@ class DihedralSpring(ASEConstraint):
 
         # Calculate central bond length (important for force scaling)
         v23 = p3 - p2
-        bond_length = norm_of(v23)
+        bond_length = np.linalg.norm(v23)
 
         # Dynamic force constant calculation - quadratic scaling near target
         rel_angle = np.abs(delta_angle) / self.theta_mid
@@ -276,8 +276,8 @@ class DihedralSpring(ASEConstraint):
         n1 = np.cross(v21, v23)
         n2 = np.cross(v23, v34)
 
-        n1_norm = norm_of(n1)
-        n2_norm = norm_of(n2)
+        n1_norm = np.linalg.norm(n1)
+        n2_norm = np.linalg.norm(n2)
 
         if n1_norm < 1e-6 or n2_norm < 1e-6:
             return
@@ -319,7 +319,7 @@ class NewBondPreventer:
         self.nonbound_pairs = []
         for i1, i2 in cartesian_product(range(n), range(n)):
             if i2 > i1 and (i1, i2) not in bonds and (i2, i1) not in bonds:
-                if norm_of(ref_coords[i1] - ref_coords[i2]) < 4:
+                if np.linalg.norm(ref_coords[i1] - ref_coords[i2]) < 4:
                     self.nonbound_pairs.append((i1, i2))
 
         self.nonbound_dists = []
@@ -341,9 +341,9 @@ class NewBondPreventer:
             direction = atoms.positions[i2] - atoms.positions[i1]
             # vector connecting atom1 to atom2
 
-            norm_of_d = norm_of(direction)
+            np.linalg.norm_d = np.linalg.norm(direction)
 
-            spring_force = self.k * 1 / ((norm_of_d - dist + 0.5) ** 2)
+            spring_force = self.k * 1 / ((np.linalg.norm_d - dist + 0.5) ** 2)
             # absolute spring force (float). Positive if spring is overstretched.
 
             spring_force = np.clip(spring_force, -50, 50)
@@ -641,17 +641,19 @@ class OrbitalSpring:
         # First, assess if we have to move atoms 1 and 2 at all
 
         sum_of_distances = (
-            norm_of(atoms.positions[self.i1] - self.orb1)
-            + norm_of(atoms.positions[self.i2] - self.orb2)
+            np.linalg.norm(atoms.positions[self.i1] - self.orb1)
+            + np.linalg.norm(atoms.positions[self.i2] - self.orb2)
             + self.d_eq
         )
 
-        reactive_atoms_distance = norm_of(atoms.positions[self.i1] - atoms.positions[self.i2])
+        reactive_atoms_distance = np.linalg.norm(
+            atoms.positions[self.i1] - atoms.positions[self.i2]
+        )
 
         orb_direction = self.orb2 - self.orb1
         # vector connecting orb1 to orb2
 
-        spring_force = self.k * (norm_of(orb_direction) - self.d_eq)
+        spring_force = self.k * (np.linalg.norm(orb_direction) - self.d_eq)
         # absolute spring force (float). Positive if spring is overstretched.
 
         # spring_force = np.clip(spring_force, -50, 50)
@@ -681,7 +683,7 @@ class OrbitalSpring:
         # Now applying to neighbors the force derived by torque, scaled to match the spring_force,
         # but only if atomic orbitals are more than two Angstroms apart. This improves convergence.
 
-        if norm_of(orb_direction) > 2:
+        if np.linalg.norm(orb_direction) > 2:
             torque1 = np.cross(self.orb1 - atoms.positions[self.i1], force_direction1)
             for i in self.neighbors_of_1:
                 forces[i] += (
@@ -807,7 +809,7 @@ def ase_popt(
         constrained_distances = constrained_distances or [None for _ in constrained_indices]
         for i, c in enumerate(constrained_indices):
             i1, i2 = c
-            tgt_dist = constrained_distances[i] or norm_of(coords[i1] - coords[i2])
+            tgt_dist = constrained_distances[i] or np.linalg.norm(coords[i1] - coords[i2])
             constraints.append(Spring(i1, i2, tgt_dist))
 
     if constrained_angles_indices is not None:
@@ -946,7 +948,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title="temp", traj=
             active_pivot = p
             break
 
-    dist = norm_of(active_pivot.pivot)
+    dist = np.linalg.norm(active_pivot.pivot)
 
     atoms = Atoms(mol.atoms, positions=mol.coords[conf])
 
@@ -974,7 +976,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title="temp", traj=
         atoms.positions = mol.coords[0]
 
         orb_memo = {
-            index: norm_of(atom.center[0] - atom.coord)
+            index: np.linalg.norm(atom.center[0] - atom.coord)
             for index, atom in mol.reactive_atoms_classes_dict[0].items()
         }
 
@@ -1039,7 +1041,7 @@ def ase_bend(embedder, original_mol, conf, pivot, threshold, title="temp", traj=
                 break
         # print(active_pivot)
 
-        dist = norm_of(active_pivot.pivot)
+        dist = np.linalg.norm(active_pivot.pivot)
         # print(f'{iteration}. {mol.filename} conf {conf}: pivot is {round(dist, 3)} (target {round(threshold, 3)})')
 
         if dist - threshold < 0.1:

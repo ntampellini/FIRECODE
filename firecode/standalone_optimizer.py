@@ -289,7 +289,7 @@ def main(filenames):
                             coords, data.atomnos, smarts_string
                         )
 
-                    if constraint.type == "B":
+                    if constraint.type_ == "B":
                         a, b = constraint.indices
                         if constraint.value is None:
                             constraint.value = np.linalg.norm(coords[a] - coords[b])
@@ -301,7 +301,7 @@ def main(filenames):
                             f"CONSTRAIN -> d({a}-{b}) = {round(np.linalg.norm(coords[a] - coords[b]), 3)} A at start of optimization (target is {round(constraint.value, 3)} A)"
                         )
 
-                    elif constraint.type == "A":
+                    elif constraint.type_ == "A":
                         a, b, c = constraint.indices
                         if constraint.value is None:
                             constraint.value = point_angle(coords[a], coords[b], coords[c])
@@ -313,7 +313,7 @@ def main(filenames):
                             f"CONSTRAIN ANGLE -> Angle({a}-{b}-{c}) = {round(point_angle(coords[a], coords[b], coords[c]), 3)}° at start of optimization, target {round(constraint.value, 3)}°"
                         )
 
-                    elif constraint.type == "D":
+                    elif constraint.type_ == "D":
                         a, b, c, d = constraint.indices
                         if constraint.value is None:
                             constraint.value = dihedral(
@@ -409,24 +409,24 @@ def main(filenames):
             print("Constraints: final values")
 
             for constraint in optimizer.constraints:
-                if constraint.type == "B":
+                if constraint.type_ == "B":
                     a, b = constraint.indices
                     final_value = np.linalg.norm(coords[a] - coords[b])
                     uom = " Å"
 
-                elif constraint.type == "A":
+                elif constraint.type_ == "A":
                     a, b, c = constraint.indices
                     final_value = point_angle(coords[a], coords[b], coords[c])
                     uom = "°"
 
-                elif constraint.type == "D":
+                elif constraint.type_ == "D":
                     a, b, c, d = constraint.indices
                     final_value = dihedral(np.array([coords[a], coords[b], coords[c], coords[d]]))
                     uom = "°"
 
                 indices_string = "-".join([str(i) for i in constraint.indices])
                 print(
-                    f"CONSTRAIN -> {constraint.type}({indices_string}) = {round(final_value, 3)}{uom}"
+                    f"CONSTRAIN -> {constraint.type_}({indices_string}) = {round(final_value, 3)}{uom}"
                 )
 
                 # revert original indices for the next molecule

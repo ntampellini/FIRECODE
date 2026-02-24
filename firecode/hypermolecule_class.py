@@ -25,7 +25,6 @@ from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import get_alignment_matrix
 from prism_pruner.utils import flatten
 
-from firecode.algebra import norm_of
 from firecode.errors import NoOrbitalError
 from firecode.graph_manipulations import is_sigmatropic, is_vicinal
 from firecode.pt import pt
@@ -218,7 +217,7 @@ class Hypermolecule:
         """Scale each orbital dimension according to value."""
         for c, _ in enumerate(self.coords):
             for index, atom in self.reactive_atoms_classes_dict[c].items():
-                orb_dim = norm_of(atom.center[0] - atom.coord)
+                orb_dim = np.linalg.norm(atom.center[0] - atom.coord)
                 atom.init(self, index, update=True, orb_dim=orb_dim * value, conf=c)
 
     def get_r_atoms(self, c):
@@ -256,7 +255,7 @@ class Hypermolecule:
                 # print(f'Atom {i} in conf {j+1} weight is {weight} - rel. E was {self.energies[j+1]}')
 
                 for cluster_number, reference in deepcopy(clusters[i]).items():
-                    if norm_of(atom - reference[0]) < radii:
+                    if np.linalg.norm(atom - reference[0]) < radii:
                         clusters[i][cluster_number][1] += weight
                     else:
                         clusters[i][max(clusters[i].keys()) + 1] = [atom, weight]
@@ -318,7 +317,7 @@ class Hypermolecule:
             )
 
         r_atom = self.reactive_atoms_classes_dict[0][index]
-        return norm_of(r_atom.center[0] - r_atom.coord)
+        return np.linalg.norm(r_atom.center[0] - r_atom.coord)
 
 
 class Pivot:
@@ -352,4 +351,4 @@ class Pivot:
         # and to the index2-th center of the second
 
     def __repr__(self):
-        return f"Pivot object - index {self.index}, norm {round(norm_of(self.pivot), 3)}, meanpoint {self.meanpoint}"
+        return f"Pivot object - index {self.index}, norm {round(np.linalg.norm(self.pivot), 3)}, meanpoint {self.meanpoint}"

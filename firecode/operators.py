@@ -28,21 +28,19 @@ from subprocess import CalledProcessError
 import matplotlib.pyplot as plt
 import numpy as np
 from prism_pruner.graph_manipulations import graphize
-from prism_pruner.pruner import prune_by_rmsd, prune_by_rmsd_rot_corr
+from prism_pruner.pruner import prune_by_rmsd, prune_by_rmsd_rot_corr, prune_by_moment_of_inertia
 from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.algebra import norm_of
+
 from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
 from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
 from firecode.mep_relaxer import ase_mep_relax
-from firecode.numba_functions import prune_conformers_tfd
 from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.torsion_module import csearch, get_quadruplets
 from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
 
@@ -170,6 +168,8 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
 
     for i, coords in enumerate(data.coords):
         opt_coords = coords
+
+        from firecode.torsion_module import csearch
 
         conf_batch = csearch(
             data.atoms,
@@ -642,12 +642,10 @@ def crest_search_operator(filename, embedder):
     )
     before = len(conformers)
 
-    ### SIMILARITY PRUNING: TFD
-    quadruplets = get_quadruplets(mol.graph)
-    conformers, _ = prune_conformers_tfd(conformers, quadruplets)
-
     # ### MOI - turned off, as it would get rid of enantiomeric conformations
-    # conformers, _ = prune_by_moment_of_inertia(conformers, mol.atoms)
+    conformers, _ = prune_by_moment_of_inertia(
+        conformers, mol.atoms, debugfunction=embedder.debuglog
+    )
 
     ### RMSD
     if len(conformers) < 5e4:
@@ -711,7 +709,7 @@ def distance_scan(embedder):
     coords = mol.coords[0]
 
     # getting the start distance between scan indices and start energy
-    d = norm_of(coords[i1] - coords[i2])
+    d = np.linalg.norm(coords[i1] - coords[i2])
 
     # deciding if moving atoms closer or further apart based on distance
     bonds = list(mol.graph.edges)
@@ -784,7 +782,7 @@ def distance_scan(embedder):
         energies.append(energy - e_0)
         dists.append(d)
         structures.append(coords)
-        # print(f"------> target was {round(d, 3)} A, reached {round(norm_of(coords[mol.reactive_indices[0]]-coords[mol.reactive_indices[1]]), 3)} A")
+        # print(f"------> target was {round(d, 3)} A, reached {round(np.linalg.norm(coords[mol.reactive_indices[0]]-coords[mol.reactive_indices[1]]), 3)} A")
 
         embedder.log(
             f"Step {i + 1:3}/{max_iterations:3} - d={d:.2f} Å    {energy - e_0:+.2f} kcal/mol - {time_to_string(time.perf_counter() - t_start)}"

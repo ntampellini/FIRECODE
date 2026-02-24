@@ -59,7 +59,6 @@ keywords_dict = {
     "FFCALC": 1,  # Manually overrides the force field calculator in "settings.py"
     "FFLEVEL": 1,  # Manually set the theory level to be used.
     # . Syntax: `FFLEVEL=UFF
-    "FINALSPLEVEL": 1,  # add a single point calc after optimization at a different level
     "IMAGES": 1,  # Number of images to be used in NEB and mep_relax> jobs
     "KCAL": 1,  # Trim output structures to a given value of relative energy.
     # Syntax: `KCAL=n`, where n can be an integer or float.
@@ -159,7 +158,6 @@ class Options:
         self.optimization = True
         self.calculator = CALCULATOR
         self.theory_level = None  # set later in _calculator_setup()
-        self.final_sp_level = None
         self.solvent = None
         self.scramble_check = False
         self.charge = 0
@@ -345,10 +343,6 @@ class OptionSetter:
         options.rotation_steps = 72
         options.max_clashes = 1
         options.clash_thresh = 1.4
-
-    def finalsplevel(self, options, *args):
-        kw = self.keywords_simple[self.keywords.index("FINALSPLEVEL")]
-        options.final_sp_level = kw.split("=")[1].upper()
 
     def rotrange(self, options, *args):
         kw = self.keywords_simple[self.keywords.index("ROTRANGE")]

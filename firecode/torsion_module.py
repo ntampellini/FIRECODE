@@ -32,18 +32,19 @@ from networkx import (
     minimum_spanning_tree,
     shortest_path,
     subgraph,
+    Graph,
 )
-from prism_pruner.algebra import normalize, vec_angle
+from prism_pruner.algebra import dihedral, normalize, vec_angle
 from prism_pruner.graph_manipulations import get_phenyl_ids, get_sp_n, is_amide_n, is_ester_o
 from prism_pruner.utils import flatten, get_double_bonds_indices, rotate_dihedral, time_to_string
+from scipy.spatial.distance import cdist
 
-from firecode.algebra import norm_of
 from firecode.errors import SegmentedGraphError
 from firecode.graph_manipulations import is_sp_n
 from firecode.hypermolecule_class import graphize
-from firecode.numba_functions import prune_conformers_tfd, torsion_comp_check
 from firecode.settings import DEFAULT_FF_LEVELS, FF_CALC
 from firecode.utils import cartesian_product, write_xyz
+from firecode.typing import Array1D_float, Array2D_int
 
 
 class Torsion:
@@ -59,8 +60,8 @@ class Torsion:
         self.i4 = i4
         self.torsion = (i1, i2, i3, i4)
 
-    def in_cycle(self, graph):
-        """Returns True if the torsion is part of a cycle"""
+    def in_cycle(self, graph: Graph) -> bool:
+        """Returns True if the torsion is part of a cycle."""
         graph.remove_edge(self.i2, self.i3)
         cyclical = has_path(graph, self.i1, self.i4)
         graph.add_edge(self.i2, self.i3)
@@ -275,7 +276,7 @@ def _get_hydrogen_bonds(
                     continue
 
             # keep close pairs
-            if d_min < norm_of(coords[i1] - coords[i2]) < d_max:
+            if d_min < np.linalg.norm(coords[i1] - coords[i2]) < d_max:
                 # getting the indices of all H atoms attached to them
                 Hs = [i for i in (graph.neighbors(i1)) if graph.nodes[i]["atoms"] == "H"]
 
@@ -288,8 +289,8 @@ def _get_hydrogen_bonds(
                     v2 = coords[iH] - coords[i2]
 
                     # lengths of these vectors
-                    d1 = norm_of(v1)
-                    d2 = norm_of(v2)
+                    d1 = np.linalg.norm(v1)
+                    d2 = np.linalg.norm(v2)
 
                     # scalar projection in the heteroatom direction
                     l1 = v1 @ versor
@@ -927,6 +928,27 @@ def clustered_csearch(
     return output_structures
 
 
+def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool:
+    """coords: 3D molecule coordinates
+    mask: 1D boolean array with the mask torsion
+    thresh: threshold value for when two atoms are considered clashing
+    max_clashes: maximum number of clashes to pass a structure
+    returns True if the molecule shows less than max_clashes
+    """
+    _, i2, i3, _ = torsion
+
+    antimask = ~mask
+    antimask[i2] = False
+    antimask[i3] = False
+    # making sure the i2-i3 bond is not included in the clashes
+
+    m1 = coords[mask]
+    m2 = coords[antimask]
+    # fragment identification by boolean masking
+
+    return 0 if np.count_nonzero(cdist(m2, m1) < thresh) > max_clashes else 1
+
+
 def most_diverse_conformers(n, structures, torsion_array, energies=None, interactive_print=False):
     """Return the n most diverse structures from the set.
     First removes similar structures based on torsional fingerprints, then divides them in n subsets and:
@@ -942,67 +964,6 @@ def most_diverse_conformers(n, structures, torsion_array, energies=None, interac
     # if n > 300:
     indices = np.sort(np.random.choice(len(structures), size=n))
     return structures[indices]
-    # For now, the algorithm scales badly with number of clusters.
-    # If there are too many to compute, just choose randomly
-
-    ### AVOID SKLEARN?
-
-    # if interactive_print:
-    #     print(f'Removing similar structures...{" "*10}', end='\r')
-
-    # structures, _ = prune_conformers_tfd(structures, torsion_array)
-    # # remove structrures with too similar TFPs
-
-    # if len(structures) <= n:
-    #     return structures
-    # # if we already pruned enough structures to meet the requirement, return them
-
-    # if interactive_print:
-    #     print(f'Aligning structures...{" "*10}', end='\r')
-
-    # structures = align_structures(structures)
-    # features = structures.reshape((structures.shape[0], structures.shape[1]*structures.shape[2]))
-    # # reduce the dimensionality of the rest of the structure array to cluster them with KMeans
-
-    # if interactive_print:
-    #     print(f'Performing KMeans clustering...{" "*10}', end='\r')
-
-    # kmeans = KMeans(n_clusters=n)
-    # kmeans.fit(features)
-    # # Generate and train the model
-
-    # # if energies are given, pick the lowest energy structure from each cluster
-    # if energies is not None:
-    #     clusters = [[] for _ in range(n)]
-    #     for coords, energy, c in zip(structures, energies, kmeans.labels_):
-    #         clusters[c].append((coords, energy))
-
-    #     output = []
-    #     for group in clusters:
-    #         sorted_s, _ = zip(*sorted(group, key=lambda x: x[1]))
-    #         output.append(sorted_s[0])
-
-    # # if not, from each non-empty cluster yield the structure that is more distant from the other clusters
-    # else:
-    #     centers = kmeans.cluster_centers_.reshape((n, *structures.shape[1:3]))
-
-    #     clusters = [[] for _ in range(n)]
-    #     for coords, c in zip(structures, kmeans.labels_):
-    #         clusters[c].append(coords)
-
-    #     r = np.arange(len(clusters))
-    #     output = []
-
-    #     # take one from each non-empty cluster
-    #     for cluster in clusters:
-
-    #         if cluster:
-    #             cumdists = [np.sum(np.centers[r!=c]-ref, axis=2)) for c, ref in enumerate(cluster)]
-
-    #             furthest = cluster[cumdists.index(max(cumdists))]
-    #             output.append(furthest)
-
-    # return np.array(output)
 
 
 def _write_torsion_vmd(atoms, coords, constrained_indices, grouped_torsions, title="test"):
@@ -1032,3 +993,123 @@ def _write_torsion_vmd(atoms, coords, constrained_indices, grouped_torsions, tit
             s += f"label add Bonds 0/{a} 0/{b}\n"
 
         f.write(s)
+
+
+def prune_conformers_tfd(structures, quadruplets, thresh=10, verbose=False):
+    """Removes similar structures by repeatedly grouping them into k
+    subgroups and removing similar ones. A cache is present to avoid
+    repeating TFD computations.
+
+    Similarity occurs for structures with a total angle difference
+    greater than thresh degrees
+    """
+    # Get torsion fingerprints for structures
+    tf_mat = _get_tf_mat(structures, quadruplets)
+
+    cache_set = set()
+    final_mask = np.ones(structures.shape[0], dtype=bool)
+
+    for k in (5e5, 2e5, 1e5, 5e4, 2e4, 1e4, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1):
+        num_active_str = np.count_nonzero(final_mask)
+
+        if k == 1 or 5 * k < num_active_str:
+            # proceed only of there are at least five structures per group
+
+            if verbose:
+                print(
+                    f"Working on subgroups with k={k} ({num_active_str} candidates left) {' ' * 10}",
+                    end="\r",
+                )
+
+            d = int(len(structures) // k)
+
+            for step in range(int(k)):
+                # operating on each of the k subdivisions of the array
+                if step == k - 1:
+                    _l = len(range(d * step, num_active_str))
+                else:
+                    _l = len(range(d * step, int(d * (step + 1))))
+
+                # similarity_mat = np.zeros((_l, _l))
+                matches = set()
+
+                for i_rel in range(_l):
+                    for j_rel in range(i_rel + 1, _l):
+                        i_abs = i_rel + (d * step)
+                        j_abs = j_rel + (d * step)
+
+                        if (i_abs, j_abs) not in cache_set:
+                            # if we have already performed the comparison,
+                            # structures were not similar and we can skip them
+
+                            if tfd_similarity(tf_mat[i_abs], tf_mat[j_abs], thresh=thresh):
+                                # similarity_mat[i_rel,j_rel] = 1
+                                matches.add((i_rel, j_rel))
+                                break
+                            else:
+                                i_abs = i_rel + (d * step)
+                                j_abs = j_rel + (d * step)
+                                cache_set.add((i_abs, j_abs))
+
+                # for i_rel, j_rel in zip(*np.where(similarity_mat == False)):
+                #     i_abs = i_rel+(d*step)
+                #     j_abs = j_rel+(d*step)
+                #     cache_set.add((i_abs, j_abs))
+                # adding indices of structures that are considered equal,
+                # so as not to repeat computing their TFD
+                # Their index accounts for their position in the initial
+                # array (absolute index)
+
+                # matches = [(i,j) for i,j in zip(*np.where(similarity_mat))]
+                g = Graph(matches)
+
+                subgraphs = [g.subgraph(c) for c in connected_components(g)]
+                groups = [tuple(graph.nodes) for graph in subgraphs]
+
+                best_of_cluster = [group[0] for group in groups]
+                # of each cluster, keep the first structure
+
+                rejects_sets = [set(a) - {b} for a, b in zip(groups, best_of_cluster)]
+                rejects = []
+                for s in rejects_sets:
+                    for i in s:
+                        rejects.append(i)
+
+                for i in rejects:
+                    abs_index = i + d * step
+                    final_mask[abs_index] = 0
+
+    return structures[final_mask], final_mask
+
+
+def _get_tf_mat(structures, quadruplets):
+    """Get the torsional fingerprint matrix."""
+    tf_mat = np.empty(shape=(len(structures), len(quadruplets)), dtype=float)
+
+    for i in range(len(structures)):
+        tf_mat[i] = get_torsion_fingerprint(structures[i], quadruplets)
+
+    return tf_mat
+
+
+def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
+    """Return True if the two structure are similar under the torsion fingeprint criteria."""
+    # Compute their absolute difference
+    deltas = np.abs(tfp1 - tfp2)
+
+    # Correct for rotations over 180 deg
+    deltas = np.abs(deltas - (deltas > 180) * 360)
+
+    if np.sum(deltas) < thresh:
+        return True
+
+    return False
+
+
+def get_torsion_fingerprint(coords: Array1D_float, quadruplets: Array2D_int) -> Array1D_float:
+    """Get vector with dihedral angle values."""
+    out = np.zeros(quadruplets.shape[0], dtype=float)
+    for i, q in enumerate(quadruplets):
+        i1, i2, i3, i4 = q
+        out[i] = dihedral([coords[i1], coords[i2], coords[i3], coords[i4]])
+    return out

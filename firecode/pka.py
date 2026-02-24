@@ -20,23 +20,30 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Callable
+
 import numpy as np
 from prism_pruner.graph_manipulations import graphize
 
 from firecode.algebra import normalize
 from firecode.calculators._xtb import xtb_get_free_energy
 from firecode.optimization_methods import optimize, refine_structures, write_xyz
-from firecode.torsion_module import csearch
+from firecode.typing import Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import loadbar
+
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
 
 
 def _get_anions(
-    embedder,
-    atoms,
-    structures,
-    index,
-    logfunction=print,
-):
+    embedder: Embedder,
+    atoms: Array1D_str,
+    structures: Array2D_float,
+    index: int,
+    logfunction: Callable[[str], None] = print,
+) -> tuple[Array3D_float, list[float], Array1D_str]:
     """atoms: 1D array of atomic numbers
     structures: array of 3D of coordinates
     index: position of hydrogen atom to be abstracted
@@ -170,6 +177,8 @@ def pka_routine(filename, embedder, search=True):
     if search:
         if len(mol.coords) > 1:
             embedder.log(f"Using only the first molecule of {mol.filename} to generate conformers")
+
+        from firecode.torsion_module import csearch
 
         conformers = csearch(
             mol.atoms,

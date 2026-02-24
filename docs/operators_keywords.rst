@@ -128,8 +128,7 @@ one is accepted, like in ``DIST``.
    energy maxima for further refinement. Syntax: ``KCAL=n``.
 
 -  **LET** - Overrides safety checks that prevent the program from
-   running calculations that seem too large and likely erroneous. Also avoids efficiency-oriented 
-   trimming when writing large files to disk (DEBUG keyword).
+   running calculations that seem too large and likely erroneous.
 
 -  **LEVEL** - Manually set the theory level to be used.
    White spaces, if needed, can be expressed in input files with underscores. Syntax (ORCA):

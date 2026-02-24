@@ -31,30 +31,6 @@ from networkx import (
 )
 from prism_pruner.graph_manipulations import find_paths, get_sp_n
 
-from firecode.algebra import norm_of
-
-
-def _get_planar_angles(graph):
-    """Returns list of triplets that indicate angles."""
-    allpaths = []
-    for node in graph:
-        allpaths.extend(find_paths(graph, node, 2))
-    # get all possible continuous indices triplets
-
-    triplets, t_ids = [], []
-    for path in allpaths:
-        i1, _, i3 = path
-        t_id = tuple(sorted((i1, i3)))
-
-        if t_id not in t_ids:
-            triplets.append(path)
-            t_ids.append(t_id)
-
-    # Yields non-redundant triplets
-    # Rejects (3,2,1) if (1,2,3) is present
-
-    return np.array(triplets)
-
 
 def is_sigmatropic(mol, conf):
     """mol: Hypermolecule object
@@ -73,7 +49,7 @@ def is_sigmatropic(mol, conf):
     sp2_types = ("Ketone", "Imine", "sp2", "sp", "bent carbene")
     if len(mol.reactive_indices) == 2:
         i1, i2 = mol.reactive_indices
-        if norm_of(mol.coords[conf][i1] - mol.coords[conf][i2]) < 3:
+        if np.linalg.norm(mol.coords[conf][i1] - mol.coords[conf][i2]) < 3:
             if all(
                 [
                     str(r_atom) in sp2_types

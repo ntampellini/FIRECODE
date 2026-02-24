@@ -50,7 +50,7 @@ dev = { features = ["dev"], solve-group = "default"}
 pytest = ">=9.0.2,<10"
 pytest-cov = ">=7.0"
 ruff = ">=0.11"
-mypy = ">=1.18.2,<2"
+mypy = ">=1.19.1,<2"
 pre-commit = ">=4.2"
 fairchem-core = "*"
 coverage = ">=7.13.4,<8"
@@ -128,3 +128,20 @@ relative_files = true
 
 [tool.coverage.xml]
 output = "coverage.xml"
+
+[tool.mypy]
+files = ["firecode", "tests"]
+strict = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "rdkit.*",
+    "rdkit.Chem.*",
+    "rdkit.Chem.AllChem",
+    "networkx.*",
+    "scipy.*",
+    "prism_pruner.*",
+]
+ignore_missing_imports = true
+

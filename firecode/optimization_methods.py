@@ -20,35 +20,48 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 import time
 from copy import deepcopy
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
-from prism_pruner.pruner import prune_by_rmsd  # type: ignore[import-untyped]
-from prism_pruner.utils import time_to_string  # type: ignore[import-untyped]
+from prism_pruner.algebra import normalize
+from prism_pruner.pruner import prune_by_rmsd
+from prism_pruner.utils import time_to_string
 
-from firecode.algebra import norm_of, normalize
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
+from firecode.pt import pt
 from firecode.settings import DEFAULT_LEVELS
-from firecode.utils import loadbar, molecule_check, pt, scramble_check, write_xyz
+from firecode.typing import Array1D_str, Array2D_float
+from firecode.utils import loadbar, molecule_check, scramble_check, write_xyz
+
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
 
 
 class Opt_func_dispatcher:
-    def __init__(self, calculator):
+    """Dispatcher for optimization functions."""
+
+    def __init__(self, calculator: str) -> None:
+        """Init method."""
         self.opt_func = {
             "ORCA": orca_opt,
             "XTB": xtb_opt,
             "TBLITE": ase_popt,
             "UMA": ase_popt_with_alpb,
             "AIMNET2": ase_popt_with_alpb,
-        }.get(calculator, None)
+        }[calculator]
 
         self.ase_calc = None
         self.calculator = calculator
 
-    def get_ase_calc(self, method, solvent=None, force_reload=False, raise_err=True):
+    def get_ase_calc(
+        self, method: str, solvent: str | None = None, force_reload=False, raise_err=True
+    ):
         if self.ase_calc is not None and not force_reload:
             pass
 
@@ -176,7 +189,7 @@ def optimize(
     debug=False,
     dispatcher=None,
     **kwargs,
-):
+) -> tuple[Array2D_float, float, bool]:
     """Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA or XTB at $method level,
     constraining the distance between the specified atom pairs, if any. Moreover, if $check, performs a check on atomic
     pairs distances to ensure that the optimization has preserved molecular identities and no atom scrambling occurred.
@@ -316,7 +329,7 @@ def opt_linear_scan(
     )
 
     direction = coords[i1] - coords[i2]
-    base_dist = norm_of(direction)
+    base_dist = np.linalg.norm(direction)
     energies, geometries = [energy], [coords]
 
     for sign in (1, -1):
@@ -332,9 +345,9 @@ def opt_linear_scan(
                 safe
             ):  # use ASE optimization function - more reliable, but locks all interatomic dists
                 targets = [
-                    norm_of(active_coords[a] - active_coords[b]) - step_size
+                    np.linalg.norm(active_coords[a] - active_coords[b]) - step_size
                     if (a in scan_indices and b in scan_indices)
-                    else norm_of(active_coords[a] - active_coords[b])
+                    else np.linalg.norm(active_coords[a] - active_coords[b])
                     for a, b in constrained_indices
                 ]
 
@@ -384,7 +397,7 @@ def opt_linear_scan(
                 break
 
             direction = active_coords[i1] - active_coords[i2]
-            dist = norm_of(direction)
+            dist = np.linalg.norm(direction)
 
             total_iter += 1
             geometries.append(active_coords)
@@ -409,7 +422,7 @@ def opt_linear_scan(
             ):
                 break
 
-    distances = [norm_of(g[i1] - g[i2]) for g in geometries]
+    distances = [np.linalg.norm(g[i1] - g[i2]) for g in geometries]
     best_distance = distances[energies.index(max(energies))]
 
     distances_delta = [abs(d - best_distance) for d in distances]
@@ -445,7 +458,7 @@ def opt_linear_scan(
                     f,
                     title=title
                     + (
-                        f" FINAL - d({i1}-{i2}) = {round(norm_of(final_geom[i1] - final_geom[i2]), 3)} A,"
+                        f" FINAL - d({i1}-{i2}) = {round(np.linalg.norm(final_geom[i1] - final_geom[i2]), 3)} A,"
                         f" Rel. E = {round(final_energy - energies[0], 3)} kcal/mol"
                     ),
                 )
@@ -454,7 +467,7 @@ def opt_linear_scan(
 
         plt.figure()
 
-        distances = [norm_of(geom[i1] - geom[i2]) for geom in geometries]
+        distances = [np.linalg.norm(geom[i1] - geom[i2]) for geom in geometries]
         distances, sorted_energies = zip(*sorted(zip(distances, energies), key=lambda x: x[0]))
 
         plt.plot(
@@ -468,7 +481,7 @@ def opt_linear_scan(
         )
 
         plt.plot(
-            norm_of(coords[i1] - coords[i2]),
+            np.linalg.norm(coords[i1] - coords[i2]),
             0,
             marker="o",
             color="tab:blue",
@@ -519,7 +532,7 @@ def fitness_check(coords, constraints, targets, threshold) -> bool:
     error = 0
     for (a, b), target in zip(constraints, targets):
         if target is not None:
-            error += norm_of(coords[a] - coords[b]) - target
+            error += np.linalg.norm(coords[a] - coords[b]) - target
 
     return error < threshold
 
