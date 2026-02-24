@@ -135,7 +135,6 @@ one is accepted, like in ``DIST``.
    White spaces, if needed, can be expressed in input files with underscores. Syntax (ORCA):
    ``LEVEL(B3LYP_def2-TZVP)``. Defaults can be found in settings.py, and can be modified by running 
    the module with the -s flag (``>>> firecode -s``).
-   .. Here ( should be written as [ in input, or it will crash (temporary fix?)
 
 -  **NEB** - Set NEB options. Syntax and default values: ``NEB(images=7, preopt=true, ci=true)``.
 
