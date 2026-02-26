@@ -20,7 +20,10 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 import numpy as np
 from networkx import (
@@ -29,10 +32,15 @@ from networkx import (
     get_node_attributes,
     set_node_attributes,
 )
-from prism_pruner.graph_manipulations import find_paths, get_sp_n
+from prism_pruner.graph_manipulations import get_sp_n
+
+if TYPE_CHECKING:
+    from networkx import Graph
+
+    from firecode.hypermolecule_class import Hypermolecule
 
 
-def is_sigmatropic(mol, conf):
+def is_sigmatropic(mol: Hypermolecule, conf: int) -> bool:
     """mol: Hypermolecule object
     conf: conformer index
 
@@ -72,7 +80,7 @@ def is_sigmatropic(mol, conf):
     return False
 
 
-def is_vicinal(mol):
+def is_vicinal(mol: Hypermolecule) -> bool:
     """A hypermolecule is considered vicinal when:
     - has 2 reactive atoms
     - they are of sp3 or Single Bond type
@@ -98,7 +106,7 @@ def is_vicinal(mol):
     return False
 
 
-def is_sp_n(index, graph, n):
+def is_sp_n(index: int, graph: Graph, n: int) -> bool:
     """Returns True if the sp_n value matches the input"""
     sp_n = get_sp_n(index, graph)
     if sp_n == n:
@@ -106,7 +114,9 @@ def is_sp_n(index, graph, n):
     return False
 
 
-def get_sum_graph(graphs, extra_edges=None):
+def get_sum_graph(
+    graphs: Sequence[Graph], extra_edges: Iterable[Iterable[int]] | None = None
+) -> Graph:
     """Creates a graph containing all graphs, added in
     sequence, and then adds the specified extra edges
     (with cumulative numbering).

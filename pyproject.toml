@@ -37,6 +37,7 @@ xtb-python = "*"
 tblite = ">=0.3.0"
 tblite-python = "*"
 crest = "2.12.*"
+psutil = ">=7.2.2,<8"
 
 
 [tool.pixi.pypi-dependencies]
@@ -142,6 +143,7 @@ module = [
     "networkx.*",
     "scipy.*",
     "prism_pruner.*",
+    "fairchem.core.*",
 ]
 ignore_missing_imports = true
 

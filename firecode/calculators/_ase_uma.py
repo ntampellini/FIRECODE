@@ -1,9 +1,17 @@
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING, Callable, Literal
 
 from firecode.settings import UMA_MODEL_PATH
 
+if TYPE_CHECKING:
+    from fairchem.core import FAIRChemCalculator
 
-def get_uma_calc(method="omol", logfunction=None):
+
+def get_uma_calc(
+    method: str = "omol", logfunction: Callable[[str], None] | None = None
+) -> FAIRChemCalculator:
     """Load UMA model from disk and return the ASE calculator object"""
     try:
         from fairchem.core import FAIRChemCalculator

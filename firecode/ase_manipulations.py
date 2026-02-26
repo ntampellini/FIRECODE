@@ -1162,8 +1162,6 @@ def ase_get_free_energy(
     ase_calc.charge = charge
     ase_calc.multiplicity = mult
     ase_calc.verbosity = 0
-    # setattr(ase_calc, "charge", charge)
-    # setattr(ase_calc, "multiplicity", mult)
     # setattr(ase_calc, "verbosity", 0)
     atoms.calc = ase_calc
 
@@ -1234,11 +1232,11 @@ def fsm_operator(embedder, optimize_endpoints=True):
     from mlfsm.opt import CartesianOptimizer, InternalsOptimizer
 
     # interp = 'ric'
-    interp = "cart"
-    maxiter = 100  # default = 3
-    maxls = 2  # default = 2
-    dmax = 0.3  # default = 0.3
-    nnodes_min = embedder.options.images if hasattr(embedder.options, "images") else 10
+    interp: str = "cart"
+    maxiter: int = 100  # default = 3
+    maxls: int = 2  # default = 2
+    dmax: float = 0.3  # default = 0.3
+    nnodes_min: int = embedder.options.images or 10
 
     charge = embedder.options.charge
     mult = embedder.options.mult

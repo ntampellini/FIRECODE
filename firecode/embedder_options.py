@@ -20,6 +20,11 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
 from firecode.settings import (
     CALCULATOR,
     DEFAULT_FF_LEVELS,
@@ -27,6 +32,9 @@ from firecode.settings import (
     FF_OPT_BOOL,
     SINGLE_THREAD_BOOL,
 )
+
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
 
 # Known keywords and relative priority level:
 # 1 : First to run, set some option
@@ -104,7 +112,7 @@ keywords_dict = {
 }
 
 
-def get_keyword_suggestion(unknown_kw):
+def get_keyword_suggestion(unknown_kw: str) -> str | None:
     """Given an unknown keyword, return the known one
     with the highest score, if similar enough,
     else return None.
@@ -118,7 +126,7 @@ def get_keyword_suggestion(unknown_kw):
     return None
 
 
-def kw_similarity_score(ref, kw):
+def kw_similarity_score(ref: str, kw: str) -> float:
     """Simple scoring for string similarity"""
     score = 0
     letters = []
@@ -130,84 +138,91 @@ def kw_similarity_score(ref, kw):
     return score / len(ref)
 
 
-class Truthy_struct:
-    """Stub of a class with truthy behavior."""
+@dataclass
+class NEBOptions:
+    """Simple dataclass with truthy behavior."""
 
-    def __bool__(self):
+    n_images: int
+    preopt: bool
+    climbing_image: bool
+
+    def __bool__(self) -> bool:
         return True
 
 
+@dataclass
 class Options:
-    def __init__(self):
-        # only used by cyclical embeds, can be set here
-        self.rotation_range = 45
+    # only used by cyclical embeds, can be set here
+    rotation_range: int = 45
 
-        # Set later by the _setup() function based on embed type,
-        # since it is used by both cyclical and string embeds
-        self.rotation_steps = None
+    # Set later by the _setup() function based on embed type,
+    # since it is used by both cyclical and string embeds
+    rotation_steps: int | None = None
+    custom_rotation_steps: int | None = None
 
-        self.rmsd = 0.5
-        self.rigid = False
-        self.max_confs = 1000
+    rmsd: float = 0.5
+    rigid: bool = False
+    max_confs: int = 1000
 
-        self.max_clashes = 0
-        self.clash_thresh = 1.5
+    max_clashes: int = 0
+    clash_thresh: float = 1.5
 
-        self.max_newbonds = 0
+    max_newbonds: int = 0
 
-        self.optimization = True
-        self.calculator = CALCULATOR
-        self.theory_level = None  # set later in _calculator_setup()
-        self.solvent = None
-        self.scramble_check = False
-        self.charge = 0
-        self.mult = 1
-        self.ff_opt = FF_OPT_BOOL
-        self.ff_calc = FF_CALC
+    optimization: bool = True
+    calculator: str = CALCULATOR
+    theory_level: str | None = None  # set later in _calculator_setup()
+    solvent: str | None = None
+    scramble_check: bool = False
+    charge: int = 0
+    mult: int = 1
+    ff_opt: bool = FF_OPT_BOOL
+    ff_calc: str | None = FF_CALC
 
-        if self.ff_opt:
-            self.ff_level = DEFAULT_FF_LEVELS[FF_CALC]
+    if ff_opt and FF_CALC is not None:
+        ff_level: str = DEFAULT_FF_LEVELS[FF_CALC]
 
-        self.crestnci = False
-        self.shrink = False
-        self.shrink_multiplier = 1
-        self.metadynamics = False
-        self.suprafacial = False
-        self.simpleorbitals = False
-        self.only_refined = False
-        # self.keep_enantiomers = False
-        self.double_bond_protection = False
-        self.keep_hb = False
-        self.dryrun = False
-        self.checkpoint_frequency = 50
+    crestnci: bool = False
+    crestlevel: str | None = None
+    shrink: bool = False
+    shrink_multiplier: int = 1
+    metadynamics: bool = False
+    suprafacial: bool = False
+    simpleorbitals: bool = False
+    only_refined: bool = False
+    double_bond_protection: bool = False
+    keep_hb: bool = False
+    dryrun: bool = False
+    checkpoint_frequency: int = 50
+    images: int | None = None
 
-        self.fix_angles_in_deformation = False
-        # Not possible to set manually through a keyword.
-        # Monomolecular embeds have it on to prevent
-        # scrambling, but better to leave it off for
-        # less severe deformations, since convergence
-        # is faster
+    fix_angles_in_deformation: bool = False
+    # Not possible to set manually through a keyword.
+    # Monomolecular embeds have it on to prevent
+    # scrambling, but better to leave it off for
+    # less severe deformations, since convergence
+    # is faster
 
-        self.kcal_thresh = 10
-        self.bypass = False
-        self.debug = False
-        self.let = False
-        self.check_structures = False
-        self.noembed = False
-        # Default values, updated if _parse_input
-        # finds keywords and calls _set_options
+    kcal_thresh: int = 10
+    bypass: bool = False
+    debug: bool = False
+    let: bool = False
+    check_structures: bool = False
+    noembed: bool = False
+    # Default values, updated if _parse_input
+    # finds keywords and calls _set_options
 
-        self.operators = []
-        # this list will be filled with operator strings
-        # that need to be exectured before the run. i.e. ['firecode_search>mol.xyz']
+    operators: list[str] = field(default_factory=list)
+    # this list will be filled with operator strings
+    # that need to be exectured before the run. i.e. ['firecode_search>mol.xyz']
 
-        self.operators_dict = {}
-        # Analogous dictionary that will contain the seuquences of operators for each molecule
+    operators_dict: dict[int, str] = field(default_factory=dict)
+    # Analogous dictionary that will contain the seuquences of operators for each molecule
 
-        self.single_thread = SINGLE_THREAD_BOOL
-        # enforce the use of a single thread in multimolecular optimization
+    single_thread: bool = SINGLE_THREAD_BOOL
+    # enforce the use of a single thread in multimolecular optimization
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         d = {var: self.__getattribute__(var) for var in dir(self) if var[0] != "_"}
 
         repr_if_true = (
@@ -255,16 +270,17 @@ class Options:
             [f"{key}{' ' * (padding - len(key))}: {value}" for key, value in d.items()]
         )
 
-    def _init_neb_options(self):
+    def _init_neb_options(self) -> None:
         """Initialize NEB options."""
-        self.neb = Truthy_struct()
-        self.neb.n_images = self.images if hasattr(self, "images") else 7
-        self.neb.preopt = True
-        self.neb.climbing_image = True
+        self.neb = NEBOptions(
+            n_images=self.images if self.images is not None else 7,
+            preopt=True,
+            climbing_image=True,
+        )
 
 
 class OptionSetter:
-    def __init__(self, embedder, *args):
+    def __init__(self, embedder: Embedder, *args: Any) -> None:
         embedder.kw_line = embedder.kw_line if hasattr(embedder, "kw_line") else ""
 
         self.keywords = [
@@ -293,7 +309,7 @@ class OptionSetter:
                 + "\n"
             )
 
-    def _refine_operator_routine(self):
+    def _refine_operator_routine(self) -> None:
         if len(self.embedder.objects) > 1:
             raise SystemExit(
                 (
@@ -313,53 +329,53 @@ class OptionSetter:
         )
         self.embedder.options.noembed = True
 
-    def bypass(self, options, *args):
+    def bypass(self, options: Options, *args: Any) -> None:
         options.bypass = True
         options.optimization = False
 
-    def charge(self, options, *args):
+    def charge(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CHARGE")]
         options.charge = int(kw.split("=")[1])
 
-    def mult(self, options, *args):
+    def mult(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("MULT")]
         options.mult = int(kw.split("=")[1])
 
-    def confs(self, options, *args):
+    def confs(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CONFS")]
         options.max_confs = int(kw.split("=")[1])
 
-    def crestnci(self, options, *args):
+    def crestnci(self, options: Options, *args: Any) -> None:
         options.crestnci = True
 
-    def dryrun(self, options, *args):
+    def dryrun(self, options: Options, *args: Any) -> None:
         options.dryrun = True
 
-    def suprafac(self, options, *args):
+    def suprafac(self, options: Options, *args: Any) -> None:
         options.suprafacial = True
 
-    def deep(self, options, *args):
-        options.options.rmsd = 0.1
+    def deep(self, options: Options, *args: Any) -> None:
+        options.rmsd = 0.1
         options.rotation_steps = 72
         options.max_clashes = 1
         options.clash_thresh = 1.4
 
-    def rotrange(self, options, *args):
+    def rotrange(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("ROTRANGE")]
         options.rotation_range = int(kw.split("=")[1])
 
-    def steps(self, options, *args):
+    def steps(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("STEPS")]
         options.custom_rotation_steps = int(kw.split("=")[1])
 
-    def rmsd(self, options, *args):
+    def rmsd(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("RMSD")]
         options.rmsd = float(kw.split("=")[1])
 
-    def noopt(self, options, *args):
+    def noopt(self, options: Options, *args: Any) -> None:
         options.optimization = False
 
-    def ffopt(self, options, *args):
+    def ffopt(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("FFOPT")]
         value = kw.split("=")[1].upper()
 
@@ -373,11 +389,11 @@ class OptionSetter:
 
         options.ff_opt = True if value in on else False
 
-    def images(self, options, *args):
+    def images(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("IMAGES")]
         options.images = int(kw.split("=")[1])
 
-    def dist(self, options, *args):
+    def dist(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple_case_sensitive[self.keywords.index("DIST")]
         orb_string = kw[5:-1].replace(" ", "")
         # orb_string looks like 'a=2.345,b=3.456,c=2.22'
@@ -385,7 +401,7 @@ class OptionSetter:
         embedder = args[0]
         embedder._set_custom_orbs(orb_string)
 
-    def clashes(self, options, *args):
+    def clashes(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CLASHES")]
         clashes_string = kw[8:-1].lower().replace(" ", "")
         # clashes_string now looks like 'num=3,dist=1.2'
@@ -404,11 +420,11 @@ class OptionSetter:
                     )
                 )
 
-    def newbonds(self, options, *args):
+    def newbonds(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("NEWBONDS")]
         options.max_newbonds = int(kw.split("=")[1])
 
-    def neb(self, options, *args):
+    def neb(self, options: Options, *args: Any) -> None:
         options._init_neb_options()
 
         kw = self.keywords_simple[self.keywords.index("NEB")]
@@ -432,7 +448,7 @@ class OptionSetter:
                         )
                     )
 
-    def level(self, options, *args):
+    def level(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("LEVEL")]
         options.theory_level = kw.split("=")[1].upper().replace("_", " ")
 
@@ -442,40 +458,40 @@ class OptionSetter:
         # mistaken for one with sub-arguments. To be better addressed
         # when/if a major rewrite of the option setting happens.
 
-    def fflevel(self, options, *args):
+    def fflevel(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("FFLEVEL")]
         options.ff_level = kw.split("=")[1].upper().replace("_", " ")
 
-    def rigid(self, options, *args):
+    def rigid(self, options: Options, *args: Any) -> None:
         options.rigid = True
 
-    def onlyrefined(self, options, *args):
+    def onlyrefined(self, options: Options, *args: Any) -> None:
         options.only_refined = True
 
-    def let(self, options, *args):
+    def let(self, options: Options, *args: Any) -> None:
         options.let = True
 
-    def check(self, options, *args):
+    def check(self, options: Options, *args: Any) -> None:
         options.check_structures = True
 
-    def simpleorbitals(self, options, *args):
+    def simpleorbitals(self, options: Options, *args: Any) -> None:
         options.simpleorbitals = True
 
-    def kcal(self, options, *args):
+    def kcal(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("KCAL")]
         options.kcal_thresh = float(kw.split("=")[1])
 
-    def shrink(self, options, *args):
+    def shrink(self, options: Options, *args: Any) -> None:
         options.shrink = True
         kw = self.keywords_simple[self.keywords.index("SHRINK")]
 
         parsed = kw.split("=")
         options.shrink_multiplier = float(parsed[1]) if len(parsed) > 1 else 1.5
 
-    # def enantiomers(self, options, *args):
+    # def enantiomers(self, options: Options, *args: Any) -> None:
     #     options.keep_enantiomers = True
 
-    def debug(self, options, *args):
+    def debug(self, options: Options, *args: Any) -> None:
         options.debug = True
 
         # open a dedicated debug logfile
@@ -486,29 +502,29 @@ class OptionSetter:
 
         basicConfig(filename=debug_log_filename, filemode="a")
 
-    def procs(self, options, *args):
+    def procs(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("PROCS")]
         self.embedder.procs = int(kw.split("=")[1])
 
-    def ezprot(self, options, *args):
+    def ezprot(self, options: Options, *args: Any) -> None:
         options.double_bond_protection = True
 
-    def calc(self, options, *args):
+    def calc(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CALC")]
         options.calculator = kw.split("=")[1]
 
-    def ffcalc(self, options, *args):
+    def ffcalc(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("FFCALC")]
         options.ff_calc = kw.split("=")[1]
 
-    def solvent(self, options, *args):
+    def solvent(self, options: Options, *args: Any) -> None:
         from firecode.solvents import solvent_synonyms
 
         kw = self.keywords_simple[self.keywords.index("SOLVENT")]
         solvent = kw.split("=")[1].lower()
         options.solvent = solvent_synonyms.get(solvent, solvent)
 
-    def pka(self, options, *args):
+    def pka(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple_case_sensitive[self.keywords.index("PKA")]
         pka_string, pka = kw.split("=")
         molname = pka_string[4:-1].replace(" ", "")
@@ -524,14 +540,14 @@ class OptionSetter:
             f"{molname} must be present in the molecule lines, along with the pka> operator. Syntax: pka(mol.xyz)=n"
         )
 
-    def crestlevel(self, options, *args):
+    def crestlevel(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CRESTLEVEL")]
         options.crestlevel = kw.split("=")[1]
 
-    def scramblecheck(self, options, *args):
+    def scramblecheck(self, options: Options, *args: Any) -> None:
         options.scramble_check = True
 
-    def set_options(self):
+    def set_options(self) -> None:
         for kw in self.sorted_keywords():
             setter_function = getattr(self, kw.lower())
             setter_function(self.embedder.options, self.embedder, *self.args)
@@ -542,6 +558,6 @@ class OptionSetter:
         ):
             self._refine_operator_routine()
 
-    def sorted_keywords(self):
+    def sorted_keywords(self) -> Iterable[str]:
         """Returns all the keywords sorted in the optimal execution order."""
         return sorted(self.keywords, key=keywords_dict.get)

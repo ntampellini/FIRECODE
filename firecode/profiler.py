@@ -2,7 +2,8 @@ import cProfile
 from pstats import Stats
 
 
-def profiled_wrapper(filename, name):
+def profiled_wrapper(filename: str, name: str) -> None:
+    """Wrapper to profile a FIRECODE run."""
     datafile = f"firecode_{name}_cProfile.dat"
     cProfile.run("Embedder(filename, args.name).run()", datafile)
 

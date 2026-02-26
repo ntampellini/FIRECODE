@@ -29,7 +29,7 @@ from InquirerPy.validator import PathValidator
 from firecode.settings import DEFAULT_FF_LEVELS, DEFAULT_LEVELS, UMA_MODEL_PATH
 
 
-def run_setup():
+def run_setup() -> None:
     """Invoked by the command
     > python -m firecode -s (--setup)
 

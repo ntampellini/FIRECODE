@@ -22,6 +22,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 import os as op_sys
 from time import perf_counter
+from typing import Iterable
 
 import numpy as np
 from InquirerPy import inquirer
@@ -35,12 +36,17 @@ from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.pt import pt
 from firecode.settings import CALCULATOR
 from firecode.solvents import epsilon_dict, solvent_synonyms
+from firecode.typing import Array1D_int
 from firecode.units import EH_TO_KCAL
 from firecode.utils import Constraint, read_xyz, write_xyz
 
 
 class Optimizer:
-    def __init__(self, calc=None, method=None, solvent=None):
+    """Standalone Optimizer Class."""
+
+    def __init__(self, calc=None, method=None, solvent=None) -> None:
+        """Class initialization."""
+
         if any((calc is None, method is None)):
             choices = (
                 Choice(value=("AIMNET2", "wB97M-D3"), name="AIMNet2/wB97M-D3"),
@@ -76,20 +82,17 @@ class Optimizer:
         self.solvent = solvent
 
         self.dispatcher = Opt_func_dispatcher(calc)
+        self.constraints: list[Constraint] = []
 
-        # try:
-        #     self.dispatcher.get_ase_calc(method, solvent)
-        # except NotImplementedError:
-        #     pass
-
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """Return string representation."""
         s = ""
         for attr in ("calc", "method", "solvent"):
             s += f"--> {attr} : {getattr(self, attr)}\n"
         return s
 
 
-def main(filenames):
+def main(filenames: str) -> None:
     """Standalone optimizer entry point.
     args: iterable of strings of structure filenames.
 
@@ -117,7 +120,7 @@ def main(filenames):
         Choice(value="free_energy", name="Free Energy      - Calculate free energy (G)."),
     ]
 
-    options_to_set = inquirer.checkbox(
+    options_to_set = inquirer.checkbox(  # type: ignore[attr-defined]
         message="Select options (spacebar to toggle, enter to confirm):",
         choices=choices,
         cycle=False,
@@ -129,7 +132,6 @@ def main(filenames):
     for option in choices:
         setattr(optimizer, option.value, option.value in options_to_set)
 
-    optimizer.constraints = []
     smarts_string = None
     optimizer.opt = not optimizer.sp
 
@@ -458,7 +460,7 @@ def main(filenames):
         print(table.get_string())
 
 
-def multiplicity_check(atomnos, charge, multiplicity=1) -> bool:
+def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1) -> bool:
     """Returns True if the multiplicity and the nuber of
     electrons are one odd and one even, and vice versa.
 
@@ -468,7 +470,9 @@ def multiplicity_check(atomnos, charge, multiplicity=1) -> bool:
     return (multiplicity % 2) != (electrons % 2)
 
 
-def get_ts_d_estimate(filename, indices, factor=1.35, verbose=True):
+def get_ts_d_estimate(
+    filename: str, indices: Iterable[float], factor: float = 1.35, verbose: bool = True
+) -> float:
     """Returns an estimate for the distance between two
     specific atoms in a transition state, by multipling
     the sum of covalent radii for a constant.

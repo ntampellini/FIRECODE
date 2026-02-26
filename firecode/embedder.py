@@ -20,6 +20,8 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import pickle
@@ -33,7 +35,7 @@ from getpass import getuser
 from importlib.metadata import version
 from itertools import groupby
 from string import ascii_lowercase
-from typing import List, Tuple
+from typing import TYPE_CHECKING, Any, Sequence
 
 import numpy as np
 from prism_pruner.algebra import dihedral
@@ -43,7 +45,7 @@ from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, time_to_string
 from psutil import virtual_memory
 
-from firecode.algebra import point_angle, count_clashes
+from firecode.algebra import count_clashes, point_angle
 from firecode.calculators._xtb import xtb_opt, xtb_pre_opt
 from firecode.embedder_options import Options, OptionSetter, keywords_dict
 from firecode.embeds import (
@@ -66,13 +68,21 @@ from firecode.utils import (
     auto_newline,
     cartesian_product,
     clean_directory,
+    compenetration_check,
     loadbar,
     saturation_check,
     scramble_check,
+    str_to_var,
     timing_wrapper,
     write_xyz,
-    compenetration_check,
 )
+
+if TYPE_CHECKING:
+    from io import TextIOWrapper
+
+from typing import Iterable
+
+from firecode.typing import Array1D_bool
 
 
 class Embedder:
@@ -119,6 +129,7 @@ class Embedder:
 
         log_filename = f"firecode_{self.stamp}.log"
         self.logfile = open(log_filename, "a", buffering=1, encoding="utf-8")
+        self.debug_logfile: FileIOWrapper | None = None
         logging.basicConfig(filename=log_filename, filemode="a", encoding="utf-8")
 
         try:
@@ -128,8 +139,8 @@ class Embedder:
             self.options = Options()
             # initialize option subclass
 
-            self.embed = None
-            self.warnings = []
+            self.embed: str | None = None
+            self.warnings: list[str] = []
             # initialize embed type variable and warnings list
 
             inp = self._parse_input(filename)
@@ -188,7 +199,7 @@ class Embedder:
         self.logfile.write(string)
 
     def debuglog(self, string: str = "") -> None:
-        if self.options.debug:
+        if self.options.debug and self.debug_logfile is not None:
             string += "\n"
             # self.logfile.write(string)
             self.debug_logfile.write(string)
@@ -289,7 +300,7 @@ class Embedder:
                 f"\n--> Your run also makes use of this other software: please cite these references as well.\n{s}"
             )
 
-    def _parse_input(self, filename) -> List[Tuple[str, str]]:
+    def _parse_input(self, filename: str) -> list[tuple[str, tuple[int, ...] | None]]:
         """Reads a textfile and sets the Embedder properties for the run.
         Keywords are read from the first non-comment(#), non-blank line
         if there are any, and molecules are read afterward.
@@ -312,7 +323,7 @@ class Embedder:
         # start parsing: get rid of comment lines and blank lines
         lines = [line.replace(", ", ",") for line in lines if line != "" and line[0] not in ("\n")]
 
-        def _remove_internal_constraints(string):
+        def _remove_internal_constraints(string: list[str]) -> tuple[int, ...]:
             numbers = [int(re.sub("[^0-9]", "", i)) for i in string]
             letters = [re.sub("[^A-Za-z]", "", i) for i in string]
             count = [letters.count(_l) if (_l != "") else 1 for _l in letters]
@@ -365,29 +376,27 @@ class Embedder:
                 f"Error in reading molecule input for {filename}. Please check your syntax."
             )
 
-    def check_saturation(self):
+    def check_saturation(self) -> None:
         """Check each loaded object and make sure it looks nice and correct"""
         self.log()
         for mol in self.objects:
-            charge = int(mol.charge) if hasattr(mol, "charge") else self.options.charge
-
-            if saturation_check(mol.atoms, charge):
+            if saturation_check(mol.atoms, mol.charge):
                 self.log(
-                    f"--> {mol.filename}: saturation check passed (even saturation index with CHG={charge}, MULT={self.options.mult})"
+                    f"--> {mol.filename}: saturation check passed (even saturation index with CHG={mol.charge}, MULT={self.options.mult})"
                 )
 
             # this may be a radical (and we would expect an even multiplicity) or something is wrong
             elif self.options.mult % 2 == 0:
                 self.log(
-                    f"--> {mol.filename}: saturation check passed (odd saturation index with CHG={charge}, MULT={self.options.mult})"
+                    f"--> {mol.filename}: saturation check passed (odd saturation index with CHG={mol.charge}, MULT={self.options.mult})"
                 )
 
             else:
                 self.warn(
-                    f"--> WARNING! {mol.filename}: saturation check failed (odd saturation index with CHG={charge}, MULT={self.options.mult}). Bad input geometry?"
+                    f"--> WARNING! {mol.filename}: saturation check failed (odd saturation index with CHG={mol.charge}, MULT={self.options.mult}). Bad input geometry?"
                 )
 
-    def check_objects_compenetration(self):
+    def check_objects_compenetration(self) -> None:
         """Checks that the input molecules look alright"""
         for mol in self.objects:
             for c, coords in enumerate(mol.coords):
@@ -397,7 +406,7 @@ class Embedder:
                         f"--> WARNING! {mol.filename}, conformer {c + 1}, looks compenetrated ({clashes} interatomic distance{'s' if clashes > 1 else ''} < 0.5 A)"
                     )
 
-    def _set_options(self, filename):
+    def _set_options(self, filename: str) -> None:
         """Set the options dataclass parameters through the OptionSetter class,
         from a list of given keywords. These will be used during the run to
         vary the search depth and/or output.
@@ -421,7 +430,7 @@ class Embedder:
 
         self.log(f"--> CHG={self.options.charge} MULT={self.options.mult}")
 
-    def _set_reactive_atoms_cumnums(self):
+    def _set_reactive_atoms_cumnums(self) -> None:
         if self.embed in ("cyclical", "chelotropic", "string"):
             for i, mol in enumerate(self.objects):
                 if not hasattr(mol, "reactive_atoms_classes_dict"):
@@ -446,7 +455,7 @@ class Embedder:
 
         return False
 
-    def _parse_constraint_lines(self):
+    def _parse_constraint_lines(self) -> list[str]:
         """Parse lines starting with an empty space, indicating constraints."""
         # removing constraint lines from mol_lines, saving constraints
         mol_and_constr_lines = [line for line in self.mol_lines if line.strip() != ""]
@@ -561,7 +570,7 @@ class Embedder:
 
                 # set constraint attributes
                 for key, value in constr_props.items():
-                    setattr(c, key, value)
+                    setattr(c, key, str_to_var(value))
                     self.log(f"--> Set property of Constraint[{' '.join(parts)}]: {key}={value}")
 
                 mol.constraints.append(c)
@@ -571,7 +580,7 @@ class Embedder:
 
         return self.mol_lines
 
-    def _read_pairings(self):
+    def _read_pairings(self) -> None:
         """Reads atomic pairings/coinstraints to be respected from the input file, if any are present."""
         parsed = []
         unlabeled_list = []
@@ -595,12 +604,13 @@ class Embedder:
                         )
 
                     attr_name, attr_value = parts
-                    setattr(self.objects[i], attr_name, attr_value)
+                    casted_value = str_to_var(attr_value)
+                    setattr(self.objects[i], attr_name, casted_value)
 
                     fragments.remove(fragment)
 
                     self.log(
-                        f"--> Set attribute '{attr_name}' of {self.objects[i]} to '{attr_value}'."
+                        f"--> Set attribute '{attr_name}' of {self.objects[i]} to {type(casted_value)}('{attr_value}')."
                     )
 
             self.log()
@@ -914,7 +924,7 @@ class Embedder:
 
         return [np.array(_l) for _l in pivots_list]
 
-    def _setup(self, p=True):
+    def _setup(self, p: bool = True) -> None:
         """Setting embed type and calculating the number of conformation combinations based on embed type"""
         if any("pka>" in op for op in self.options.operators) or (
             any("scan>" in op for op in self.options.operators)
@@ -1011,11 +1021,11 @@ class Embedder:
 
                 self.options.rotation_steps = 5
 
-                if hasattr(self.options, "custom_rotation_steps"):
+                if self.options.custom_rotation_steps is not None:
                     # if user specified a custom value, use it.
                     self.options.rotation_steps = self.options.custom_rotation_steps
 
-                self.systematic_angles = (
+                self.systematic_angles: list[Iterable[float] | float] = [
                     cartesian_product(
                         *[range(self.options.rotation_steps + 1) for _ in self.objects]
                     )
@@ -1023,7 +1033,7 @@ class Embedder:
                     * self.options.rotation_range
                     / self.options.rotation_steps
                     - self.options.rotation_range
-                )
+                ][0]
 
                 if p:
                     # avoid calculating pivots if this is an early call
@@ -1040,7 +1050,7 @@ class Embedder:
                             override="Single" if self.options.simpleorbitals else None
                         )
 
-                if hasattr(self.options, "custom_rotation_steps"):
+                if self.options.custom_rotation_steps is not None:
                     # if user specified a custom value, use it.
                     self.options.rotation_steps = self.options.custom_rotation_steps
 
@@ -1209,7 +1219,7 @@ class Embedder:
             constrained_dihedrals_values,
         )
 
-    def _set_embedder_structures_from_mol(self):
+    def _set_embedder_structures_from_mol(self) -> None:
         """Intended for REFINE runs, set the self.structures variable
         (and related) to the confomers of a specific molecuele.
         """
@@ -1224,7 +1234,7 @@ class Embedder:
             [graphize(self.atoms, self.structures[0])], self.constrained_indices[0]
         )
 
-    def _calculator_setup(self):
+    def _calculator_setup(self) -> None:
         """Set up the calculator to be used with default theory levels."""
         # Checking that calculator is specified correctly
         if self.options.calculator not in ("ORCA", "XTB", "AIMNET2", "TBLITE", "UMA"):
@@ -1301,8 +1311,8 @@ class Embedder:
     def rel_energies(self):
         return self.energies - np.min(self.energies)
 
-    def apply_mask(self, attributes, mask):
-        """Applies in-place masking of Embedder attributes"""
+    def apply_mask(self, attributes: Iterable[Any], mask: Array1D_bool) -> None:
+        """Applies in-place masking of Embedder attributes."""
         for attr in attributes:
             if hasattr(self, attr):
                 try:
@@ -1415,7 +1425,7 @@ class Embedder:
 
         self.log()
 
-    def _apply_operators(self):
+    def _apply_operators(self) -> None:
         """Replace molecules in self.objects with
         their post-operator ones.
         """
@@ -1477,7 +1487,7 @@ class Embedder:
         # resetting the attribute
         self.embed = None
 
-    def _extract_filename(self, input_string):
+    def _extract_filename(self, input_string: str) -> str:
         """Input: 'refine> firecode_unoptimized_comp_check.xyz 5a 36a 0b 43b 33c 60c'
         Output: 'firecode_unoptimized_comp_check.xyz'
         """
@@ -1489,10 +1499,10 @@ class Embedder:
 
         return input_string
 
-    def scramble(self, array, sequence):
+    def scramble(self, array: np.ndarray, sequence: Sequence[Any]) -> np.ndarray:
         return np.array([array[s] for s in sequence])
 
-    def get_pairing_dist_from_letter(self, letter):
+    def get_pairing_dist_from_letter(self, letter: str) -> float | None:
         """Get constrained distance between paired reactive
         atoms, accessed via the associated constraint letter.
         The distance returned is the final one (not affected by SHRINK)
@@ -1500,7 +1510,7 @@ class Embedder:
         if hasattr(self, "pairing_dists") and self.pairing_dists.get(letter) is not None:
             return self.pairing_dists[letter]
 
-        d = 0
+        d: float = 0.0
         try:
             for mol_index, mol_pairing_dict in self.pairings_dict.items():
                 if r_atom_index := mol_pairing_dict.get(letter):
@@ -1524,7 +1534,9 @@ class Embedder:
         except NoOrbitalError:
             return None
 
-    def get_pairing_dists_from_constrained_indices(self, constrained_pair):
+    def get_pairing_dists_from_constrained_indices(
+        self, constrained_pair: Sequence[int]
+    ) -> float | None:
         """Returns the constrained distance
         for a specific constrained pair of indices
         """
@@ -1539,7 +1551,7 @@ class Embedder:
         except StopIteration:
             return None
 
-    def get_pairing_dists(self, conf):
+    def get_pairing_dists(self, conf: int) -> list[float | None] | None:
         """Returns a list with the constrained distances for each embedder constraint"""
         if self.constrained_indices[conf].size == 0:
             return None
@@ -1553,14 +1565,14 @@ class Embedder:
 
     def write_structures(
         self,
-        tag,
-        indices=None,
-        energies=True,
-        relative=True,
-        extra="",
-        align_by="indices",
-        p=True,
-    ):
+        tag: str,
+        indices: Array1D_int | None = None,
+        energies: bool = True,
+        relative: bool = True,
+        extra: str = "",
+        align_by: str = "indices",
+        p: bool = True,
+    ) -> None:
         """Writes structures to file.
 
         align_by: 'indices' (even with indices=None) or 'moi'
@@ -1623,7 +1635,7 @@ class Embedder:
             logging.exception(_e)
             raise _e
 
-    def normal_termination(self):
+    def normal_termination(self) -> None:
         """Terminate the run, printing the total time and the
         relative energies of the first 10 structures, if possible.
 
@@ -1679,10 +1691,10 @@ class Embedder:
         self.close_log_streams()
         sys.exit(0)
 
-    def close_log_streams(self):
+    def close_log_streams(self) -> None:
         self.logfile.close()
 
-        if hasattr(self, "debug_logfile"):
+        if self.debug_logfile is not None:
             self.debug_logfile.close()
 
 
@@ -1708,7 +1720,7 @@ class RunEmbedding(Embedder):
             self.log_warnings()
             raise ZeroCandidatesError()
 
-    def generate_candidates(self):
+    def generate_candidates(self) -> None:
         """Generate a series of candidate structures by the proper embed algorithm."""
         embed_functions = {
             "chelotropic": cyclical_embed,
@@ -2747,7 +2759,7 @@ class RunEmbedding(Embedder):
         if not only_fixed_constraints:
             self.energies.fill(0)
 
-    def write_mol_info(self):
+    def write_mol_info(self) -> None:
         """Writes information about the firecode molecules read from the input file."""
         head = ""
         for i, mol in enumerate(self.objects):
@@ -2787,7 +2799,7 @@ class RunEmbedding(Embedder):
 
         self.log("--> Input structures & reactive indices data:\n" + head)
 
-    def write_constr_options(self):
+    def write_constr_options(self) -> None:
         """Writes information about the firecode parameters used in the calculation, if applicable to the run."""
         if not self.pairings_table:
             if all([len(mol.reactive_indices) == 2 for mol in self.objects]):
@@ -2860,7 +2872,7 @@ class RunEmbedding(Embedder):
 
         self.log()
 
-    def write_run_options(self):
+    def write_run_options(self) -> None:
         """Writes information about the firecode parameters used in the run, if applicable."""
         self.log("--> Calculation options used were:")
         for line in str(self.options).split("\n"):
@@ -2923,7 +2935,7 @@ class RunEmbedding(Embedder):
 
             self.log("*" * 76)
 
-    def run(self):
+    def run(self) -> None:
         """Run the firecode program."""
         self.write_mol_info()
         self.write_constr_options()
@@ -3036,7 +3048,7 @@ class RunEmbedding(Embedder):
             print("\n\nKeyboardInterrupt requested by user. Quitting.")
             sys.exit(1)
 
-    def data_termination(self):
+    def data_termination(self) -> None:
         """Type of termination for runs when there is no embedding,
         but some computed data are to be shown in a formatted way.
         """

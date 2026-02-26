@@ -27,9 +27,11 @@ from rich.traceback import install
 install(show_locals=True)
 
 
-def main():
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
+def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
 
     usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
     🔥 python -m firecode -cl "refine> crest_search> mol.xyz"
@@ -42,7 +44,6 @@ def main():
         optional arguments:
           -h, --help              Show this help message and exit.
           -s, --setup             Guided setup of the calculation settings.
-          -t, --test              Perform some tests to check the software setup.
           -n, --name NAME         Specify a custom name for the run.
           -cl,--command_line      Read instructions from the command line instead of from an input file.
           -c, --cite              Print citation links.
@@ -54,9 +55,6 @@ def main():
     parser = argparse.ArgumentParser(usage=usage)
     parser.add_argument(
         "-s", "--setup", help="Guided setup of the calculation settings.", action="store_true"
-    )
-    parser.add_argument(
-        "-t", "--test", help="Perform some tests to check the software setup.", action="store_true"
     )
     parser.add_argument(
         "-cl",
@@ -99,9 +97,7 @@ def main():
 
     args = parser.parse_args()
 
-    if (
-        not (args.test or args.setup or args.command_line or args.optimize)
-    ) and args.inputfile is None:
+    if (not (args.setup or args.command_line or args.optimize)) and args.inputfile is None:
         parser.error("One of the following arguments are required: inputfile, -t, -s, -o.\n")
 
     if args.setup:
@@ -114,12 +110,6 @@ def main():
         print(
             "No citation link is available for FIRECODE yet. You can link to the code on https://www.github.com/ntampellini/firecode"
         )
-        sys.exit(0)
-
-    if args.test:
-        from firecode.tests import run_tests
-
-        run_tests()
         sys.exit(0)
 
     if args.optimize:

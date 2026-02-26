@@ -14,12 +14,17 @@ GNU General Public License for more details.
 
 """
 
+from __future__ import annotations
+
 import os
 import warnings
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Callable, Sequence
+
 
 import numpy as np
 from numpy.linalg import LinAlgError
+from numpy.typing import NDArray
 from prism_pruner.algebra import get_inertia_moments
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import get_alignment_matrix
@@ -29,12 +34,19 @@ from firecode.errors import NoOrbitalError
 from firecode.graph_manipulations import is_sigmatropic, is_vicinal
 from firecode.pt import pt
 from firecode.reactive_atoms_classes import get_atom_type
+from firecode.typing import Array1D_float, Array1D_int, Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import read_xyz
+
+if TYPE_CHECKING:
+    from networkx import Graph
+
+    from firecode.reactive_atoms_classes import RAtom
+    from firecode.utils import Constraint
 
 warnings.simplefilter("ignore", UserWarning)
 
 
-def align_by_moi(atoms, structures):
+def align_by_moi(atoms: Array1D_str, structures: Array2D_float) -> Array3D_float:
     """Aligns molecules of a structure array (shape is (n_structures, n_atoms, 3))
     to the first one, based on the the moments of inertia vectors.
     Returns the aligned array.
@@ -81,20 +93,22 @@ def align_by_moi(atoms, structures):
 class Hypermolecule:
     """Molecule class to be used within firecode."""
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """String representation."""
         r = self.rootname
         if hasattr(self, "reactive_atoms_classes_dict"):
             r += f" {[str(atom) for atom in self.reactive_atoms_classes_dict[0].values()]}"
         return r
 
-    def __init__(self, filename, reactive_indices=None, charge=0, mult=1, debug_logfunction=None):
-        """Initializing class properties: reading conformational ensemble file, aligning
-        conformers to first and centering them in origin.
-
-        :params filename:           Input file name. Can be anything, .xyz preferred
-        :params reactive_indices:     Index of atoms that will link during the desired reaction.
-                                    May be either int or list of int.
-        """
+    def __init__(
+        self,
+        filename: str,
+        reactive_indices: Sequence[int] | None = None,
+        charge: int = 0,
+        mult: int = 1,
+        debug_logfunction: Callable[[str], None] | None = None,
+    ) -> None:
+        """Initializing class properties."""
         if not os.path.isfile(filename):
             if "." in filename:
                 raise SyntaxError(
@@ -104,53 +118,51 @@ class Hypermolecule:
         self.rootname = filename.split(".")[0]
         self.filename = filename
         self.debug_logfunction = debug_logfunction
-        self.constraints = []
+        self.constraints: list[Constraint] = []
         self.charge = charge
         self.mult = mult
 
-        if isinstance(reactive_indices, np.ndarray):
-            self.reactive_indices = reactive_indices
+        if reactive_indices is None:
+            self.reactive_indices = np.array([])
         else:
-            self.reactive_indices = (
-                np.array(reactive_indices) if isinstance(reactive_indices, (tuple, list)) else ()
-            )
+            self.reactive_indices = np.array(reactive_indices)
 
         conf_ensemble_object = read_xyz(filename)
 
-        coordinates = np.array(conf_ensemble_object.coords)
+        coordinates = conf_ensemble_object.coords
 
-        self.atomnos = conf_ensemble_object.atomnos
-        self.atoms = conf_ensemble_object.atoms
-        self.position = np.array([0, 0, 0], dtype=float)  # used in Embedder class
-        self.rotation = np.identity(3)  # used in Embedder class - rotation matrix
+        self.atomnos: Array1D_int = conf_ensemble_object.atomnos
+        self.atoms: Array1D_str = conf_ensemble_object.atoms
+        self.position: Array1D_float = np.array([0, 0, 0], dtype=float)  # used in Embedder class
+        self.rotation: Array1D_float = np.identity(3)  # used in Embedder class - rotation matrix
 
         assert all(
             [len(coordinates[i]) == len(coordinates[0]) for i in range(1, len(coordinates))]
         ), "Ensembles must have constant atom number."
         # Checking that ensemble has constant length
         if self.debug_logfunction is not None:
-            debug_logfunction(
+            self.debug_logfunction(
                 f"DEBUG: Hypermolecule Class __init__ ({filename}) - Initializing object {filename}, read {len(coordinates)} structures with {len(coordinates[0])} atoms"
             )
 
-        self.centroid = np.sum(np.sum(coordinates, axis=0), axis=0) / (
+        self.centroid: Array1D_float = np.sum(np.sum(coordinates, axis=0), axis=0) / (
             len(coordinates) * len(coordinates[0])
         )
 
-        self.coords = coordinates - self.centroid
-        self.graph = graphize(self.atoms, self.coords[0])
-        # show_graph(self)
+        self.coords: Array3D_float = coordinates - self.centroid
+        self.graph: Graph = graphize(self.atoms, self.coords[0])
 
         self.all_atoms_coords = np.array(
             [coord for structure in self.coords for coord in structure]
         )  # single list with all atomic positions
 
-    def compute_orbitals(self, override=None):
+    def compute_orbitals(self, override: str | None = None) -> None:
         """Computes orbital positions for atoms in self.reactive_atoms"""
         if len(self.reactive_indices) == 0:
             return
 
-        self.sp3_sigmastar, self.sigmatropic = None, None
+        self.sp3_sigmastar: bool | None = None
+        self.sigmatropic: list[bool] | None = None
 
         self._inspect_reactive_atoms(override=override)
         # sets reactive atoms properties
@@ -166,7 +178,7 @@ class Hypermolecule:
                 # Since now we have mol.sigmatropic and mol.sigmastar,
                 # We can update, that is set the reactive_atom.center attribute
 
-    def get_alignment_indices(self):
+    def get_alignment_indices(self) -> list[tuple[int]] | None:
         """Return the indices to align the molecule to, given a list of
         atoms that should be reacting. List is composed by reactive atoms
         plus adjacent atoms.
@@ -188,7 +200,7 @@ class Hypermolecule:
 
         return list(indices)
 
-    def _inspect_reactive_atoms(self, override=None):
+    def _inspect_reactive_atoms(self, override: str | None = None) -> None:
         """Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict."""
         self.reactive_atoms_classes_dict = {c: {} for c, _ in enumerate(self.coords)}
 
@@ -213,14 +225,14 @@ class Hypermolecule:
                 except KeyError as err:
                     raise KeyError(err)
 
-    def _scale_orbs(self, value):
+    def _scale_orbs(self, value: float) -> None:
         """Scale each orbital dimension according to value."""
         for c, _ in enumerate(self.coords):
             for index, atom in self.reactive_atoms_classes_dict[c].items():
                 orb_dim = np.linalg.norm(atom.center[0] - atom.coord)
                 atom.init(self, index, update=True, orb_dim=orb_dim * value, conf=c)
 
-    def get_r_atoms(self, c):
+    def get_r_atoms(self, c: int) -> list[RAtom]:
         """c: conformer number"""
         return list(self.reactive_atoms_classes_dict[c].values())
 
@@ -274,7 +286,7 @@ class Hypermolecule:
         self.weights = np.array([weights / np.sum(weights) for weights in self.weights])
         self.weights = flatten(self.weights)
 
-    def write_hypermolecule(self):
+    def write_hypermolecule(self) -> None:
         """ """
 
         hyp_name = self.rootname + "_hypermolecule.xyz"
@@ -309,7 +321,7 @@ class Hypermolecule:
                         % ("X", round(orb[0], 6), round(orb[1], 6), round(orb[2], 6))
                     )
 
-    def get_orbital_length(self, index):
+    def get_orbital_length(self, index: int) -> float:
         """index: reactive atom index"""
         if index not in self.reactive_indices:
             raise NoOrbitalError(
@@ -317,7 +329,7 @@ class Hypermolecule:
             )
 
         r_atom = self.reactive_atoms_classes_dict[0][index]
-        return np.linalg.norm(r_atom.center[0] - r_atom.coord)
+        return float(np.linalg.norm(r_atom.center[0] - r_atom.coord))
 
 
 class Pivot:

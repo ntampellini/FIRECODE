@@ -28,28 +28,26 @@ import shutil
 import sys
 import time
 from dataclasses import dataclass, field
-from io import TextIOWrapper
 from pathlib import Path
 from shutil import rmtree
 from subprocess import getoutput
-from typing import TYPE_CHECKING, Any, Callable, Optional, Self
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional, Self
 
 import numpy as np
-from networkx import shortest_path
-from prism_pruner.algebra import normalize, rot_mat_from_pointer
+from prism_pruner.algebra import rot_mat_from_pointer
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import rmsd_and_max
 from scipy.spatial.distance import cdist
 
-from firecode.algebra import count_clashes, point_angle
+from firecode.algebra import count_clashes
 from firecode.errors import TriangleError
 from firecode.pt import pt
 from firecode.typing import (
     Array1D_float,
+    Array1D_int,
     Array1D_str,
     Array2D_float,
     Array3D_float,
-    Array1D_int,
     FloatIterable,
     IntIterable,
 )
@@ -57,6 +55,7 @@ from firecode.units import EH_TO_KCAL
 
 if TYPE_CHECKING:
     from networkx import Graph
+    from io import TextIOWrapper
 
 
 @dataclass
@@ -120,10 +119,10 @@ class HiddenPrints:
 
 
 def clean_directory(
-    to_remove: list[str] | None = None,
-    to_remove_startswith: list[str] | None = None,
-    to_remove_endswith: list[str] | None = None,
-    to_remove_contains: list[str] | None = None,
+    to_remove: Iterable[str] | None = None,
+    to_remove_startswith: Iterable[str] | None = None,
+    to_remove_endswith: Iterable[str] | None = None,
+    to_remove_contains: Iterable[str] | None = None,
 ) -> None:
     """Cleans the current directory from temporary files created during a run."""
     if to_remove is not None:
@@ -305,7 +304,7 @@ def loadbar(
         print()
 
 
-def cartesian_product(*arrays: np.ndarray) -> np.ndarray:
+def cartesian_product(*arrays: Iterable[Any]) -> np.ndarray:
     return np.stack(np.meshgrid(*arrays), -1).reshape(-1, len(arrays))
 
 
@@ -505,6 +504,31 @@ def auto_newline(string: str, max_line_len: int = 50, padding: int = 2) -> str:
     return " ".join(out)
 
 
+def str_to_var(
+    string: str, enforced_type: Callable[[str], bool | float | int] | None = None
+) -> bool | float | int | str:
+    """Cast variable into the most appropriate type."""
+
+    if enforced_type is not None:
+        return enforced_type(string)
+
+    string_lower = string.lower()
+    if string_lower in ("true", "yes", "on"):
+        return True
+    if string_lower in ("false", "no", "off"):
+        return False
+
+    # Check for int, including negative numbers - max 1 neg. sign
+    if string.replace("-", "", 1).isdigit():
+        return int(string)
+
+    # Check for float, including negative numbers - max 1 dot/neg. sign
+    if string.count(".") <= 1 and (string.replace(".", "", 1).replace("-", "", 1).isdigit()):
+        return float(string)
+
+    return string
+
+
 def timing_wrapper(
     function: Callable[[Any], Any], *args: Any, payload: Any | None = None, **kwargs: Any
 ) -> tuple[Any, float] | tuple[Any, Any, float]:
@@ -642,7 +666,7 @@ def compenetration_check(
 
     """
     if ids is None:
-        return count_clashes(coords) < max_clashes
+        return count_clashes(coords) <= max_clashes
 
     if len(ids) == 2:
         # Bimolecular
@@ -651,7 +675,7 @@ def compenetration_check(
         m2 = coords[ids[0] :]
         # fragment identification by length (contiguous)
 
-        return int(np.count_nonzero(cdist(m2, m1) < thresh)) < max_clashes
+        return int(np.count_nonzero(cdist(m2, m1) < thresh)) <= max_clashes
 
     # if len(ids) == 3:
 
@@ -663,15 +687,15 @@ def compenetration_check(
     m3 = coords[ids[0] + ids[1] :]
     # fragment identification by length (contiguous)
 
-    clashes += int(np.count_nonzero(cdist(m2, m1) < thresh))
+    clashes += int(np.count_nonzero(cdist(m2, m1) <= thresh))
     if clashes > max_clashes:
         return False
 
-    clashes += int(np.count_nonzero(cdist(m3, m2) < thresh))
+    clashes += int(np.count_nonzero(cdist(m3, m2) <= thresh))
     if clashes > max_clashes:
         return False
 
-    clashes += int(np.count_nonzero(cdist(m1, m3) < thresh))
+    clashes += int(np.count_nonzero(cdist(m1, m3) <= thresh))
     if clashes > max_clashes:
         return False
 

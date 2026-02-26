@@ -20,18 +20,41 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
 import numpy as np
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
+
 from firecode.parameters import orb_dim_dict
 
+if TYPE_CHECKING:
+    from networkx import Graph
 
-class Single:
-    def __repr__(self):
+    from firecode.hypermolecule_class import Hypermolecule
+
+
+class RAtom:
+    """Reactive atom stub class."""
+
+    def __init__(self) -> None:
+        pass
+
+
+class Single(RAtom):
+    def __repr__(self) -> str:
         return "Single Bond"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
@@ -78,17 +101,24 @@ class Single:
                 orb_dim = orb_dim_dict.get(key)
 
                 if orb_dim is None:
-                    orb_dim = np.linalg.norm(self.coord - self.other)
+                    orb_dim = float(np.linalg.norm(self.coord - self.other))
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
 
             self.center = orb_dim * self.orb_vecs + self.coord
 
 
-class Sp2:
-    def __repr__(self):
+class Sp2(RAtom):
+    def __repr__(self) -> str:
         return "sp2"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
@@ -128,11 +158,18 @@ class Sp2:
             self.center += self.coord
 
 
-class Sp3:
-    def __repr__(self):
+class Sp3(RAtom):
+    def __repr__(self) -> str:
         return "sp3"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
@@ -285,11 +322,18 @@ class Sp3:
         return self.others[neighbors_indices.index(self.leaving_group_index)]
 
 
-class Ether:
-    def __repr__(self):
+class Ether(RAtom):
+    def __repr__(self) -> str:
         return "Ether"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
@@ -327,11 +371,18 @@ class Ether:
             # two vectors defining the position of the two orbital lobes centers
 
 
-class Ketone:
-    def __repr__(self):
+class Ketone(RAtom):
+    def __repr__(self) -> str:
         return f"Ketone ({self.subtype})"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
@@ -418,11 +469,18 @@ class Ketone:
             # two vectors defining the position of the two orbital lobes centers
 
 
-class Imine:
-    def __repr__(self):
+class Imine(RAtom):
+    def __repr__(self) -> str:
         return "Imine"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
@@ -458,11 +516,18 @@ class Imine:
             # two vectors defining the position of the two orbital lobes centers
 
 
-class Sp_or_carbene:
-    def __repr__(self):
+class Sp_or_carbene(RAtom):
+    def __repr__(self) -> str:
         return self.type
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
@@ -586,11 +651,18 @@ class Sp_or_carbene:
                 # three vectors defining the position of the two p lobes and main sp2 lobe centers
 
 
-class Metal:
-    def __repr__(self):
+class Metal(RAtom):
+    def __repr__(self) -> str:
         return "Metal"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         self.index = i
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
@@ -627,16 +699,23 @@ class Metal:
             self.center = (self.orb_vecs * orb_dim) + self.coord
 
 
-class SingleAtom:
-    def __repr__(self):
+class SingleAtom(RAtom):
+    def __repr__(self) -> str:
         return "SingleAtom"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
 
-        self.neighbors_symbols = []
+        self.neighbors_symbols: list[int] = []
         self.coord = mol.coords[conf][i]
         self.other = mol.coords[conf][i] + np.array([0, 0, 1], dtype=float)
         self.orb_vecs = np.array([normalize(self.coord - self.other)])
@@ -648,7 +727,7 @@ class SingleAtom:
                 orb_dim = orb_dim_dict.get(key)
 
                 if orb_dim is None:
-                    orb_dim = np.linalg.norm(self.coord - self.other)
+                    orb_dim = float(np.linalg.norm(self.coord - self.other))
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
 
             self.center = orb_dim * self.orb_vecs + self.coord
@@ -709,11 +788,10 @@ metals = (
 
 for metal in metals:
     for bonds in range(1, 9):
-        bonds = str(bonds)
-        atom_type_dict[metal + bonds] = Metal
+        atom_type_dict[metal + str(bonds)] = Metal
 
 
-def get_atom_type(graph, index, override=None):
+def get_atom_type(graph: Graph, index: int, override: str | None = None) -> type[RAtom]:
     """Returns the appropriate class to represent
     the atom with the given index on the graph.
     If override is not None, returns the class

@@ -20,17 +20,19 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 # import pickle
 import time
 from shutil import which
 from subprocess import CalledProcessError
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
 from prism_pruner.graph_manipulations import graphize
-from prism_pruner.pruner import prune_by_rmsd, prune_by_rmsd_rot_corr, prune_by_moment_of_inertia
+from prism_pruner.pruner import prune_by_moment_of_inertia, prune_by_rmsd, prune_by_rmsd_rot_corr
 from prism_pruner.utils import align_structures, time_to_string
-
 
 from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
@@ -41,13 +43,17 @@ from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
+from firecode.typing import Array3D_float
 from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
 
-def operate(input_string, embedder):
+
+def operate(input_string: str, embedder: Embedder) -> str:
     """Perform the operations according to the chosen
     operator and return the outname of the (new) .xyz
-    file to read instead of the input one.
+    file to be read instead of the input one.
     """
     filename = embedder._extract_filename(input_string)
 
@@ -146,7 +152,9 @@ def operate(input_string, embedder):
     return outname
 
 
-def csearch_operator(filename, embedder, keep_hb=False, mode=1):
+def csearch_operator(
+    filename: str, embedder: Embedder, keep_hb: bool = False, mode: int = 1
+) -> str:
     """ """
 
     s = f"--> Performing conformational search on {filename}"
@@ -210,7 +218,9 @@ def csearch_operator(filename, embedder, keep_hb=False, mode=1):
     return confname
 
 
-def opt_operator(filename, embedder, logfunction=None):
+def opt_operator(
+    filename: str, embedder: Embedder, logfunction: Callable[[str], None] = None
+) -> str:
     """ """
 
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
@@ -457,7 +467,7 @@ def neb_operator(filename, embedder, attempts=3):
         write_xyz(data.atoms, ts_coords, f, title="NEB TS - see log for relative energies")
 
 
-def crest_search_operator(filename, embedder):
+def crest_search_operator(filename: str, embedder: Embedder) -> str:
     """Run a CREST metadynamic conformational search and return the output filename."""
     assert crest_is_installed(), (
         "CREST 2 does not seem to be installed. Install it with: mamba install -c conda-forge crest==2.12"
@@ -557,7 +567,7 @@ def crest_search_operator(filename, embedder):
     # update mol and embedder graph after optimization
     mol.graph = graphize(mol.atoms, mol.coords[0])
     embedder.graphs = [m.graph for m in embedder.objects]
-    crest_method = getattr(embedder.options, "crestlevel", "GFN2-XTB//GFN-FF")
+    crest_method = embedder.options.crestlevel or "GFN2-XTB//GFN-FF"
 
     max_workers = embedder.avail_cpus // 2 or 1
     logfunction(
@@ -633,28 +643,31 @@ def crest_search_operator(filename, embedder):
             f"  Conformer {i + 1:2}/{len(mol.coords):2} - generated {len(conf_batch)} structures in {time_to_string(elapsed)}"
         )
 
-    conformers = np.concatenate(conformers)
-    conformers = conformers.reshape(-1, mol.atomnos.shape[0], 3)
+    conformers_array: Array3D_float = np.concatenate(conformers)
+    conformers_array = conformers_array.reshape(-1, mol.atomnos.shape[0], 3)
     # merging structures from each run in a single array
 
     embedder.log(
-        f"  CREST conformational search: Generated {len(conformers)} conformers in {time_to_string(time.perf_counter() - t_start)}"
+        f"  CREST conformational search: Generated {len(conformers_array)} conformers in {time_to_string(time.perf_counter() - t_start)}"
     )
-    before = len(conformers)
+    before = len(conformers_array)
 
     # ### MOI - turned off, as it would get rid of enantiomeric conformations
-    conformers, _ = prune_by_moment_of_inertia(
-        conformers, mol.atoms, debugfunction=embedder.debuglog
+    conformers_array, _ = prune_by_moment_of_inertia(
+        conformers_array, mol.atoms, debugfunction=embedder.debuglog
     )
 
     ### RMSD
-    if len(conformers) < 5e4:
-        conformers, _ = prune_by_rmsd(
-            conformers, mol.atoms, max_rmsd=embedder.options.rmsd, debugfunction=embedder.debuglog
+    if len(conformers_array) < 5e4:
+        conformers_array, _ = prune_by_rmsd(
+            conformers_array,
+            mol.atoms,
+            max_rmsd=embedder.options.rmsd,
+            debugfunction=embedder.debuglog,
         )
-    if len(conformers) < 1e3:
-        conformers, _ = prune_by_rmsd_rot_corr(
-            conformers,
+    if len(conformers_array) < 1e3:
+        conformers_array, _ = prune_by_rmsd_rot_corr(
+            conformers_array,
             mol.atoms,
             mol.graph,
             max_rmsd=embedder.options.rmsd,
@@ -662,13 +675,15 @@ def crest_search_operator(filename, embedder):
         )
 
     embedder.log(
-        f"  Discarded {before - len(conformers)} RMSD-similar structures ({len(conformers)} left)\n"
+        f"  Discarded {before - len(conformers_array)} RMSD-similar structures ({len(conformers_array)} left)\n"
     )
 
     ### PRINTOUT
     with open(f"{mol.rootname}_crest_confs.xyz", "w") as f:
-        for i, new_s in enumerate(conformers):
-            write_xyz(mol.atoms, new_s, f, title=f"Conformer {i}/{len(conformers)} from CREST MTD")
+        for i, new_s in enumerate(conformers_array):
+            write_xyz(
+                mol.atoms, new_s, f, title=f"Conformer {i}/{len(conformers_array)} from CREST MTD"
+            )
 
     # check the structures again and warn if some look compenetrated
     embedder.check_objects_compenetration()
