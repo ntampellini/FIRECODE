@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Callable, Literal
+from typing import TYPE_CHECKING, Callable
 
-from firecode.settings import UMA_MODEL_PATH
+from firecode.settings import UMA_MODEL_PATH, DEFAULT_LEVELS
 
 if TYPE_CHECKING:
     from fairchem.core import FAIRChemCalculator
 
 
 def get_uma_calc(
-    method: str = "omol", logfunction: Callable[[str], None] | None = None
+    method: str | None = None, logfunction: Callable[[str], None] | None = None
 ) -> FAIRChemCalculator:
     """Load UMA model from disk and return the ASE calculator object"""
     try:
@@ -28,6 +28,7 @@ def get_uma_calc(
         )
 
     gpu_bool = cuda.is_available()
+    method = method or DEFAULT_LEVELS["UMA"]
 
     if gpu_bool:
         if logfunction is not None:
@@ -35,8 +36,6 @@ def get_uma_calc(
 
     elif logfunction is not None:
         logfunction("--> No CUDA devices detected: loading model on CPU")
-
-    if logfunction is not None:
         logfunction(f"--> Loading UMA/{method.upper()} model from file")
 
     if UMA_MODEL_PATH[0] == ".":

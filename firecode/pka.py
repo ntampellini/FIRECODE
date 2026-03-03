@@ -25,13 +25,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
+from prism_pruner.algebra import normalize
 from prism_pruner.graph_manipulations import graphize
 
-from firecode.algebra import normalize
 from firecode.calculators._xtb import xtb_get_free_energy
-from firecode.optimization_methods import optimize, refine_structures, write_xyz
+from firecode.optimization_methods import optimize, refine_structures
 from firecode.typing import Array1D_str, Array2D_float, Array3D_float
-from firecode.utils import loadbar
+from firecode.utils import loadbar, write_xyz
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder

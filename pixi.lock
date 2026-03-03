@@ -1611,7 +1611,7 @@ packages:
 - pypi: ./
   name: firecode
   version: 1.5.3
-  sha256: 11fe318aa4941439a5cc7d8f15d5c0f8c71d32f825bf2cd5dda8fa48ddeaad25
+  sha256: 6a1f30f6016e78edb73f6e8a3fb3dfc51b8277b49392f4769f749d433c8c6775
   requires_dist:
   - rdkit>=2025.9.3
   - numpy

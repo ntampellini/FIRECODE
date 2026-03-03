@@ -67,7 +67,7 @@ class Constraint:
     value: float
     fixed: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set the type_ attribute"""
         self.type_: str = {
             2: "B",
@@ -641,7 +641,7 @@ def saturation_check(atoms: Array1D_str, charge: int = 0) -> bool:
     return looks_ok
 
 
-def rmsd_similarity(ref: Array2D_float, structures: Array2D_float, rmsd_thr: float = 0.5) -> bool:
+def rmsd_similarity(ref: Array2D_float, structures: Array3D_float, rmsd_thr: float = 0.5) -> bool:
     """Simple, RMSD similarity eval function."""
     # iterate over target structures
     for structure in structures:

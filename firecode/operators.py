@@ -43,7 +43,7 @@ from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.typing import Array3D_float
+from firecode.typing import Array3D_float, Array2D_int
 from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
 if TYPE_CHECKING:
@@ -315,8 +315,8 @@ def opt_operator(
     return optname
 
 
-def neb_operator(filename, embedder, attempts=3):
-    """ """
+def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
+    """Run a NEB calculation with the ASE module."""
     embedder.t_start_run = time.perf_counter()
     data = read_xyz(filename)
     n_str = len(data.coords)
@@ -691,7 +691,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
     return f"{mol.rootname}_crest_confs.xyz"
 
 
-def scan_operator(filename, embedder):
+def scan_operator(filename: str, embedder: Embedder) -> str:
     """Scan operator dispatcher:
     2 indices: distance_scan
     4 indices: dihedral_scan
@@ -711,7 +711,7 @@ def scan_operator(filename, embedder):
         return dihedral_scan(embedder)
 
 
-def distance_scan(embedder):
+def distance_scan(embedder: Embedder) -> str:
     """Thought to approach or separate two reactive atoms, looking for the energy maximum.
     Scan direction is inferred by the reactive index distance.
     """
@@ -898,7 +898,7 @@ def crest_is_installed() -> bool:
     return which("crest") is not None
 
 
-def _get_internal_constraints(filename, embedder):
+def _get_internal_constraints(filename: str, embedder: Embedder) -> Array2D_int:
     """Returns an array with distance constraints indices."""
     mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
     # get embedder,objects index of molecule to get internal constraints of

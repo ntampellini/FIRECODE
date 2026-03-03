@@ -119,6 +119,7 @@ class Hypermolecule:
         self.filename = filename
         self.debug_logfunction = debug_logfunction
         self.constraints: list[Constraint] = []
+        self.pivots: list[Pivot] = []
         self.charge = charge
         self.mult = mult
 
@@ -236,14 +237,14 @@ class Hypermolecule:
         """c: conformer number"""
         return list(self.reactive_atoms_classes_dict[c].values())
 
-    def get_centers(self, c):
+    def get_centers(self, c: int) -> Array3D_float:
         """c: conformer number"""
         return np.array([[v for v in atom.center] for atom in self.get_r_atoms(c)])
 
     # def calc_positioned_conformers(self):
     #     self.positioned_conformers = np.array([[self.rotation @ v + self.position for v in conformer] for conformer in self.coords])
 
-    def _compute_hypermolecule(self):
+    def _compute_hypermolecule(self) -> None:
         """ """
 
         self.energies = [0 for _ in self.coords]
@@ -332,6 +333,10 @@ class Hypermolecule:
         return float(np.linalg.norm(r_atom.center[0] - r_atom.coord))
 
 
+from dataclasses import dataclass
+
+
+@dataclass
 class Pivot:
     """(Cyclical embed)
     Pivot object: vector connecting two lobes of a
@@ -344,23 +349,28 @@ class Pivot:
     built on that single atom.
     """
 
-    def __init__(self, c1, c2, a1, a2, index1, index2):
-        """c: centers (orbital centers)
-        v: vectors (orbital vectors, non-normalized)
-        i: indices (of coordinates, in mol.center)
-        """
-        self.start = c1
-        self.end = c2
+    # def __init__(self, c1, c2, a1, a2, index1, index2):
+    """c: centers (orbital centers)
+    v: vectors (orbital vectors, non-normalized)
+    i: indices (of coordinates, in mol.center)
+    """
+    start: Array1D_float
+    end: Array1D_float
 
-        self.start_atom = a1
-        self.end_atom = a2
+    start_atom: RAtom
+    end_atom: RAtom
 
-        self.pivot = c2 - c1
-        self.meanpoint = np.mean((c1, c2), axis=0)
-        self.index = (index1, index2)
-        # the pivot starts from the index1-th
-        # center of the first reactive atom
-        # and to the index2-th center of the second
+    # the pivot starts from the index1-th
+    # center of the first reactive atom
+    # and to the index2-th center of the second
+    index1: int
+    index2: int
 
-    def __repr__(self):
-        return f"Pivot object - index {self.index}, norm {round(np.linalg.norm(self.pivot), 3)}, meanpoint {self.meanpoint}"
+    def __post_init__(self) -> None:
+        """Compute some extra attributes."""
+        self.pivot = self.start - self.end
+        self.meanpoint = np.mean((self.start, self.end), axis=0)
+        self.index_ = (self.index1, self.index2)
+
+    def __repr__(self) -> str:
+        return f"Pivot object - index {self.index_}, norm {round(np.linalg.norm(self.pivot), 3)}, meanpoint {self.meanpoint}"

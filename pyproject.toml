@@ -144,6 +144,12 @@ module = [
     "scipy.*",
     "prism_pruner.*",
     "fairchem.core.*",
+    "ase.*",
+    "ase.atoms.*",
+    "ase.mep.*",
+    "ase.vibrations.*",
+    "aimnet.*",
+    "xtb.*",
 ]
 ignore_missing_imports = true
 

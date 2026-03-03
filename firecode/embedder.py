@@ -78,7 +78,7 @@ from firecode.utils import (
 )
 
 if TYPE_CHECKING:
-    from io import TextIOWrapper
+    from io import FileIOWrapper
 
 from typing import Iterable
 
@@ -872,7 +872,7 @@ class Embedder:
                 mask = np.array([(i - shortest_length) < 1e-5 for i in pivots_lengths])
                 mol.pivots[c] = mol.pivots[c][mask]
 
-    def _get_pivots(self, mol):
+    def _get_pivots(self, mol: Hypermolecule) -> list[Pivot]:
         """Params mol: Hypermolecule class
         (Cyclical embed) Function that yields the molecule pivots. Called by _set_pivots
         and in pre-conditioning (deforming, bending) the molecules in ase_bend.
@@ -1025,7 +1025,7 @@ class Embedder:
                     # if user specified a custom value, use it.
                     self.options.rotation_steps = self.options.custom_rotation_steps
 
-                self.systematic_angles: list[Iterable[float] | float] = [
+                self.systematic_angles: list[Sequence[float] | float] = [
                     cartesian_product(
                         *[range(self.options.rotation_steps + 1) for _ in self.objects]
                     )
@@ -2907,7 +2907,7 @@ class RunEmbedding(Embedder):
             ):
                 continue
 
-            if self.options.rigid and line.split()[0] in (
+            if line.split()[0] in (
                 "double_bond_protection",
                 "fix_angles_in_deformation",
             ):
@@ -2950,16 +2950,6 @@ class RunEmbedding(Embedder):
 
         if self.embed == "data":
             self.data_termination()
-
-        if (
-            not self.options.let
-            and (self.embed in ("cyclical", "chelotropic"))
-            and (max([len(mol.coords) for mol in self.objects]) > 100)
-            and (not self.options.rigid)
-        ):
-            self.options.rigid = True
-
-            self.log("--> Large embed: RIGID keyword added for efficiency (override with LET)")
 
         self.write_run_options()
 

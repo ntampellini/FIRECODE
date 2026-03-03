@@ -15,6 +15,7 @@
 - Added tests for the crest_search>, neb> and fsm> operators, as well as a "neb> scan>" chain.
 - Updated documentation: usage and operators (`neb>`, `fsm>`, `rdkit_search>`, `crest_search>`, ...) as well as keywords (general vs. legacy).
 - Started to type annotate the codebase.
+- Removed molecular bending and RIGID keyword.
 
 ## FIRECODE 1.5.3 🔥 (February 19 2026)
 - Fixes a bug with reactive_atoms_classes_dict and embedder.options.charge.

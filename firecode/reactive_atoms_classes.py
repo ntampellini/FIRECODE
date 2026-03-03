@@ -23,12 +23,14 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
 
 from firecode.parameters import orb_dim_dict
+from firecode.typing import Array1D_float, Array2D_float
 
 if TYPE_CHECKING:
     from networkx import Graph
@@ -36,11 +38,15 @@ if TYPE_CHECKING:
     from firecode.hypermolecule_class import Hypermolecule
 
 
+@dataclass
 class RAtom:
     """Reactive atom stub class."""
 
-    def __init__(self) -> None:
-        pass
+    cumnum: int = -1
+    symbol: str = ""
+    center: Array1D_float = field(default_factory=lambda: np.array([]))
+    coord: Array1D_float = field(default_factory=lambda: np.array([]))
+    orb_vecs: Array2D_float = field(default_factory=lambda: np.array([]))
 
 
 class Single(RAtom):
@@ -57,6 +63,7 @@ class Single(RAtom):
     ) -> None:
         """ """
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -121,6 +128,7 @@ class Sp2(RAtom):
     ) -> None:
         """ """
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -171,6 +179,7 @@ class Sp3(RAtom):
         conf: int = 0,
     ) -> None:
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
@@ -336,6 +345,7 @@ class Ether(RAtom):
     ) -> None:
         """ """
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -385,6 +395,7 @@ class Ketone(RAtom):
     ) -> None:
         """ """
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
         self.subtype = "pre-init"
@@ -483,6 +494,7 @@ class Imine(RAtom):
     ) -> None:
         """ """
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -529,6 +541,7 @@ class Sp_or_carbene(RAtom):
         conf: int = 0,
     ) -> None:
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -664,6 +677,7 @@ class Metal(RAtom):
         conf: int = 0,
     ) -> None:
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -713,6 +727,7 @@ class SingleAtom(RAtom):
     ) -> None:
         """ """
         self.index = i
+        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
 
         self.neighbors_symbols: list[int] = []

@@ -24,23 +24,23 @@ from __future__ import annotations
 
 import time
 from copy import deepcopy
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
-from prism_pruner.algebra import normalize
+from ase.calculators.calculator import Calculator as ASECalculator
 from prism_pruner.pruner import prune_by_rmsd
 from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
-from firecode.pt import pt
 from firecode.settings import DEFAULT_LEVELS
-from firecode.typing import Array1D_str, Array2D_float
-from firecode.utils import loadbar, molecule_check, scramble_check, write_xyz
+from firecode.typing import (Array1D_float, Array1D_str, Array2D_float,
+                             Array3D_float)
+from firecode.utils import loadbar, molecule_check, scramble_check
 
 if TYPE_CHECKING:
-    from firecode.embedder import Embedder
+    from networkx import Graph
 
 
 class Opt_func_dispatcher:
@@ -56,12 +56,16 @@ class Opt_func_dispatcher:
             "AIMNET2": ase_popt_with_alpb,
         }[calculator]
 
-        self.ase_calc = None
         self.calculator = calculator
+        self.ase_calc: ASECalculator | None = None
 
     def get_ase_calc(
-        self, method: str, solvent: str | None = None, force_reload=False, raise_err=True
-    ):
+        self,
+        method: str | None,
+        solvent: str | None = None,
+        force_reload: bool = False,
+        raise_err: bool = True,
+    ) -> ASECalculator | None:
         if self.ase_calc is not None and not force_reload:
             pass
 
@@ -84,7 +88,9 @@ class Opt_func_dispatcher:
 
         return self.ase_calc
 
-    def load_aimnet2_calc(self, theory_level, logfunction=print):
+    def load_aimnet2_calc(
+        self, theory_level: str | None, logfunction: Callable[[str], None] | None = print
+    ) -> ASECalculator:
         try:
             import torch
             from aimnet.calculators import AIMNet2ASE
@@ -100,12 +106,14 @@ class Opt_func_dispatcher:
             )
 
         gpu_bool = torch.cuda.is_available()
-        self.aimnet2_calc = AIMNet2ASE("aimnet2")
+        self.aimnet2_calc = cast(ASECalculator, AIMNet2ASE("aimnet2"))
 
-        logfunction(f"--> AIMNet2 calculator loaded on {'GPU' if gpu_bool else 'CPU'}.")
+        if logfunction is not None:
+            logfunction(f"--> AIMNet2 calculator loaded on {'GPU' if gpu_bool else 'CPU'}.")
+
         return self.aimnet2_calc
 
-    def load_tblite_calc(self, method, solvent):
+    def load_tblite_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
         try:
             from tblite.ase import TBLite
 
@@ -120,6 +128,7 @@ class Opt_func_dispatcher:
             )
 
         solvation = None if solvent is None else ("alpb", solvent)
+        method = method or DEFAULT_LEVELS["TBLITE"]
 
         # tblite is picky with names
         synonyms = {
@@ -133,7 +142,7 @@ class Opt_func_dispatcher:
 
         return self.ase_calc
 
-    def load_xtb_calc(self, method, solvent):
+    def load_xtb_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
         try:
             from xtb.ase.calculator import XTB
         except ImportError:
@@ -156,7 +165,9 @@ class Opt_func_dispatcher:
 
         return self.ase_calc
 
-    def load_uma_calc(self, method, logfunction=print):
+    def load_uma_calc(
+        self, method: str | None, logfunction: Callable[[str], None] | None = print
+    ) -> ASECalculator:
         from firecode.calculators._ase_uma import get_uma_calc
 
         self.uma_calc = get_uma_calc(method, logfunction=logfunction)
@@ -165,30 +176,30 @@ class Opt_func_dispatcher:
 
 
 def optimize(
-    atoms,
-    coords,
-    calculator,
-    method=None,
-    maxiter=None,
-    conv_thr="tight",
-    constrained_indices=None,
-    constrained_distances=None,
-    constrained_dihedrals_indices=None,
-    constrained_dihedrals_values=None,
-    constrained_angles_indices=None,
-    constrained_angles_values=None,
-    mols_graphs=None,
-    procs=1,
-    solvent=None,
-    charge=0,
-    mult=1,
-    max_newbonds=0,
-    title="temp",
-    check=True,
-    logfunction=None,
-    debug=False,
-    dispatcher=None,
-    **kwargs,
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    calculator: ASECalculator,
+    method: str | None = None,
+    maxiter: int | None = None,
+    conv_thr: str = "tight",
+    constrained_indices: list[Sequence[int]] | None = None,
+    constrained_distances: list[float] | None = None,
+    constrained_dihedrals_indices: list[Sequence[int]] | None = None,
+    constrained_dihedrals_values: list[float] | None = None,
+    constrained_angles_indices: list[Sequence[int]] | None = None,
+    constrained_angles_values: list[float] | None = None,
+    mols_graphs: Sequence[Graph] | None = None,
+    procs: int = 1,
+    solvent: str | None = None,
+    charge: int = 0,
+    mult: int = 1,
+    max_newbonds: int = 0,
+    title: str = "temp",
+    check: bool = True,
+    logfunction: Callable[[str], None] | None = None,
+    debug: bool = False,
+    dispatcher: Opt_func_dispatcher | None = None,
+    **kwargs: Any,
 ) -> tuple[Array2D_float, float, bool]:
     """Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA or XTB at $method level,
     constraining the distance between the specified atom pairs, if any. Moreover, if $check, performs a check on atomic
@@ -279,284 +290,46 @@ def optimize(
     return coords, energy, False
 
 
-def opt_linear_scan(
-    embedder,
-    atoms,
-    coords,
-    scan_indices,
-    constrained_indices,
-    step_size=0.02,
-    safe=False,
-    title="temp",
-    logfile=None,
-    xyztraj=None,
-):
-    """Runs a linear scan along the specified linear coordinate.
-    The highest energy structure that passes sanity checks is returned.
-
-    embedder
-    atoms
-    coords
-    scan_indices
-    constrained_indices
-    step_size
-    safe
-    title
-    logfile
-    xyztraj
-    """
-    assert [i in constrained_indices.ravel() for i in scan_indices]
-
-    i1, i2 = scan_indices
-    far_thr = 2 * sum([pt.covalent_radius(atoms[i]) for i in scan_indices])
-    t_start = time.perf_counter()
-    total_iter = 0
-
-    _, energy, _ = optimize(
-        atoms,
-        coords,
-        embedder.options.calculator,
-        embedder.options.theory_level,
-        constrained_indices=constrained_indices,
-        mols_graphs=embedder.graphs,
-        procs=embedder.procs,
-        max_newbonds=embedder.options.max_newbonds,
-        solvent=embedder.options.solvent,
-        charge=embedder.options.charge,
-        mult=embedder.options.mult,
-        dispatcher=embedder.dispatcher,
-        debug=embedder.options.debug,
-    )
-
-    direction = coords[i1] - coords[i2]
-    base_dist = np.linalg.norm(direction)
-    energies, geometries = [energy], [coords]
-
-    for sign in (1, -1):
-        # getting closer for sign == 1, further apart for -1
-        active_coords = deepcopy(coords)
-        dist = base_dist
-
-        if scan_peak_present(energies):
-            break
-
-        for iterations in range(75):
-            if (
-                safe
-            ):  # use ASE optimization function - more reliable, but locks all interatomic dists
-                targets = [
-                    np.linalg.norm(active_coords[a] - active_coords[b]) - step_size
-                    if (a in scan_indices and b in scan_indices)
-                    else np.linalg.norm(active_coords[a] - active_coords[b])
-                    for a, b in constrained_indices
-                ]
-
-                active_coords, energy, success = ase_popt(
-                    embedder,
-                    atoms,
-                    active_coords,
-                    constrained_indices,
-                    targets=targets,
-                    safe=True,
-                )
-
-            else:  # use faster raw optimization function, might scramble more often than the ASE one
-                active_coords[i2] += sign * normalize(direction) * step_size
-                active_coords, energy, success = optimize(
-                    atoms,
-                    active_coords,
-                    embedder.options.calculator,
-                    embedder.options.theory_level,
-                    constrained_indices=constrained_indices,
-                    mols_graphs=embedder.graphs,
-                    procs=embedder.procs,
-                    max_newbonds=embedder.options.max_newbonds,
-                    solvent=embedder.options.solvent,
-                    charge=embedder.options.charge,
-                    mult=embedder.options.mult,
-                    dispatcher=embedder.dispatcher,
-                    debug=embedder.options.debug,
-                )
-
-            if not success:
-                if logfile is not None and iterations == 0:
-                    logfile.write(f"    - {title} CRASHED at first step\n")
-
-                if embedder.options.debug:
-                    with open(title + "_SCRAMBLED.xyz", "a") as f:
-                        write_xyz(
-                            atoms,
-                            active_coords,
-                            f,
-                            title=title
-                            + (
-                                f" d({i1}-{i2}) = {round(dist, 3)} A, Rel. E = {round(energy - energies[0], 3)} kcal/mol"
-                            ),
-                        )
-
-                break
-
-            direction = active_coords[i1] - active_coords[i2]
-            dist = np.linalg.norm(direction)
-
-            total_iter += 1
-            geometries.append(active_coords)
-            energies.append(energy)
-
-            if xyztraj is not None:
-                with open(xyztraj, "a") as f:
-                    write_xyz(
-                        atoms,
-                        active_coords,
-                        f,
-                        title=title
-                        + (
-                            f" d({i1}-{i2}) = {round(dist, 3)} A, Rel. E = {round(energy - energies[0], 3)} kcal/mol"
-                        ),
-                    )
-
-            if (
-                (dist < 1.2 and sign == 1)
-                or (dist > far_thr and sign == -1)
-                or (scan_peak_present(energies))
-            ):
-                break
-
-    distances = [np.linalg.norm(g[i1] - g[i2]) for g in geometries]
-    best_distance = distances[energies.index(max(energies))]
-
-    distances_delta = [abs(d - best_distance) for d in distances]
-    closest_geom = geometries[distances_delta.index(min(distances_delta))]
-    closest_dist = distances[distances_delta.index(min(distances_delta))]
-
-    direction = closest_geom[i1] - closest_geom[i2]
-    closest_geom[i1] += normalize(direction) * (best_distance - closest_dist)
-
-    final_geom, final_energy, _ = optimize(
-        atoms,
-        closest_geom,
-        embedder.options.calculator,
-        embedder.options.theory_level,
-        constrained_indices=constrained_indices,
-        mols_graphs=embedder.graphs,
-        procs=embedder.procs,
-        max_newbonds=embedder.options.max_newbonds,
-        check=False,
-        solvent=embedder.options.solvent,
-        charge=embedder.options.charge,
-        mult=embedder.options.mult,
-        dispatcher=embedder.dispatcher,
-        debug=embedder.options.debug,
-    )
-
-    if embedder.options.debug:
-        if embedder.options.debug:
-            with open(xyztraj, "a") as f:
-                write_xyz(
-                    atoms,
-                    active_coords,
-                    f,
-                    title=title
-                    + (
-                        f" FINAL - d({i1}-{i2}) = {round(np.linalg.norm(final_geom[i1] - final_geom[i2]), 3)} A,"
-                        f" Rel. E = {round(final_energy - energies[0], 3)} kcal/mol"
-                    ),
-                )
-
-        import matplotlib.pyplot as plt
-
-        plt.figure()
-
-        distances = [np.linalg.norm(geom[i1] - geom[i2]) for geom in geometries]
-        distances, sorted_energies = zip(*sorted(zip(distances, energies), key=lambda x: x[0]))
-
-        plt.plot(
-            distances,
-            [s - energies[0] for s in sorted_energies],
-            "-o",
-            color="tab:red",
-            label=f"Linear SCAN ({i1}-{i2})",
-            linewidth=3,
-            alpha=0.5,
-        )
-
-        plt.plot(
-            np.linalg.norm(coords[i1] - coords[i2]),
-            0,
-            marker="o",
-            color="tab:blue",
-            label="Starting point (0 kcal/mol)",
-            markersize=5,
-        )
-
-        plt.plot(
-            best_distance,
-            final_energy - energies[0],
-            marker="o",
-            color="black",
-            label="Interpolated best distance, actual energy",
-            markersize=5,
-        )
-
-        plt.legend()
-        plt.title(title)
-        plt.xlabel(f"Interatomic distance {tuple(scan_indices)}")
-        plt.ylabel("Energy Rel. to starting point (kcal/mol)")
-        plt.savefig(f"{title.replace(' ', '_')}_plt.svg")
-
-    if logfile is not None:
-        logfile.write(
-            f"    - {title} COMPLETED {total_iter} steps ({time_to_string(time.perf_counter() - t_start)})\n"
-        )
-
-    return final_geom, final_energy, True
-
-
-def scan_peak_present(energies) -> bool:
-    """Returns True if the maximum value of the list
-    occurs in the middle of it, that is not in first,
-    second, second to last or last positions
-    """
-    if energies.index(max(energies)) in range(2, len(energies) - 1):
-        return True
-    return False
-
-
-def fitness_check(coords, constraints, targets, threshold) -> bool:
+def fitness_check(
+    coords: Array2D_float,
+    constraints: Iterable[tuple[int, int]],
+    targets: Iterable[float | None],
+    threshold: float,
+) -> bool:
     """Returns True if the strucure respects
     the imposed pairings specified in constraints.
     targets: target distances for each constraint
     threshold: cumulative threshold to reject a structure (A)
 
     """
-    error = 0
+    error: float = 0.0
     for (a, b), target in zip(constraints, targets):
         if target is not None:
-            error += np.linalg.norm(coords[a] - coords[b]) - target
+            error += float(np.linalg.norm(coords[a] - coords[b]) - target)
 
     return error < threshold
 
 
 def refine_structures(
-    atoms,
-    structures,
-    calculator,
-    method,
-    procs,
-    charge=0,
-    mult=1,
-    constrained_indices=None,
-    constrained_distances=None,
-    constrained_angles_indices=None,
-    constrained_angles_values=None,
-    constrained_dihedrals_indices=None,
-    constrained_dihedrals_values=None,
-    solvent=None,
-    loadstring="",
-    logfunction=None,
-    dispatcher=None,
-    debug=False,
-):
+    atoms: Array1D_str,
+    structures: Array2D_float,
+    calculator: ASECalculator,
+    method: str | None,
+    procs: int | None,
+    charge: int = 0,
+    mult: int = 1,
+    constrained_indices: list[Sequence[int]] | None = None,
+    constrained_distances: list[float] | None = None,
+    constrained_dihedrals_indices: list[Sequence[int]] | None = None,
+    constrained_dihedrals_values: list[float] | None = None,
+    constrained_angles_indices: list[Sequence[int]] | None = None,
+    constrained_angles_values: list[float] | None = None,
+    solvent: str | None = None,
+    loadstring: str = "",
+    logfunction: Callable[[str], None] | None = None,
+    dispatcher: Opt_func_dispatcher | None = None,
+    debug: bool = False,
+) -> tuple[Array3D_float, Array1D_float]:
     """Refine a set of structures - optimize them and remove similar
     ones and high energy ones (>20 kcal/mol above lowest)
     """

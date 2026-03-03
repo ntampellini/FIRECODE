@@ -20,54 +20,77 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 import os
 import time
 from copy import deepcopy
+from typing import TYPE_CHECKING, Callable, Sequence, cast
 
 import numpy as np
 from networkx import (
+    Graph,
     connected_components,
     has_path,
     is_isomorphic,
     minimum_spanning_tree,
     shortest_path,
     subgraph,
-    Graph,
 )
 from prism_pruner.algebra import dihedral, normalize, vec_angle
-from prism_pruner.graph_manipulations import get_phenyl_ids, get_sp_n, is_amide_n, is_ester_o
+from prism_pruner.graph_manipulations import (
+    get_phenyl_ids,
+    get_sp_n,
+    graphize,
+    is_amide_n,
+    is_ester_o,
+)
 from prism_pruner.utils import flatten, get_double_bonds_indices, rotate_dihedral, time_to_string
 from scipy.spatial.distance import cdist
 
 from firecode.errors import SegmentedGraphError
 from firecode.graph_manipulations import is_sp_n
-from firecode.hypermolecule_class import graphize
 from firecode.settings import DEFAULT_FF_LEVELS, FF_CALC
+from firecode.typing import (
+    Array1D_bool,
+    Array1D_float,
+    Array1D_int,
+    Array1D_str,
+    Array2D_float,
+    Array2D_int,
+    Array3D_float,
+)
 from firecode.utils import cartesian_product, write_xyz
-from firecode.typing import Array1D_float, Array2D_int
+
+if TYPE_CHECKING:
+    from firecode.optimization_methods import Opt_func_dispatcher
+    from ase.calculators.calculator import Calculator as ASECalculator
 
 
 class Torsion:
-    def __repr__(self):
+    def __repr__(self) -> str:
         if hasattr(self, "n_fold"):
             return f"Torsion({self.i1}, {self.i2}, {self.i3}, {self.i4}; {self.n_fold}-fold)"
         return f"Torsion({self.i1}, {self.i2}, {self.i3}, {self.i4})"
 
-    def __init__(self, i1, i2, i3, i4):
+    def __init__(self, i1: int, i2: int, i3: int, i4: int, mode: str | None = None) -> None:
         self.i1 = i1
         self.i2 = i2
         self.i3 = i3
         self.i4 = i4
         self.torsion = (i1, i2, i3, i4)
+        self.mode = mode
 
     def in_cycle(self, graph: Graph) -> bool:
         """Returns True if the torsion is part of a cycle."""
         graph.remove_edge(self.i2, self.i3)
-        cyclical = has_path(graph, self.i1, self.i4)
+        cyclical = bool(has_path(graph, self.i1, self.i4))
         graph.add_edge(self.i2, self.i3)
         return cyclical
 
-    def is_rotable(self, graph, hydrogen_bonds, keepdummy=False) -> bool:
+    def is_rotable(
+        self, graph: Graph, hydrogen_bonds: Sequence[list[int]], keepdummy: bool = False
+    ) -> bool:
         """Hydrogen bonds: iterable with pairs of sorted atomic indices"""
         if sorted((self.i2, self.i3)) in hydrogen_bonds:
             # self.n_fold = 6
@@ -84,7 +107,7 @@ class Torsion:
 
         return False
 
-    def get_n_fold(self, graph) -> int:
+    def get_n_fold(self, graph: Graph) -> int:
         symbols = (graph.nodes[self.i2]["atoms"], graph.nodes[self.i3]["atoms"])
 
         if "H" in symbols:
@@ -113,7 +136,7 @@ class Torsion:
 
         return 4  # O-O, S-S, Ar-Ar, Ar-CO, and everything else
 
-    def get_angles(self):
+    def get_angles(self) -> tuple[int, ...] | None:
         return {
             2: (0, 180),
             3: (0, 120, 240),
@@ -121,7 +144,7 @@ class Torsion:
             6: (0, 60, 120, 180, 240, 300),
         }.get(self.n_fold)
 
-    def sort_torsion(self, graph, constrained_indices) -> None:
+    def sort_torsion(self, graph: Graph, constrained_indices: np.NDArray) -> None:
         """Acts on the self.torsion tuple leaving it as it is or
         reversing it, so that the first index of it (from which
         rotation will act) is external to the molecule constrained
@@ -131,11 +154,11 @@ class Torsion:
         graph.remove_edge(self.i2, self.i3)
         for d in constrained_indices.flatten():
             if has_path(graph, self.i2, d):
-                self.torsion = tuple(reversed(self.torsion))
+                self.torsion = cast(tuple[int, int, int, int], tuple(reversed(self.torsion)))
         graph.add_edge(self.i2, self.i3)
 
 
-def _is_free(index, graph):
+def _is_free(index: int, graph: Graph) -> bool:
     """Return True if the index specified
     satisfies all of the following:
     - Is not a sp2 carbonyl carbon atom
@@ -161,7 +184,7 @@ def _is_free(index, graph):
     return True
 
 
-def _is_nondummy(i, root, graph) -> bool:
+def _is_nondummy(i: int, root: int, graph: Graph) -> bool:
     """Checks that a molecular rotation along the dihedral
     angle (*, root, i, *) is non-dummy, that is the atom
     at index i, in the direction opposite to the one leading
@@ -243,8 +266,15 @@ def _is_nondummy(i, root, graph) -> bool:
 
 
 def _get_hydrogen_bonds(
-    atoms, coords, graph, d_min=2.5, d_max=3.3, max_angle=45, elements=None, fragments=None
-):
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    graph: Graph,
+    d_min: float = 2.5,
+    d_max: float = 3.3,
+    max_angle: int = 45,
+    elements: Sequence[Sequence[int]] | None = None,
+    fragments: Sequence[Sequence[int]] | None = None,
+) -> list[tuple[int, ...]]:
     """Returns a list of tuples with the indices
     of hydrogen bonding partners.
 
@@ -312,7 +342,7 @@ def _get_hydrogen_bonds(
     return hbs
 
 
-def _get_rotation_mask(graph, torsion):
+def _get_rotation_mask(graph: Graph, torsion: tuple[int, int, int, int]) -> Array1D_bool:
     """Get mask for the atoms that will rotate in a torsion:
     all the ones in the graph reachable from the last index
     of the torsion but not going through the central two
@@ -343,7 +373,7 @@ def _get_rotation_mask(graph, torsion):
     return mask
 
 
-def get_quadruplets(graph):
+def get_quadruplets(graph: Graph) -> Array2D_int:
     """Returns list of quadruplets that indicate potential torsions"""
     # Step 1: Find spanning tree
     spanning_tree = minimum_spanning_tree(graph)
@@ -369,7 +399,13 @@ def get_quadruplets(graph):
     return np.array(dihedrals)
 
 
-def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="csearch"):
+def _get_torsions(
+    graph: Graph,
+    hydrogen_bonds: Sequence[list[int]],
+    double_bonds: Sequence[list[int]],
+    keepdummy: bool = False,
+    mode: str = "csearch",
+) -> list[Torsion]:
     """Returns list of Torsion objects"""
     torsions = []
     for path in get_quadruplets(graph):
@@ -377,8 +413,7 @@ def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="cs
         bt = tuple(sorted((i2, i3)))
 
         if bt not in double_bonds:
-            t = Torsion(*path)
-            t.mode = mode
+            t = Torsion(*path, mode=mode)
 
             if (not t.in_cycle(graph)) and t.is_rotable(graph, hydrogen_bonds, keepdummy=keepdummy):
                 torsions.append(t)
@@ -389,47 +424,20 @@ def _get_torsions(graph, hydrogen_bonds, double_bonds, keepdummy=False, mode="cs
     return torsions
 
 
-# def _group_torsions_dbscan(coords, torsions, max_size=5):
-#     '''
-#     '''
-#     torsions_indices = [t.torsion for t in torsions]
-#     # get torsion indices
-
-#     torsions_centers = np.array([np.mean((coords[i2], coords[i3]), axis=0) for _, i2, i3, _ in torsions_indices])
-#     # compute spatial distance
-
-#     for eps in np.arange(10, 1.5, -0.5):
-#         labels = dbscan(torsions_centers, eps=eps, min_samples=1)[1]
-#         n_clusters = max(labels) + 1
-#         biggest_cluster_size = max([np.count_nonzero(labels==i) for i in set(labels)])
-
-#         if biggest_cluster_size <= max_size:
-#             break
-
-#     output = [[] for _ in range(n_clusters)]
-#     for torsion, cluster in zip(torsions, labels):
-#         output[cluster].append(torsion)
-
-#     output = sorted(output, key=len)
-#     # largest groups last
-
-#     return output
-
-
 def random_csearch(
-    atoms,
-    coords,
-    torsions,
-    graph,
-    constrained_indices=None,
-    n_out=100,
-    max_tries=10000,
-    rotations=None,
-    title="test",
-    logfunction=print,
-    interactive_print=True,
-    write_torsions=False,
-):
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    torsions: Sequence[Torsion],
+    graph: Graph,
+    constrained_indices: list[Sequence[int]] | None = None,
+    n_out: int = 100,
+    max_tries: int = 10000,
+    rotations: int | None = None,
+    title: str = "test",
+    logfunction: Callable[[str], None] | None = print,
+    interactive_print: bool = True,
+    write_torsions: bool = False,
+) -> Array3D_float:
     """Random dihedral rotations - quickly generate n_out conformers
 
     n_out: number of output structures
@@ -554,25 +562,25 @@ def random_csearch(
 
 
 def csearch(
-    atoms,
-    coords,
-    charge=0,
-    mult=1,
-    constrained_indices=None,
-    keep_hb=False,
-    ff_opt=False,
-    n=100,
-    n_out=100,
-    mode=1,
-    calc=None,
-    method=None,
-    title="test",
-    logfunction=print,
-    dispatcher=None,
-    debug=False,
-    interactive_print=True,
-    write_torsions=False,
-):
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    charge: int = 0,
+    mult: int = 1,
+    constrained_indices: list[Sequence[int]] | None = None,
+    keep_hb: bool = False,
+    ff_opt: bool = False,
+    n: int = 100,
+    n_out: int = 100,
+    mode: int = 1,
+    calc: ASECalculator | None = None,
+    method: str | None = None,
+    title: str = "test",
+    logfunction: Callable[[str], None] | None = print,
+    dispatcher: Opt_func_dispatcher | None = None,
+    debug: bool = False,
+    interactive_print: bool = True,
+    write_torsions: bool = False,
+) -> Array3D_float:
     """n: number of structures to keep from each torsion cluster
     mode: 0 - torsion clustered - keep the n lowest energy conformers
     1 - torsion clustered - keep the n most diverse conformers
@@ -586,13 +594,14 @@ def csearch(
     method = DEFAULT_FF_LEVELS[calc] if method is None else method
     # Set default calculator attributes if user did not specify them
 
-    if constrained_indices is not None and len(constrained_indices) > 0:
-        logfunction(
-            f"Constraining {len(constrained_indices)} distance{'s' if len(constrained_indices) > 1 else ''} - {constrained_indices}"
-        )
-    else:
-        logfunction("Free conformational search: no constraints provided.")
-        constrained_indices = np.array([])
+    if logfunction is not None:
+        if constrained_indices is not None and len(constrained_indices) > 0:
+            logfunction(
+                f"Constraining {len(constrained_indices)} distance{'s' if len(constrained_indices) > 1 else ''} - {constrained_indices}"
+            )
+        else:
+            logfunction("Free conformational search: no constraints provided.")
+            constrained_indices = np.array([])
 
     graph = graphize(atoms, coords)
     for i1, i2 in constrained_indices:
@@ -606,10 +615,11 @@ def csearch(
         for hb in hydrogen_bonds:
             graph.add_edge(*hb)
 
-        if hydrogen_bonds:
-            logfunction(f"Preserving {len(hydrogen_bonds)} hydrogen bonds - {hydrogen_bonds}")
-        else:
-            logfunction("No hydrogen bonds found.")
+        if logfunction is not None:
+            if hydrogen_bonds:
+                logfunction(f"Preserving {len(hydrogen_bonds)} hydrogen bonds - {hydrogen_bonds}")
+            else:
+                logfunction("No hydrogen bonds found.")
 
     else:
         hydrogen_bonds = []
@@ -657,7 +667,8 @@ def csearch(
     # is the half that will move and is external to the structure
 
     if not torsions:
-        logfunction(f"No rotable bonds found for {title}.")
+        if logfunction is not None:
+            logfunction(f"No rotable bonds found for {title}.")
         return np.array([coords])
 
     if mode in (0, 1):
@@ -698,26 +709,26 @@ def csearch(
 
 
 def clustered_csearch(
-    atoms,
-    coords,
-    torsions,
-    graph,
-    charge=0,
-    mult=1,
-    constrained_indices=None,
-    ff_opt=False,
-    n=100,
-    n_out=100,
-    mode=1,
-    calc=None,
-    method=None,
-    title="test",
-    logfunction=print,
-    dispatcher=None,
-    interactive_print=True,
-    write_torsions=False,
-    debug=False,
-):
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    torsions: Sequence[Torsion],
+    graph: Graph,
+    charge: int = 0,
+    mult: int = 1,
+    constrained_indices: list[Sequence[int]] | None = None,
+    ff_opt: bool = False,
+    n: int = 100,
+    n_out: int = 100,
+    mode: int = 1,
+    calc: ASECalculator | None = None,
+    method: str | None = None,
+    title: str = "test",
+    logfunction: Callable[[str], None] | None = print,
+    dispatcher: Opt_func_dispatcher | None = None,
+    interactive_print: bool = True,
+    write_torsions: bool = False,
+    debug: bool = False,
+) -> Array3D_float:
     """n: number of structures to keep from each torsion cluster
     mode: 0 - torsion clustered - keep the n lowest energy conformers
     1 - torsion clustered - keep the n most diverse conformers
@@ -928,7 +939,13 @@ def clustered_csearch(
     return output_structures
 
 
-def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool:
+def torsion_comp_check(
+    coords: Array2D_float,
+    torsion: Sequence[int, int, int, int],
+    mask: Array1D_bool,
+    thresh: float = 1.5,
+    max_clashes: int = 0,
+) -> bool:
     """coords: 3D molecule coordinates
     mask: 1D boolean array with the mask torsion
     thresh: threshold value for when two atoms are considered clashing
@@ -949,24 +966,26 @@ def torsion_comp_check(coords, torsion, mask, thresh=1.5, max_clashes=0) -> bool
     return 0 if np.count_nonzero(cdist(m2, m1) < thresh) > max_clashes else 1
 
 
-def most_diverse_conformers(n, structures, torsion_array, energies=None, interactive_print=False):
-    """Return the n most diverse structures from the set.
-    First removes similar structures based on torsional fingerprints, then divides them in n subsets and:
-    - If the enrgy list is given, chooses the
-    one with the lowest energy from each.
-    - If it is not, picks the most diverse structures.
+def most_diverse_conformers(n: int, structures: Array3D_float) -> Array3D_float:
+    """TEMP: JUST RETURNS THE TOP n STRUCTURES.
 
+    Previous algo required scikit-learn which was dropped.
     """
     if len(structures) <= n:
         return structures
     # if we already pruned enough structures to meet the requirement, return them
 
-    # if n > 300:
     indices = np.sort(np.random.choice(len(structures), size=n))
     return structures[indices]
 
 
-def _write_torsion_vmd(atoms, coords, constrained_indices, grouped_torsions, title="test"):
+def _write_torsion_vmd(
+    atoms: Array1D_int,
+    coords: Array2D_float,
+    constrained_indices: list[Sequence[int]],
+    grouped_torsions: Iterable[Torsion],
+    title: str = "test",
+) -> None:
     with open(f"{title}.xyz", "w") as f:
         write_xyz(atoms, coords, f)
 
@@ -995,7 +1014,9 @@ def _write_torsion_vmd(atoms, coords, constrained_indices, grouped_torsions, tit
         f.write(s)
 
 
-def prune_conformers_tfd(structures, quadruplets, thresh=10, verbose=False):
+def prune_conformers_tfd(
+    structures: Array3D_float, quadruplets: Array2D_int, thresh: int = 10, verbose: bool = False
+) -> Array3D_float:
     """Removes similar structures by repeatedly grouping them into k
     subgroups and removing similar ones. A cache is present to avoid
     repeating TFD computations.
@@ -1082,7 +1103,7 @@ def prune_conformers_tfd(structures, quadruplets, thresh=10, verbose=False):
     return structures[final_mask], final_mask
 
 
-def _get_tf_mat(structures, quadruplets):
+def _get_tf_mat(structures: Array3D_float, quadruplets: Array2D_int) -> Array2D_float:
     """Get the torsional fingerprint matrix."""
     tf_mat = np.empty(shape=(len(structures), len(quadruplets)), dtype=float)
 
@@ -1092,7 +1113,7 @@ def _get_tf_mat(structures, quadruplets):
     return tf_mat
 
 
-def tfd_similarity(tfp1, tfp2, thresh=10) -> bool:
+def tfd_similarity(tfp1: Array1D_float, tfp2: Array1D_float, thresh: int = 10) -> bool:
     """Return True if the two structure are similar under the torsion fingeprint criteria."""
     # Compute their absolute difference
     deltas = np.abs(tfp1 - tfp2)

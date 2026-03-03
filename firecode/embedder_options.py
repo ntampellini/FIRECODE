@@ -23,7 +23,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterable
 
 from firecode.settings import (
     CALCULATOR,
@@ -84,8 +84,6 @@ keywords_dict = {
     "PKA": 1,  # Set reference pKa for a specific compound
     "PROCS": 1,  # Set the number of parallel cores to be used by ORCA
     "REFINE": 1,  # Same as calling refine> on a single file
-    "RIGID": 1,  # Does not apply to "string" embeds. Avoid
-    # bending structures to better build TSs.
     "RMSD": 1,  # RMSD threshold (Angstroms) for structure pruning. The smaller,
     # the more retained structures. Default is 0.5 A.
     # Syntax: `RMSD=n`, where n is a number.
@@ -185,7 +183,7 @@ class Options:
     crestnci: bool = False
     crestlevel: str | None = None
     shrink: bool = False
-    shrink_multiplier: int = 1
+    shrink_multiplier: float = 1.0
     metadynamics: bool = False
     suprafacial: bool = False
     simpleorbitals: bool = False
@@ -203,7 +201,7 @@ class Options:
     # less severe deformations, since convergence
     # is faster
 
-    kcal_thresh: int = 10
+    kcal_thresh: float = 10.0
     bypass: bool = False
     debug: bool = False
     let: bool = False
@@ -461,9 +459,6 @@ class OptionSetter:
     def fflevel(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("FFLEVEL")]
         options.ff_level = kw.split("=")[1].upper().replace("_", " ")
-
-    def rigid(self, options: Options, *args: Any) -> None:
-        options.rigid = True
 
     def onlyrefined(self, options: Options, *args: Any) -> None:
         options.only_refined = True

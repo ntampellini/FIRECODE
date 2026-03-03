@@ -113,7 +113,8 @@ new_theory_level = {
 }
 
 
-def get_solvent_line(solvent, calculator, theory_level):
+def get_solvent_line(solvent: str, calculator: str, theory_level: str) -> str:
+    """Get the solvent line for a specific external calculator."""
     if solvent is None:
         return ""
 
