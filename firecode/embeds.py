@@ -31,7 +31,7 @@ from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
 from firecode.algebra import align_vec_pair
 from firecode.errors import ZeroCandidatesError
 from firecode.graph_manipulations import get_sum_graph
-from firecode.typing import Array1D_float, Array1D_int, Array2D_float, Array2D_int, Array3D_float
+from firecode.typing_ import Array1D_float, Array1D_int, Array2D_float, Array2D_int, Array3D_float
 from firecode.utils import (
     cartesian_product,
     compenetration_check,
@@ -255,7 +255,7 @@ def cyclical_embed(embedder: Embedder, max_norm_delta: float = 5.0) -> Array3D_f
         directions: Array2D_float,
         constrained_indices: list[list[int]],
         triangle_vectors: np.ndarray,
-        pivots: Sequence[Pivot],
+        pivots: list[Pivot],
         conf_ids: list[int],
     ) -> Array2D_float:
         """For trimolecular TSs, correct molecules pre-alignment. That is, after the initial estimate
@@ -487,7 +487,7 @@ def cyclical_embed(embedder: Embedder, max_norm_delta: float = 5.0) -> Array3D_f
                         # for the specific case through another algorithm.
 
                     for angles in embedder.systematic_angles:
-                        angles = cast(Sequence[float], angles)
+                        angles = cast("Sequence[float]", angles)
                         for i, vec_pair in enumerate(vecs):
                             # setting molecular positions and rotations (embedding)
                             # i is the molecule index, vecs is a tuple of start and end positions
@@ -644,7 +644,7 @@ def _fast_bimol_rigid_cyclical_embed(
                     # that are too similar to each other.
 
                     for angles in embedder.systematic_angles:
-                        angles = cast(Sequence[float], angles)
+                        angles = cast("Sequence[float]", angles)
                         for i, vec_pair in enumerate(vecs):
                             # setting molecular positions and rotations (embedding)
                             # i is the molecule index, vecs is a tuple of start and end positions
@@ -778,7 +778,7 @@ def monomolecular_embed(embedder: Embedder) -> Array3D_float:
     in embedder.structures. Algorithm used is the "monomolecular" algorithm (see docs).
     """
     assert len(embedder.objects) == 1
-    raise NotImplementedError(f"Deprecated feature.")
+    raise NotImplementedError("Deprecated feature.")
 
     # embedder.log(f"\n--> Performing monomolecular embed ({embedder.candidates} candidates)")
 

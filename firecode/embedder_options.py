@@ -202,6 +202,7 @@ class Options:
     # is faster
 
     kcal_thresh: float = 10.0
+    pka_ref: tuple[str, float] | None = None
     bypass: bool = False
     debug: bool = False
     let: bool = False
@@ -253,6 +254,7 @@ class Options:
         repr_if_not_none = (
             "kcal_thresh",
             "solvent",
+            "pka_ref",
         )
 
         for name in repr_if_not_none:
@@ -528,7 +530,7 @@ class OptionSetter:
             if any(
                 [f"pka>{molname}" in op.replace(" ", "") for op in self.embedder.options.operators]
             ):
-                self.embedder.pka_ref = (molname, float(pka))
+                self.embedder.options.pka_ref = (molname, float(pka))
                 return
 
         raise SyntaxError(

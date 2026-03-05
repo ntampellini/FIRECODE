@@ -15,8 +15,9 @@ GNU General Public License for more details.
 
 import numpy as np
 from prism_pruner.algebra import normalize
-from firecode.typing import Array1D_float, Array2D_float
 from scipy.spatial.distance import cdist
+
+from firecode.typing_ import Array1D_float, Array2D_float
 
 
 def point_angle(p1: Array1D_float, p2: Array1D_float, p3: Array1D_float) -> float:

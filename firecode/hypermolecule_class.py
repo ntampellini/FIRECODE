@@ -19,12 +19,10 @@ from __future__ import annotations
 import os
 import warnings
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Callable, Sequence
-
+from typing import TYPE_CHECKING, Callable, Sequence
 
 import numpy as np
 from numpy.linalg import LinAlgError
-from numpy.typing import NDArray
 from prism_pruner.algebra import get_inertia_moments
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import get_alignment_matrix
@@ -34,7 +32,7 @@ from firecode.errors import NoOrbitalError
 from firecode.graph_manipulations import is_sigmatropic, is_vicinal
 from firecode.pt import pt
 from firecode.reactive_atoms_classes import get_atom_type
-from firecode.typing import Array1D_float, Array1D_int, Array1D_str, Array2D_float, Array3D_float
+from firecode.typing_ import Array1D_float, Array1D_int, Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import read_xyz
 
 if TYPE_CHECKING:
@@ -115,13 +113,17 @@ class Hypermolecule:
                     (f"Molecule {filename} cannot be read. Please check your syntax.")
                 )
 
-        self.rootname = filename.split(".")[0]
+        self.rootname = filename.split(".", maxsplit=1)[0]
         self.filename = filename
-        self.debug_logfunction = debug_logfunction
-        self.constraints: list[Constraint] = []
-        self.pivots: list[Pivot] = []
         self.charge = charge
         self.mult = mult
+        self.debug_logfunction = debug_logfunction
+
+        # properties that can be set/overwritten later
+        self.constraints: list[Constraint] = []
+        self.pivots: list[list[Pivot]]
+        self.pka_data: tuple[str, float] | None = None
+        self.sp3_sigmastar: bool = False
 
         if reactive_indices is None:
             self.reactive_indices = np.array([])
@@ -162,14 +164,11 @@ class Hypermolecule:
         if len(self.reactive_indices) == 0:
             return
 
-        self.sp3_sigmastar: bool | None = None
-        self.sigmatropic: list[bool] | None = None
-
         self._inspect_reactive_atoms(override=override)
         # sets reactive atoms properties
 
         # self.coords = align_structures(self.coords, self.get_alignment_indices())
-        self.sigmatropic = [is_sigmatropic(self, c) for c, _ in enumerate(self.coords)]
+        self.sigmatropic: list[bool] = [is_sigmatropic(self, c) for c, _ in enumerate(self.coords)]
         self.sp3_sigmastar = is_vicinal(self)
 
         for c, _ in enumerate(self.coords):
@@ -203,7 +202,9 @@ class Hypermolecule:
 
     def _inspect_reactive_atoms(self, override: str | None = None) -> None:
         """Control the type of reactive atoms and sets the class attribute self.reactive_atoms_classes_dict."""
-        self.reactive_atoms_classes_dict = {c: {} for c, _ in enumerate(self.coords)}
+        self.reactive_atoms_classes_dict: dict[int, dict[int, RAtom]] = {
+            c: dict() for c, _ in enumerate(self.coords)
+        }
 
         for c, _ in enumerate(self.coords):
             for index in self.reactive_indices:
@@ -220,7 +221,7 @@ class Hypermolecule:
 
                     if self.debug_logfunction is not None:
                         self.debug_logfunction(
-                            f"DEBUG: Hypermolecule._inspect_reactive_atoms {self.filename} - Reactive atom {index + 1} is a {symbol} atom of {atom_type} type. It is bonded to {len(self.graph.neighbors(index))} neighbor(s): {atom_type.neighbors_symbols}"
+                            f"DEBUG: Hypermolecule._inspect_reactive_atoms {self.filename} - Reactive atom {index} is a {symbol} atom of {atom_type} type. It is bonded to {len(list(self.graph.neighbors(index)))} neighbor(s): {atom_type.neighbors_symbols}"
                         )
 
                 except KeyError as err:
@@ -247,7 +248,7 @@ class Hypermolecule:
     def _compute_hypermolecule(self) -> None:
         """ """
 
-        self.energies = [0 for _ in self.coords]
+        self.energies: Array1D_float = np.array([0.0 for _ in self.coords], dtype=float)
 
         self.hypermolecule_atomnos = []
         clusters = {
@@ -305,7 +306,7 @@ class Hypermolecule:
                     )
                 )
                 f.write(
-                    f"FIRECODE Hypermolecule {c} for {self.rootname} - reactive indices {self.reactive_indices}\n"
+                    f"\nFIRECODE Hypermolecule {c} for {self.rootname} - reactive indices {self.reactive_indices}\n"
                 )
                 orbs = np.vstack(
                     [atom_type.center for atom_type in self.reactive_atoms_classes_dict[c].values()]

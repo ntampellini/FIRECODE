@@ -38,7 +38,9 @@ from firecode.algebra import point_angle
 from firecode.utils import write_xyz
 
 if TYPE_CHECKING:
+    from firecode.ase_manipulations import Constraint
     from firecode.embedder import Embedder
+    from firecode.typing_ import Array1D_int, Array2D_float
 
 
 def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 1000) -> str:
@@ -378,8 +380,10 @@ def match_smarts_pattern(
         raise RuntimeError(f"Error matching SMARTS pattern: {e!s}")
 
 
-def convert_constraint_with_smarts(self, coords, atomnos, smarts):
-    """Converts self.indices from being relative to a SMARTS
+def convert_constraint_with_smarts(
+    constraint: Constraint, coords: Array2D_float, atomnos: Array1D_int, smarts: str
+) -> Constraint:
+    """Converts constraint.indices from being relative to a SMARTS
     pattern to being the effective molecular indices.
     Since more matches could be present, the one that is
     the closest to satisfying the desired constraint value
@@ -388,33 +392,37 @@ def convert_constraint_with_smarts(self, coords, atomnos, smarts):
     """
     match_indices_list = match_smarts_pattern((coords, atomnos), smarts)
 
-    if self.type_ == "B":
-        a, b = self.indices
+    if constraint.type_ == "B":
+        a, b = constraint.indices
         deltas = [
-            abs(np.linalg.norm(coords[match[a]] - coords[match[b]]) - self.value)
+            abs(np.linalg.norm(coords[match[a]] - coords[match[b]]) - constraint.value)
             for match in match_indices_list
         ]
         best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
-    if self.type_ == "A":
-        a, b, c = self.indices
-        deltas = [
-            abs(point_angle(coords[match[a]], coords[match[b]], coords[match[c]]) - self.value)
-            for match in match_indices_list
-        ]
-        best_match_indices = match_indices_list[deltas.index(min(deltas))]
-
-    if self.type_ == "D":
-        a, b, c, d = self.indices
+    if constraint.type_ == "A":
+        a, b, c = constraint.indices
         deltas = [
             abs(
-                dihedral((coords[match[a]], coords[match[b]], coords[match[c]], coords[match[d]]))
-                - self.value
+                point_angle(coords[match[a]], coords[match[b]], coords[match[c]]) - constraint.value
             )
             for match in match_indices_list
         ]
         best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
-    old_indices = self.indices[:]
+    if constraint.type_ == "D":
+        a, b, c, d = constraint.indices
+        deltas = [
+            abs(
+                dihedral((coords[match[a]], coords[match[b]], coords[match[c]], coords[match[d]]))
+                - constraint.value
+            )
+            for match in match_indices_list
+        ]
+        best_match_indices = match_indices_list[deltas.index(min(deltas))]
+
+    old_indices = constraint.indices[:]
     for i, index in enumerate(old_indices):
-        self.indices[i] = best_match_indices[index]
+        constraint.indices[i] = best_match_indices[index]
+
+    return constraint

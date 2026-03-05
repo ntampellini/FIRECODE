@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Union
+from typing import Annotated, Any, TypeAlias, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -12,3 +12,4 @@ Array1D_str = Annotated[NDArray[np.str_], "shape: (nsymbols,)"]
 Array1D_bool = Annotated[NDArray[np.bool_], "shape: (nbool,)"]
 FloatIterable = Union[tuple[float, ...], list[float], NDArray[np.floating[Any]]]
 IntIterable = Union[tuple[int, ...], list[int], NDArray[np.int_]]
+MaybeNone: TypeAlias = Any

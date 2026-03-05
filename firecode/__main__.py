@@ -28,11 +28,8 @@ install(show_locals=True)
 
 
 def main() -> None:
-    # sys.stdout.reconfigure(encoding="utf-8") # type: ignore[union-attr]
-    # sys.stderr.reconfigure(encoding="utf-8") # type: ignore[union-attr]
-
-    sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf8', buffering=1)
-    sys.stderr = open(sys.stdout.fileno(), mode='w', encoding='utf8', buffering=1)
+    sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf8", buffering=1)
+    sys.stderr = open(sys.stdout.fileno(), mode="w", encoding="utf8", buffering=1)
 
     usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
     🔥 python -m firecode -cl "refine> crest_search> mol.xyz"

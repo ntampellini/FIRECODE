@@ -24,13 +24,13 @@ from __future__ import annotations
 
 import os
 from subprocess import STDOUT, CalledProcessError, check_call
-from typing import TYPE_CHECKING, Sequence, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 import numpy as np
 from prism_pruner.algebra import normalize
 
 from firecode.graph_manipulations import get_sum_graph
-from firecode.typing import Array1D_str, Array2D_float, Array3D_float
+from firecode.typing_ import Array1D_str, Array2D_float, Array3D_float
 from firecode.units import EH_TO_KCAL
 from firecode.utils import NewFolderContext, clean_directory, read_xyz, write_xyz
 

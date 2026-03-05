@@ -43,7 +43,7 @@ from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.typing import Array3D_float, Array2D_int
+from firecode.typing_ import Array2D_int, Array3D_float
 from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
 if TYPE_CHECKING:
@@ -146,7 +146,7 @@ def operate(input_string: str, embedder: Embedder) -> str:
         embedder.normal_termination()
 
     else:
-        op = input_string.split(">")[0]
+        op = input_string.split(">", maxsplit=1)[0]
         raise Exception(f"Operator {op} not recognized.")
 
     return outname
@@ -530,7 +530,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 constrained_angles_values=constrained_angles_values,
                 constrained_dihedrals_indices=constrained_dihedrals_indices,
                 constrained_dihedrals_values=constrained_dihedrals_values,
-                title=f"{filename.split('.')[0]}_conf{c + 1}",
+                title=f"{filename.split('.', maxsplit=1)[0]}_conf{c + 1}",
                 debug=embedder.options.debug,
             )
             if embedder.options.optimization
@@ -544,7 +544,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
             exit_status = "" if success else "SCRAMBLED"
 
         if not success:
-            dumpname = filename.split(".")[0] + f"_conf{c + 1}_{exit_status}.xyz"
+            dumpname = filename.split(".", maxsplit=1)[0] + f"_conf{c + 1}_{exit_status}.xyz"
             with open(dumpname, "w") as f:
                 write_xyz(
                     mol.atoms,

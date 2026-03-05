@@ -137,19 +137,23 @@ pretty = true
 
 [[tool.mypy.overrides]]
 module = [
-    "rdkit.*",
-    "rdkit.Chem.*",
-    "rdkit.Chem.AllChem",
-    "networkx.*",
-    "scipy.*",
-    "prism_pruner.*",
-    "fairchem.core.*",
+    "aimnet.*",
     "ase.*",
     "ase.atoms.*",
     "ase.mep.*",
     "ase.vibrations.*",
-    "aimnet.*",
+    "fairchem.core.*",
+    "networkx.*",
+    "prism_pruner.*",
+    "psutil.*",
+    "rdkit.*",
+    "rdkit.Chem.*",
+    "rdkit.Chem.AllChem",
+    "scipy.*",
     "xtb.*",
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "InquirerPy"
+ignore_errors = true

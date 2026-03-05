@@ -51,7 +51,7 @@ from scipy.spatial.distance import cdist
 from firecode.errors import SegmentedGraphError
 from firecode.graph_manipulations import is_sp_n
 from firecode.settings import DEFAULT_FF_LEVELS, FF_CALC
-from firecode.typing import (
+from firecode.typing_ import (
     Array1D_bool,
     Array1D_float,
     Array1D_int,
@@ -63,8 +63,9 @@ from firecode.typing import (
 from firecode.utils import cartesian_product, write_xyz
 
 if TYPE_CHECKING:
-    from firecode.optimization_methods import Opt_func_dispatcher
     from ase.calculators.calculator import Calculator as ASECalculator
+
+    from firecode.optimization_methods import Opt_func_dispatcher
 
 
 class Torsion:
@@ -154,7 +155,7 @@ class Torsion:
         graph.remove_edge(self.i2, self.i3)
         for d in constrained_indices.flatten():
             if has_path(graph, self.i2, d):
-                self.torsion = cast(tuple[int, int, int, int], tuple(reversed(self.torsion)))
+                self.torsion = cast("tuple[int, int, int, int]", tuple(reversed(self.torsion)))
         graph.add_edge(self.i2, self.i3)
 
 

@@ -24,13 +24,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
 
 from firecode.parameters import orb_dim_dict
-from firecode.typing import Array1D_float, Array2D_float
+from firecode.typing_ import Array1D_float, Array2D_float, MaybeNone
 
 if TYPE_CHECKING:
     from networkx import Graph
@@ -42,11 +42,13 @@ if TYPE_CHECKING:
 class RAtom:
     """Reactive atom stub class."""
 
-    cumnum: int = -1
-    symbol: str = ""
-    center: Array1D_float = field(default_factory=lambda: np.array([]))
-    coord: Array1D_float = field(default_factory=lambda: np.array([]))
-    orb_vecs: Array2D_float = field(default_factory=lambda: np.array([]))
+    index: int = field(init=False)
+    cumnum: int = field(init=False)
+    symbol: str = field(init=False)
+    init: Callable[..., None] = field(init=False)
+    center: Array1D_float = field(init=False)
+    coord: Array1D_float = field(init=False)
+    orb_vecs: Array2D_float = field(init=False)
 
 
 class Single(RAtom):
@@ -63,13 +65,15 @@ class Single(RAtom):
     ) -> None:
         """ """
         self.index = i
-        self.cumnum: int = 0
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
         self.coord = mol.coords[conf][i]
         self.other = mol.coords[conf][neighbors_indices][0]
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
 
         if not mol.sp3_sigmastar:
             self.orb_vecs = np.array([normalize(self.coord - self.other)])
@@ -128,7 +132,10 @@ class Sp2(RAtom):
     ) -> None:
         """ """
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -179,7 +186,10 @@ class Sp3(RAtom):
         conf: int = 0,
     ) -> None:
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
@@ -215,8 +225,6 @@ class Sp3(RAtom):
 
             else:  # if we cannot infer, ask user if we didn't have already
                 try:
-                    # self.leaving_group_coords = self._set_leaving_group(mol, neighbors_indices)
-
                     # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
                     self.leaving_group_coords = self.others[0]
 
@@ -289,47 +297,6 @@ class Sp3(RAtom):
 
             self.center = np.array([orb_dim * normalize(vec) + self.coord for vec in self.orb_vecs])
 
-    def _set_leaving_group(self, mol, neighbors_indices):
-        """Manually set the molecule leaving group from the ASE GUI, imposing
-        a constraint on the desired atom.
-
-        """
-        if self.leaving_group_index is None:
-            from ase import Atoms
-            from ase.gui.gui import GUI
-            from ase.gui.images import Images
-
-            atoms = Atoms(mol.atoms, positions=mol.coords[0])
-
-            while True:
-                print(
-                    (
-                        "\nPlease, manually select the leaving group atom for molecule %s"
-                        "\nbonded to the sp3 reactive atom with index %s."
-                        "\nRotate with right click and select atoms by clicking."
-                        "\nThen go to Tools -> Constraints -> Constrain, and close the GUI."
-                    )
-                    % (mol.filename, self.index)
-                )
-
-                GUI(images=Images([atoms]), show_bonds=True).run()
-
-                if atoms.constraints != []:
-                    if len(list(atoms.constraints[0].get_indices())) == 1:
-                        if list(atoms.constraints[0].get_indices())[0] in neighbors_indices:
-                            self.leaving_group_index = list(atoms.constraints[0].get_indices())[0]
-                            break
-                        else:
-                            print(
-                                "\nSeems that the atom you selected is not bonded to the reactive center or is the reactive atom itself.\nThis is probably an error, please try again."
-                            )
-                            atoms.constraints = []
-                    else:
-                        print("\nPlease only select one leaving group atom.")
-                        atoms.constraints = []
-
-        return self.others[neighbors_indices.index(self.leaving_group_index)]
-
 
 class Ether(RAtom):
     def __repr__(self) -> str:
@@ -345,7 +312,10 @@ class Ether(RAtom):
     ) -> None:
         """ """
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -395,7 +365,10 @@ class Ketone(RAtom):
     ) -> None:
         """ """
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
         self.subtype = "pre-init"
@@ -494,7 +467,10 @@ class Imine(RAtom):
     ) -> None:
         """ """
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -541,7 +517,10 @@ class Sp_or_carbene(RAtom):
         conf: int = 0,
     ) -> None:
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -677,7 +656,10 @@ class Metal(RAtom):
         conf: int = 0,
     ) -> None:
         self.index = i
-        self.cumnum: int = 0
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -727,7 +709,7 @@ class SingleAtom(RAtom):
     ) -> None:
         """ """
         self.index = i
-        self.cumnum: int = 0
+        self.cumnum: int | MaybeNone = None
         self.symbol = mol.atoms[i]
 
         self.neighbors_symbols: list[int] = []

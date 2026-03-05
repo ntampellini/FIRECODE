@@ -21,8 +21,8 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 """
 
 from dataclasses import dataclass
-from numpy import str_
 
+from numpy import str_
 from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
 
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import os
 import time
-from copy import deepcopy
+from dataclasses import dataclass
 from functools import wraps
 from shutil import rmtree
 from subprocess import getoutput
@@ -39,7 +39,7 @@ from ase.mep import DyNEB
 from ase.optimize import FIRE, LBFGS
 from ase.thermochemistry import IdealGasThermo
 from ase.vibrations import Vibrations
-from prism_pruner.algebra import dihedral, get_alignment_matrix, normalize
+from prism_pruner.algebra import dihedral, normalize
 from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, get_double_bonds_indices, time_to_string
@@ -47,14 +47,12 @@ from prism_pruner.utils import align_structures, get_double_bonds_indices, time_
 from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import DEFAULT_LEVELS
-from firecode.typing import Array1D_float, Array1D_str, Array2D_float, Array3D_float
+from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EH_TO_EV, EH_TO_KCAL, EV_TO_KCAL, EV_TO_WAVENUMS
 from firecode.utils import (
     HiddenPrints,
     NewFolderContext,
     cartesian_product,
-    clean_directory,
-    molecule_check,
     read_xyz,
     suppress_stdout_stderr,
     write_xyz,
@@ -66,7 +64,6 @@ if TYPE_CHECKING:
     from networkx import Graph
 
     from firecode.embedder import Embedder
-    from firecode.hypermolecule_class import Hypermolecule
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -381,6 +378,62 @@ class NewBondPreventer:
 
     def __repr__(self) -> str:
         return f"NewBondPreventer - k:{self.k} - nonbound_pairs : {len(self.nonbound_pairs)}"
+
+
+@dataclass
+class Constraint:
+    """FIRECODE Constraint class with indices, type and value attributes.
+
+    Can return the corresponding ASE Constraint object.
+    """
+
+    indices: list[int]
+
+    value: float | MaybeNone = None
+    fixed: bool = True
+
+    def __post_init__(self) -> None:
+        """Set the type_ attribute"""
+        self.type_: str = {
+            2: "B",
+            3: "A",
+            4: "D",
+        }[len(self.indices)]
+
+    def set_auto_value(self, coords: Array2D_float) -> None:
+        """Modifies self.value (if None) with the current from the given coordinates."""
+        if self.value is None:
+            match self.type_:
+                case "B":
+                    i1, i2 = self.indices
+                    self.value = float(np.linalg.norm(coords[i1] - coords[i2]))
+
+                case "A":
+                    i1, i2, i3 = self.indices
+                    self.value = point_angle(coords[i1], coords[i2], coords[i3])
+
+                case "D":
+                    i1, i2, i3, i4 = self.indices
+                    self.value = dihedral(coords[np.array(self.indices)])
+
+                case _:
+                    pass
+
+    @property
+    def ase_constraint(self) -> ASEConstraint:
+        """Return the corresponding ASE Constraint object."""
+        match self.type_:
+            case "B":
+                i1, i2 = self.indices
+                return Spring(i1, i2, d_eq=self.value)
+
+            case "A":
+                i1, i2, i3 = self.indices
+                return PlanarAngleSpring(i1, i2, i3, eq_angle=self.value)
+
+            case _:
+                i1, i2, i3, i4 = self.indices
+                return DihedralSpring(i1, i2, i3, i4, eq_angle=self.value)
 
 
 def ase_vib(
@@ -1141,7 +1194,9 @@ def fsm_operator(embedder, optimize_endpoints=True):
 
     embedder.structures = read_xyz(outname).coords
     embedder.atoms = mol.atoms
-    embedder.energies = np.array(string.r_energy + string.p_energy[::-1]) * EV_TO_KCAL
+    embedder.energies: Array1D_float = (
+        np.array(string.r_energy + string.p_energy[::-1]) * EV_TO_KCAL
+    )
     ts_guess_e = max(embedder.energies)
 
     embedder.log("--> String energetics:")

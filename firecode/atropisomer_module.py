@@ -20,7 +20,11 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
+from io import TextIOWrapper
 from time import time
+from typing import TYPE_CHECKING, Iterable
 
 import numpy as np
 from ase import Atoms
@@ -35,22 +39,25 @@ from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.errors import ZeroCandidatesError
 from firecode.optimization_methods import optimize
+from firecode.typing_ import Array1D_float, Array1D_int, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import EV_TO_KCAL
 from firecode.utils import clean_directory, loadbar, write_xyz
 
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
+
 
 def ase_torsion_TSs(
-    embedder,
-    atoms,
-    coords,
-    indices,
-    threshold_kcal=5,
-    title="temp",
-    optimization=True,
-    logfile=None,
-    bernytraj=None,
-    plot=False,
-):
+    embedder: Embedder,
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    indices: Array1D_int,
+    threshold_kcal: float = 5.0,
+    title: str = "temp",
+    optimization: bool = True,
+    logfile: TextIOWrapper | None = None,
+    plot: bool = False,
+) -> tuple[Array3D_float, Array1D_float]:
     """Automated dihedral scan. Runs two preliminary scans
     (clockwise, anticlockwise) in 10 degrees increments,
     then peaks above 'kcal_thresh' are re-scanned accurately
@@ -60,7 +67,7 @@ def ase_torsion_TSs(
     assert len(indices) == 4
     # cyclical = False
 
-    ts_structures, energies = [], []
+    ts_structures = []
 
     graph = graphize(atoms, coords)
     i1, i2, i3, i4 = indices
@@ -108,7 +115,6 @@ def ase_torsion_TSs(
         if logfile is not None:
             logfile.write(s + "\n")
 
-    # routine = ((10, 18, '_clockwise'), (-10, 18, '_counterclockwise')) if cyclical else ((10, 36, ''),)
     routine = ((10, 36, "_clockwise"), (-10, 36, "_counterclockwise"))
 
     for degrees, steps, direction in routine:
@@ -140,12 +146,12 @@ def ase_torsion_TSs(
         tag = "_relaxed" if optimization else "_rigid"
 
         with open(title + tag + direction + "_scan.xyz", "w") as outfile:
-            for s, structure in enumerate(align_structures(np.array(structures), indices[:-1])):
+            for s, structure in enumerate(align_structures(structures, indices[:-1])):
                 write_xyz(
                     atoms,
                     structure,
                     outfile,
-                    title=f"Scan point {s + 1}/{len(structures)} - Rel. E = {round(rel_energies[s], 3)} kcal/mol",
+                    title=f"Scan point {s + 1}/{len(structures)} - Rel. E = {rel_energies[s]:.3f} kcal/mol",
                 )
 
         if plot:
@@ -270,7 +276,7 @@ def ase_torsion_TSs(
     return ts_structures, energies
 
 
-def atropisomer_peaks(data, min_thr, max_thr):
+def atropisomer_peaks(data: Iterable[float], min_thr: float, max_thr: float) -> list[int]:
     """data: iterable
     min_thr: peaks must be values greater than min_thr
     max_thr: peaks must be values smaller than max_thr
@@ -297,18 +303,18 @@ def atropisomer_peaks(data, min_thr, max_thr):
 
 
 def ase_dih_scan(
-    embedder,
-    atoms,
-    coords,
-    indices,
-    degrees=10,
-    steps=36,
-    relaxed=True,
-    ad_libitum=False,
-    indices_to_be_moved=None,
-    title="temp scan",
-    logfile=None,
-):
+    embedder: Embedder,
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    indices: Array1D_int,
+    degrees: int = 10,
+    steps: int = 36,
+    relaxed: bool = True,
+    ad_libitum: bool = False,
+    indices_to_be_moved: Array1D_int | None = None,
+    title: str = "temp scan",
+    logfile: str | None = None,
+) -> tuple[Array3D_float, Array1D_float]:
     """Performs a dihedral scan via the ASE library
     if ad libitum, steps is the minimum number of performed steps
     """
@@ -407,7 +413,9 @@ def ase_dih_scan(
     return align_structures(structures, indices), energies
 
 
-def get_plot_segments(x, y, max_step=2):
+def get_plot_segments(
+    x: list[float], y: list[float], max_step: int = 2
+) -> Iterable[tuple[list[float], list[float]]]:
     """Returns a zip object with x, y segments.
     A single segment has x values with separation
     smaller than max_step.
@@ -426,7 +434,7 @@ def get_plot_segments(x, y, max_step=2):
     return zip(x_slices, y_slices)
 
 
-def dihedral_scan(embedder):
+def dihedral_scan(embedder: Embedder) -> None:
     """Automated dihedral scan. Runs two preliminary scans
     (clockwise, anticlockwise) in 10 degrees increments,
     then peaks above 'kcal_thresh' are re-scanned accurately
@@ -438,7 +446,7 @@ def dihedral_scan(embedder):
         embedder.options.kcal_thresh = 5
 
     mol = embedder.objects[0]
-    embedder.structures, embedder.energies = [], []
+    cum_structures, cum_energies = [], []
 
     embedder.log(
         f"\n--> {mol.filename} - performing a scan of dihedral angle with indices {mol.reactive_indices}\n"
@@ -452,7 +460,7 @@ def dihedral_scan(embedder):
 
         embedder.log(f"--> Performing relaxed scans (conformer {c + 1}/{len(mol.coords)})")
 
-        new_coords, ground_energy, success = optimize(
+        new_coords, _, success = optimize(
             mol.atoms,
             coords,
             embedder.options.calculator,
@@ -475,16 +483,15 @@ def dihedral_scan(embedder):
             title=mol.rootname + f"_conf_{c + 1}",
             optimization=embedder.options.optimization,
             logfile=embedder.logfile,
-            bernytraj=mol.rootname + "_berny" if embedder.options.debug else None,
             plot=True,
         )
 
         for structure, energy in zip(structures, energies):
-            embedder.structures.append(structure)
-            embedder.energies.append(energy)
+            cum_structures.append(structure)
+            cum_energies.append(energy)
 
-    embedder.structures = np.array(embedder.structures)
-    embedder.energies = np.array(embedder.energies)
+    embedder.structures = np.array(cum_structures)
+    embedder.energies = np.array(cum_energies)
     embedder.atomnos = mol.atomnos
     embedder.atoms = mol.atoms
 

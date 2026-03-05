@@ -30,7 +30,7 @@ from prism_pruner.graph_manipulations import graphize
 
 from firecode.calculators._xtb import xtb_get_free_energy
 from firecode.optimization_methods import optimize, refine_structures
-from firecode.typing import Array1D_str, Array2D_float, Array3D_float
+from firecode.typing_ import Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import loadbar, write_xyz
 
 if TYPE_CHECKING:

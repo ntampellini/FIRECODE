@@ -35,8 +35,7 @@ from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
 from firecode.settings import DEFAULT_LEVELS
-from firecode.typing import (Array1D_float, Array1D_str, Array2D_float,
-                             Array3D_float)
+from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import loadbar, molecule_check, scramble_check
 
 if TYPE_CHECKING:
@@ -106,7 +105,7 @@ class Opt_func_dispatcher:
             )
 
         gpu_bool = torch.cuda.is_available()
-        self.aimnet2_calc = cast(ASECalculator, AIMNet2ASE("aimnet2"))
+        self.aimnet2_calc = cast("ASECalculator", AIMNet2ASE("aimnet2"))
 
         if logfunction is not None:
             logfunction(f"--> AIMNet2 calculator loaded on {'GPU' if gpu_bool else 'CPU'}.")
@@ -178,7 +177,7 @@ class Opt_func_dispatcher:
 def optimize(
     atoms: Array1D_str,
     coords: Array2D_float,
-    calculator: ASECalculator,
+    calculator: str,
     method: str | None = None,
     maxiter: int | None = None,
     conv_thr: str = "tight",

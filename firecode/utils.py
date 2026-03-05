@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import rmtree
 from subprocess import getoutput
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional, Self
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional, ParamSpec, Self, TypeVar
 
 import numpy as np
 from prism_pruner.algebra import rot_mat_from_pointer
@@ -42,38 +42,24 @@ from scipy.spatial.distance import cdist
 from firecode.algebra import count_clashes
 from firecode.errors import TriangleError
 from firecode.pt import pt
-from firecode.typing import (
+from firecode.typing_ import (
     Array1D_float,
     Array1D_int,
     Array1D_str,
     Array2D_float,
     Array3D_float,
-    FloatIterable,
     IntIterable,
 )
 from firecode.units import EH_TO_KCAL
 
 if TYPE_CHECKING:
-    from networkx import Graph
     from io import TextIOWrapper
 
+    from networkx import Graph
 
-@dataclass
-class Constraint:
-    """Constraint class with indices, type and value attributes."""
-
-    indices: list[int]
-
-    value: float
-    fixed: bool = True
-
-    def __post_init__(self) -> None:
-        """Set the type_ attribute"""
-        self.type_: str = {
-            2: "B",
-            3: "A",
-            4: "D",
-        }[len(self.indices)]
+P = ParamSpec("P")
+R = TypeVar("R")
+T = TypeVar("T")
 
 
 class suppress_stdout_stderr(object):
@@ -97,7 +83,7 @@ class suppress_stdout_stderr(object):
         os.dup2(self.null_fds[0], 1)
         os.dup2(self.null_fds[1], 2)
 
-    def __exit__(self, *_: Any) -> None:
+    def __exit__(self, *_: object) -> None:
         # Re-assign the real stdout/stderr back to (1) and (2)
         os.dup2(self.save_fds[0], 1)
         os.dup2(self.save_fds[1], 2)
@@ -279,7 +265,7 @@ def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]
     return energies
 
 
-def pretty_num(n: int | float) -> str:
+def pretty_num(n: float) -> str:
     if n < 1e3:
         return str(n)
     if n < 1e6:
@@ -444,7 +430,7 @@ def scramble_check(
     embedded_atoms: Array1D_str,
     embedded_structure: Array2D_float,
     excluded_atoms: IntIterable,
-    mols_graphs: tuple[Graph],
+    mols_graphs: Iterable[Graph],
     max_newbonds: int = 0,
     logfunction: Callable[[str], None] | None = None,
     title: str | None = None,
@@ -508,7 +494,6 @@ def str_to_var(
     string: str, enforced_type: Callable[[str], bool | float | int] | None = None
 ) -> bool | float | int | str:
     """Cast variable into the most appropriate type."""
-
     if enforced_type is not None:
         return enforced_type(string)
 
@@ -530,8 +515,8 @@ def str_to_var(
 
 
 def timing_wrapper(
-    function: Callable[[Any], Any], *args: Any, payload: Any | None = None, **kwargs: Any
-) -> tuple[Any, float] | tuple[Any, Any, float]:
+    function: Callable[P, R], *args: Any, payload: T | None = None, **kwargs: Any
+) -> tuple[R, float] | tuple[R, T, float]:
     """Generic function wrapper that appends the
     execution time in seconds at the end of return.
     If payload is not None, appends it at the end
@@ -722,7 +707,7 @@ class NewFolderContext:
 
         os.chdir(self.new_folder_name)
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         # get out of working folder
         os.chdir(os.path.dirname(os.getcwd()))
 
@@ -746,6 +731,6 @@ class FolderContext:
         else:
             raise NotADirectoryError(self.target_folder)
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         """Get out of working folder on exit."""
         os.chdir(self.initial_folder)

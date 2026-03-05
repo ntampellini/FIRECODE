@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Callable
 
-from firecode.settings import UMA_MODEL_PATH, DEFAULT_LEVELS
+from firecode.settings import DEFAULT_LEVELS, UMA_MODEL_PATH
 
 if TYPE_CHECKING:
     from fairchem.core import FAIRChemCalculator
