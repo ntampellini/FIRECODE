@@ -30,7 +30,7 @@ from prism_pruner.graph_manipulations import graphize
 
 from firecode.calculators._xtb import xtb_get_free_energy
 from firecode.optimization_methods import optimize, refine_structures
-from firecode.typing_ import Array1D_str, Array2D_float, Array3D_float
+from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import loadbar, write_xyz
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ def _get_anions(
     structures: Array2D_float,
     index: int,
     logfunction: Callable[[str], None] = print,
-) -> tuple[Array3D_float, list[float], Array1D_str]:
+) -> tuple[Array3D_float, Array1D_float, Array1D_str]:
     """atoms: 1D array of atomic numbers
     structures: array of 3D of coordinates
     index: position of hydrogen atom to be abstracted
@@ -87,28 +87,26 @@ def _get_anions(
 
     anions, energies = zip(*sorted(zip(anions, energies), key=lambda x: x[1]))
 
-    return anions, energies, atoms
+    return np.array(anions), np.array(energies), atoms
 
 
 def _get_cations(
-    embedder,
-    atoms,
-    structures,
-    index,
-    logfunction=print,
-):
+    embedder: Embedder,
+    atoms: Array1D_str,
+    structures: Array3D_float,
+    index: int,
+    logfunction: Callable[[str], None] | None = print,
+) -> tuple[Array3D_float, Array1D_float, Array1D_str]:
     """structures: array of 3D of coordinates
     atoms: 1D array of atomic numbers
     index: position where the new hydrogen atom has to be inserted
 
     return: cation optimized geomertries, their energies and the new atoms array
     """
-    assert embedder.options.calculator == "XTB", (
-        "Charge calculations not yet implemented for Gau, Orca, Mopac, OB"
-    )
-
-    cation_atoms = np.append(atoms, 1)
+    cation_atoms = np.append(atoms, "H")
     # adding proton to atoms
+
+    ##FROMHERE
 
     solvent = embedder.options.solvent
     if solvent is None:
@@ -142,10 +140,12 @@ def _get_cations(
 
     cations, energies = zip(*sorted(zip(cations, energies), key=lambda x: x[1]))
 
-    return cations, energies, cation_atoms
+    return np.array(cations), np.array(energies), cation_atoms
 
 
-def protonate(atoms, coords, index, length=1):
+def protonate(
+    atoms: Array1D_str, coords: Array2D_float, index: int, length: float = 1.0
+) -> Array2D_float:
     """Returns the input structure,
     protonated at the index provided,
     ready to be optimized
@@ -159,7 +159,7 @@ def protonate(atoms, coords, index, length=1):
     return coords
 
 
-def pka_routine(filename, embedder, search=True):
+def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
     """Calculates the energy difference between
     the most stable conformer of the provided
     structure and its conjugate base, obtained
@@ -289,7 +289,14 @@ def pka_routine(filename, embedder, search=True):
         embedder.log()
 
 
-def get_free_energies(embedder, atoms, structures, charge=0, title="Molecule"):
+def get_free_energies(
+    embedder: Embedder,
+    atoms: Array1D_str,
+    structures: Array3D_float,
+    charge: int = 0,
+    sph: bool = False,
+    title: str = "Molecule",
+) -> Array1D_float:
     """ """
     assert embedder.options.calculator == "XTB", (
         "Free energy calculations not yet implemented for Gau, Orca, Mopac, OB"
@@ -307,6 +314,7 @@ def get_free_energies(embedder, atoms, structures, charge=0, title="Molecule"):
                 method=embedder.options.theory_level,
                 solvent=embedder.options.solvent,
                 charge=charge,
+                sph=sph,
             )
         )
 

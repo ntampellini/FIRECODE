@@ -308,7 +308,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
     """
     if optimizer.free_energy:
         print("--> Requested free energy calculation - performing vibrational analysis")
-        from firecode.ase_manipulations import ase_get_free_energy
+        from firecode.ase_manipulations import ase_vib
 
     if optimizer.sp:
         print("--> Single point calculation requested (no optimization)")
@@ -413,11 +413,10 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     )
                     t_start = perf_counter()
 
-                    energy = ase_get_free_energy(
+                    energy += ase_vib(
                         mol.atoms,
                         coords,
                         ase_calc=optimizer.ase_calc,
-                        energy=energy,
                         charge=charge,
                         mult=mult,
                         title=f"{name[:-4]}",
@@ -432,9 +431,8 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
         except Exception as e:
             print("--> ", name, " - ", e)
             raise (e)
-            continue
 
-        if optimizer.constraints:
+        if optimizer.constraints[name]:
             print("Constraints: final values")
 
             for constraint in optimizer.constraints[name]:

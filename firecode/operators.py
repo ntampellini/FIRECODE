@@ -280,14 +280,14 @@ def opt_operator(
         dispatcher=embedder.dispatcher,
     )
 
-    energies, conformers = zip(*sorted(zip(energies, conformers), key=lambda x: x[0]))
-    energies = np.array(energies)
-    rel_energies = energies - np.min(energies)
-    conformers = np.array(conformers)
     # sorting structures based on energy
+    sorted_indices = np.argsort(energies)
+    energies = energies[sorted_indices]
+    conformers = conformers[sorted_indices]
 
-    mask = rel_energies < 20
     # getting the structures to reject (Rel Energy > 20 kcal/mol)
+    rel_energies = energies - np.min(energies)
+    mask = rel_energies < 20
 
     if logfunction is not None:
         s = "s" if len(conformers) > 1 else ""

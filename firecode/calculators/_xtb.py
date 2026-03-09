@@ -268,9 +268,13 @@ def xtb_opt(
                 )
 
         # sometimes the SCC does not converge: only raise the error if specified
-        except CalledProcessError as cpe:
+        except CalledProcessError:
             if assert_convergence:
-                raise cpe
+                raise CalledProcessError(
+                    1,
+                    f"xtb {title}.xyz --input {title}.inp {flags}",
+                    "XTB optimization failed to converge.",
+                )
 
         except KeyboardInterrupt:
             raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
@@ -682,11 +686,6 @@ def crest_mtd_search(
         except KeyboardInterrupt:
             raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
 
-        # if CREST crashes, cd into the parent folder before propagating the error
-        except CalledProcessError as cpe:
-            os.chdir(os.path.dirname(os.getcwd()))
-            raise cpe
-
         new_coords = read_xyz("crest_conformers.xyz").coords
 
         # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))
@@ -747,9 +746,11 @@ def xtb_gsolv(
                 check_call(f"xtb {title}.xyz {flags}".split(), stdout=f, stderr=STDOUT)
 
         # sometimes the SCC does not converge: only raise the error if specified
-        except CalledProcessError as cpe:
+        except CalledProcessError:
             if assert_convergence:
-                raise cpe
+                raise CalledProcessError(
+                    1, f"xtb {title}.xyz {flags}", "XTB optimization failed to converge."
+                )
 
         except KeyboardInterrupt:
             raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")

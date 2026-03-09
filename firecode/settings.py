@@ -27,7 +27,7 @@ FF_OPT_BOOL = False
 # Whether to run Force Field optimization
 # prior to the final one.
 
-FF_CALC = None
+FF_CALC: str | None = None
 # Calculator to perform Force Field optimizations.
 # Possibilites are:
 # 'XTB' : GFN-FF method

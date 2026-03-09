@@ -493,14 +493,14 @@ def auto_newline(string: str, max_line_len: int = 50, padding: int = 2) -> str:
 def str_to_var(
     string: str, enforced_type: Callable[[str], bool | float | int] | None = None
 ) -> bool | float | int | str:
-    """Cast variable into the most appropriate type."""
+    """Cast a string into the most appropriate type."""
     if enforced_type is not None:
         return enforced_type(string)
 
     string_lower = string.lower()
-    if string_lower in ("true", "yes", "on"):
+    if string_lower in ("true", "yes", "on", "1"):
         return True
-    if string_lower in ("false", "no", "off"):
+    if string_lower in ("false", "no", "off", "0"):
         return False
 
     # Check for int, including negative numbers - max 1 neg. sign

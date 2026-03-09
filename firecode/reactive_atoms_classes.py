@@ -198,7 +198,7 @@ class Sp3(RAtom):
 
         if not mol.sp3_sigmastar:
             if not hasattr(self, "leaving_group_index"):
-                self.leaving_group_index = None
+                self.leaving_group_index: int | None = None
 
             if (
                 len(
@@ -223,38 +223,9 @@ class Sp3(RAtom):
                     )
                 ]
 
-            else:  # if we cannot infer, ask user if we didn't have already
-                try:
-                    # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
-                    self.leaving_group_coords = self.others[0]
-
-                except Exception:
-                    # if something goes wrong, we fallback to command line input for reactive atom index collection
-
-                    if self.leaving_group_index is None:
-                        while True:
-                            self.leaving_group_index = input(
-                                f"Please insert the index of the leaving group atom bonded to the sp3 reactive atom (index {self.index}) of molecule {mol.rootname} : "
-                            )
-
-                            if (
-                                self.leaving_group_index == ""
-                                or self.leaving_group_index.lower().islower()
-                            ):
-                                pass
-
-                            elif int(self.leaving_group_index) in neighbors_indices:
-                                self.leaving_group_index = int(self.leaving_group_index)
-                                break
-
-                            else:
-                                print(
-                                    f"Atom {self.leaving_group_index} is not bonded to the sp3 center with index {self.index}."
-                                )
-
-                    self.leaving_group_coords = self.others[
-                        neighbors_indices.index(self.leaving_group_index)
-                    ]
+            else:
+                # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
+                self.leaving_group_coords = self.others[0]
 
             self.orb_vecs = np.array([self.coord - self.leaving_group_coords])
             self.orb_vers = normalize(self.orb_vecs[0])

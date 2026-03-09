@@ -23,6 +23,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from itertools import permutations, product
 from time import perf_counter
 from typing import TYPE_CHECKING, List, Tuple, Union
@@ -31,38 +32,44 @@ import numpy as np
 from prism_pruner.algebra import dihedral
 from prism_pruner.pruner import prune_by_moment_of_inertia
 from prism_pruner.utils import time_to_string
-from rdkit import Chem
-from rdkit.Chem import AllChem, rdDetermineBonds
 
 from firecode.algebra import point_angle
 from firecode.utils import write_xyz
 
 if TYPE_CHECKING:
+    from rdkit import Chem
+
     from firecode.ase_manipulations import Constraint
     from firecode.embedder import Embedder
     from firecode.typing_ import Array1D_int, Array2D_float
 
 
 def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 1000) -> str:
+
+    # import rdkit functions only if we need them for perforance reasons
+    from rdkit.Chem import AddHs, MolFromXYZFile, RWMol, SanitizeMol
+    from rdkit.Chem.rdDetermineBonds import DetermineBonds
+    from rdkit.Chem.rdDistGeom import EmbedMultipleConfs
+
     embedder.log(
         f"--> Performing an RDKit ETKDGv3 conformational search on {filename} ({attempts} attempts)"
     )
 
-    rdkit_mol = Chem.MolFromXYZFile(filename)
+    rdkit_mol = MolFromXYZFile(filename)
 
     # XYZ files have no bond info — perceive connectivity and sanitize
-    rdkit_mol = Chem.RWMol(rdkit_mol)
-    rdDetermineBonds.DetermineBonds(rdkit_mol, charge=0)
-    Chem.SanitizeMol(rdkit_mol)
+    rdkit_mol = RWMol(rdkit_mol)
+    DetermineBonds(rdkit_mol, charge=0)
+    SanitizeMol(rdkit_mol)
 
     # Add hydrogens after sanitization so valence is known
-    rdkit_mol = Chem.AddHs(rdkit_mol)
+    rdkit_mol = AddHs(rdkit_mol)
     rdkit_atoms = np.array([atom.GetSymbol() for atom in rdkit_mol.GetAtoms()])  # type: ignore[no-untyped-call]
 
     t_start = perf_counter()
 
     # Generate conformers
-    conf_ids = AllChem.EmbedMultipleConfs(  # type: ignore[attr-defined]
+    conf_ids = EmbedMultipleConfs(  # type: ignore[attr-defined]
         rdkit_mol,
         numConfs=embedder.options.max_confs,
         numThreads=0,  # Use all available threads
@@ -72,13 +79,13 @@ def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 100
         useBasicKnowledge=True,
     )
 
-    conformers = []
+    conformers_list = []
     for conf_id in conf_ids:
         conf = rdkit_mol.GetConformer(conf_id)
         coords = conf.GetPositions()
-        conformers.append(coords)
+        conformers_list.append(coords)
 
-    conformers = np.array(conformers)
+    conformers = np.array(conformers_list)
 
     embedder.log(
         f"--> RDKit ETKDGv3 generated {len(conformers)} conformers ({time_to_string(perf_counter() - t_start)})"
@@ -216,8 +223,9 @@ def find_symmetric_atoms(mol: Chem.Mol, match: Tuple[int, ...]) -> List[List[int
 
 
 def match_smarts_pattern(
-    molecule_input: Union[str, Tuple[np.ndarray, np.ndarray]],
+    molecule_input: Union[str, Tuple[Array2D_float, Array1D_int]],
     smarts_pattern: str,
+    charge: int = 0,
     symmetric_atoms: List[List[int]] | None = None,
     auto_symmetry: bool = True,
     input_format: str = "xyz",
@@ -267,18 +275,16 @@ def match_smarts_pattern(
     ... )
 
     """
+    # import rdkit functions only if we need them for perforance reasons
+    from rdkit.Chem import Atom, Conformer, MolFromSmarts, MolFromXYZFile, RWMol, SanitizeMol
+    from rdkit.Chem.rdDetermineBonds import DetermineBonds
+
     try:
         # Create RDKit molecule object based on input type
         if isinstance(molecule_input, str):
             # Read molecule from file
             if input_format.lower() == "xyz":
-                mol = Chem.MolFromXYZFile(molecule_input)
-            elif input_format.lower() == "mol":
-                mol = Chem.MolFromMolFile(molecule_input)
-            elif input_format.lower() == "mol2":
-                mol = Chem.MolFromMol2File(molecule_input)
-            elif input_format.lower() == "pdb":
-                mol = Chem.MolFromPDBFile(molecule_input)
+                mol = MolFromXYZFile(molecule_input)
             else:
                 raise ValueError(f"Unsupported input format: {input_format}")
 
@@ -288,24 +294,24 @@ def match_smarts_pattern(
             coords, atomic_nums = molecule_input
 
             # Create editable molecule
-            mol = Chem.RWMol()
+            mol = RWMol()
 
             # Add atoms
             for atom_num in atomic_nums:
-                atom = Chem.Atom(int(atom_num))
+                atom = Atom(int(atom_num))
                 mol.AddAtom(atom)
 
             # Set up 3D coordinates
-            conf = Chem.Conformer(len(atomic_nums))
+            conf = Conformer(len(atomic_nums))
             for i, pos in enumerate(coords):
                 conf.SetAtomPosition(i, tuple(pos))
             mol.AddConformer(conf)
 
-            # Determine connectivity and bond orders
-            # RDKit's approach to determining bonds from coordinates
-            mol = mol.GetMol()
-            Chem.SanitizeMol(mol, Chem.SANITIZE_ALL ^ Chem.SANITIZE_PROPERTIES)
-            AllChem.DetermineBonds(mol)
+        # Determine connectivity and bond orders
+        DetermineBonds(mol, charge=charge)  # type: ignore[attr-defined]
+
+        # Sanitize it
+        SanitizeMol(mol)
 
         # Split pattern into fragments
         fragment_patterns = [p.strip() for p in smarts_pattern.split(".")]
@@ -313,7 +319,7 @@ def match_smarts_pattern(
         # Find matches for each fragment
         fragment_matches = []
         for pattern in fragment_patterns:
-            smarts = Chem.MolFromSmarts(pattern)
+            smarts = MolFromSmarts(pattern)
             if smarts is None:
                 raise ValueError(f"Invalid SMARTS pattern: {pattern}")
 
@@ -404,7 +410,7 @@ def convert_constraint_with_smarts(
         a, b, c = constraint.indices
         deltas = [
             abs(
-                point_angle(coords[match[a]], coords[match[b]], coords[match[c]]) - constraint.value
+                point_angle(coords[match[a]], coords[match[b]], coords[match[c]]) - constraint.value  # type: ignore[arg-type]
             )
             for match in match_indices_list
         ]
@@ -421,8 +427,7 @@ def convert_constraint_with_smarts(
         ]
         best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
-    old_indices = constraint.indices[:]
-    for i, index in enumerate(old_indices):
-        constraint.indices[i] = best_match_indices[index]
+    new_constraint = deepcopy(constraint)
+    new_constraint.indices = best_match_indices
 
-    return constraint
+    return new_constraint

@@ -312,7 +312,7 @@ def fitness_check(
 def refine_structures(
     atoms: Array1D_str,
     structures: Array2D_float,
-    calculator: ASECalculator,
+    calculator: str,
     method: str | None,
     procs: int | None,
     charge: int = 0,
@@ -339,7 +339,7 @@ def refine_structures(
         opt_coords, energy, success = optimize(
             atoms,
             conformer,
-            calculator,
+            calculator=calculator,
             constrained_indices=constrained_indices,
             constrained_distances=constrained_distances,
             constrained_dihedrals_indices=constrained_dihedrals_indices,

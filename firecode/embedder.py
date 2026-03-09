@@ -483,19 +483,9 @@ class Embedder:
                 # save constraint properties
                 constr_props = dict()
 
-                values_dict = {
-                    "true": True,
-                    "1": True,
-                    "yes": True,
-                    "false": False,
-                    "0": False,
-                    "no": False,
-                }
-
                 for part in deepcopy(parts):
                     if "=" in part:
                         name, value = part.split("=")
-                        value = values_dict.get(value, value)
                         constr_props[name] = value
                         parts.remove(part)
 
@@ -590,7 +580,9 @@ class Embedder:
         """Reads atomic pairings/coinstraints to be respected from the input file, if any are present."""
         parsed = []
         unlabeled_list = []
-        self.pairings_dict = {i: {} for i, _ in enumerate(self.objects)}
+        self.pairings_dict: dict[int, dict[str, int | tuple[int, int]]] = {
+            i: {} for i, _ in enumerate(self.objects)
+        }
 
         self.mol_lines = self._parse_constraint_lines()
 
@@ -621,7 +613,8 @@ class Embedder:
 
             self.log()
 
-            pairings, unlabeled = [], []
+            pairings: list[list[int | str]] = []
+            unlabeled: list[int] = []
 
             for fragment in fragments:
                 if not fragment.lower().islower():  # if all we have is a number

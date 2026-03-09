@@ -6,5 +6,6 @@ site/
 firecode.egg-info/
 
 firecode/calculators/uma-s-1p1.pt
+firecode/calculators/uma-s-1p2.pt
 coverage.xml
 .coverage

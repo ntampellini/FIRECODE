@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from io import TextIOWrapper
 from time import time
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 import numpy as np
 from ase import Atoms
@@ -146,12 +146,12 @@ def ase_torsion_TSs(
         tag = "_relaxed" if optimization else "_rigid"
 
         with open(title + tag + direction + "_scan.xyz", "w") as outfile:
-            for s, structure in enumerate(align_structures(structures, indices[:-1])):
+            for s_, structure in enumerate(align_structures(structures, indices[:-1])):
                 write_xyz(
                     atoms,
                     structure,
                     outfile,
-                    title=f"Scan point {s + 1}/{len(structures)} - Rel. E = {rel_energies[s]:.3f} kcal/mol",
+                    title=f"Scan point {s_ + 1}/{len(structures)} - Rel. E = {rel_energies[s_]:.3f} kcal/mol",
                 )
 
         if plot:
@@ -174,7 +174,7 @@ def ase_torsion_TSs(
                 )
 
         peaks_indices = atropisomer_peaks(
-            energies, min_thr=min_e + threshold_kcal, max_thr=min_e + 75
+            list(energies), min_thr=min_e + threshold_kcal, max_thr=min_e + 75
         )
 
         if peaks_indices:
@@ -222,7 +222,7 @@ def ase_torsion_TSs(
                         )
 
                 sub_peaks_indices = atropisomer_peaks(
-                    sub_energies, min_thr=threshold_kcal + min_e, max_thr=min_e + 75
+                    list(sub_energies), min_thr=threshold_kcal + min_e, max_thr=min_e + 75
                 )
 
                 if sub_peaks_indices:
@@ -234,7 +234,7 @@ def ase_torsion_TSs(
                     if logfile is not None:
                         logfile.write(s + "\n")
 
-                    for s, sub_peak in enumerate(sub_peaks_indices):
+                    for sub_peak in sub_peaks_indices:
                         if plot:
                             x = dihedral(sub_structures[sub_peak][indices])
                             y = sub_energies[sub_peak] - min_e
@@ -248,7 +248,7 @@ def ase_torsion_TSs(
                             )
 
                         ts_structures.append(sub_structures[sub_peak])
-                        energies.append(sub_energies[sub_peak])
+                        np.append(energies, sub_energies[sub_peak])
 
                         print()
 
@@ -269,14 +269,12 @@ def ase_torsion_TSs(
             #     pickle.dump(fig, _f)
             plt.savefig(f"{title}{direction}_plt.svg")
 
-    ts_structures = np.array(ts_structures)
-
     clean_directory()
 
-    return ts_structures, energies
+    return np.array(ts_structures), energies
 
 
-def atropisomer_peaks(data: Iterable[float], min_thr: float, max_thr: float) -> list[int]:
+def atropisomer_peaks(data: Sequence[float], min_thr: float, max_thr: float) -> list[int]:
     """data: iterable
     min_thr: peaks must be values greater than min_thr
     max_thr: peaks must be values smaller than max_thr
@@ -307,13 +305,13 @@ def ase_dih_scan(
     atoms: Array1D_str,
     coords: Array2D_float,
     indices: Array1D_int,
-    degrees: int = 10,
+    degrees: float = 10.0,
     steps: int = 36,
     relaxed: bool = True,
     ad_libitum: bool = False,
     indices_to_be_moved: Array1D_int | None = None,
     title: str = "temp scan",
-    logfile: str | None = None,
+    logfile: TextIOWrapper | None = None,
 ) -> tuple[Array3D_float, Array1D_float]:
     """Performs a dihedral scan via the ASE library
     if ad libitum, steps is the minimum number of performed steps
@@ -324,17 +322,17 @@ def ase_dih_scan(
         if not relaxed:
             raise Exception("The ad_libitum keyword is only available for relaxed scans.")
 
-    atoms = Atoms(atoms, positions=coords)
+    ase_atoms = Atoms(atoms, positions=coords)
     structures, energies = [], []
 
-    atoms.calc = embedder.dispatcher.get_ase_calc(
+    ase_atoms.calc = embedder.dispatcher.get_ase_calc(
         embedder.options.theory_level, embedder.options.solvent
     )
 
     if indices_to_be_moved is None:
-        indices_to_be_moved = range(len(atoms))
+        indices_to_be_moved = np.arange(len(ase_atoms), dtype=int)
 
-    mask = np.array([i in indices_to_be_moved for i, _ in enumerate(atoms)], dtype=bool)
+    mask = np.array([bool(i in indices_to_be_moved) for i, _ in enumerate(ase_atoms)], dtype=bool)
 
     t_start = time()
 
@@ -353,11 +351,11 @@ def ase_dih_scan(
             t_start_step = time()
 
         if relaxed:
-            atoms.set_constraint(
-                FixInternals(dihedrals_deg=[[atoms.get_dihedral(*indices), indices]])
+            ase_atoms.set_constraint(  # type: ignore[no-untyped-call]
+                FixInternals(dihedrals_deg=[[ase_atoms.get_dihedral(*indices), indices]])  # type: ignore[no-untyped-call]
             )
 
-            with LBFGS(atoms, maxstep=0.2, logfile=None, trajectory=None) as opt:
+            with LBFGS(ase_atoms, maxstep=0.2, logfile=None, trajectory=None) as opt:  # type: ignore[arg-type]
                 try:
                     opt.run(fmax=0.05, steps=500)
                     exit_str = "converged"
@@ -367,7 +365,7 @@ def ase_dih_scan(
 
                 iterations = opt.nsteps
 
-            energies.append(atoms.get_total_energy() * EV_TO_KCAL)
+            energies.append(ase_atoms.get_total_energy() * EV_TO_KCAL)  # type: ignore[no-untyped-call]
 
         if logfile is not None:
             elapsed = time() - t_start_step
@@ -376,9 +374,9 @@ def ase_dih_scan(
                 f"        Step {scan_step + 1}{s} - {exit_str} - {iterations} iterations ({time_to_string(elapsed)})\n"
             )
 
-        structures.append(atoms.get_positions())
+        structures.append(ase_atoms.get_positions())  # type: ignore[no-untyped-call]
 
-        atoms.rotate_dihedral(*indices, angle=degrees, mask=mask)
+        ase_atoms.rotate_dihedral(*indices, angle=degrees, mask=mask)  # type: ignore[misc, no-untyped-call]
 
         if exit_str == "crashed":
             break
@@ -402,34 +400,33 @@ def ase_dih_scan(
             else:
                 break
 
-    structures = np.array(structures)
-
     clean_directory()
 
     if logfile is not None:
         elapsed = time() - t_start
         logfile.write(f"{title} - completed ({time_to_string(elapsed)})\n")
 
-    return align_structures(structures, indices), energies
+    return align_structures(np.array(structures), indices), np.array(energies)
 
 
 def get_plot_segments(
-    x: list[float], y: list[float], max_step: int = 2
+    x: list[float], y: list[float], max_step: float = 2.0
 ) -> Iterable[tuple[list[float], list[float]]]:
     """Returns a zip object with x, y segments.
     A single segment has x values with separation
     smaller than max_step.
     """
-    x, y = zip(*sorted(zip(x, y), key=lambda t: t[0]))
+    x_sorted, y_sorted = zip(*sorted(zip(x, y), key=lambda t: t[0]))
 
-    x_slices, y_slices = [], []
-    for i, n in enumerate(x):
-        if abs(x[i - 1] - n) > max_step:
+    x_slices: list[list[float]] = []
+    y_slices: list[list[float]] = []
+    for i, n in enumerate(x_sorted):
+        if abs(x_sorted[i - 1] - n) > max_step:
             x_slices.append([])
             y_slices.append([])
 
         x_slices[-1].append(n)
-        y_slices[-1].append(y[i])
+        y_slices[-1].append(y_sorted[i])
 
     return zip(x_slices, y_slices)
 
@@ -518,11 +515,9 @@ def dihedral_scan(embedder: Embedder) -> None:
         )
 
     # sort structures based on energy
-    embedder.energies, embedder.structures = zip(
-        *sorted(zip(embedder.energies, embedder.structures), key=lambda x: x[0])
-    )
-    embedder.structures = np.array(embedder.structures)
-    embedder.energies = np.array(embedder.energies)
+    sorted_indices = np.argsort(embedder.energies)
+    embedder.energies = embedder.energies[sorted_indices]
+    embedder.structures = embedder.structures[sorted_indices]
 
     # write output and exit
     embedder.write_structures(

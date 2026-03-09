@@ -85,10 +85,10 @@ def multiembed_bifunctional(embedder):
 
 
 def run_child_embedder(
-    mol1_name,
-    mol2_name,
+    mol1_name: str,
+    mol2_name: str,
     constrained_indices,
-    i,
+    i: int,
     options,
 ):
     from firecode.embedder import Embedder, RunEmbedding
@@ -106,7 +106,7 @@ def run_child_embedder(
 
         child_name = f"embed{i + 1}_input.txt"
 
-        with open(child_name, "w") as f:
+        with open(child_name, "w", encoding="utf-8") as f:
             extra = ""
             extra += " debug" if options.debug else ""
             extra += " simpleorbitals" if options.simpleorbitals else ""

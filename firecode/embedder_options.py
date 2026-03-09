@@ -32,6 +32,7 @@ from firecode.settings import (
     FF_OPT_BOOL,
     SINGLE_THREAD_BOOL,
 )
+from firecode.typing_ import MaybeNone
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder
@@ -169,7 +170,7 @@ class Options:
 
     optimization: bool = True
     calculator: str = CALCULATOR
-    theory_level: str | None = None  # set later in _calculator_setup()
+    theory_level: str | MaybeNone = None  # set later in _calculator_setup()
     solvent: str | None = None
     scramble_check: bool = False
     charge: int = 0
@@ -215,7 +216,7 @@ class Options:
     # this list will be filled with operator strings
     # that need to be exectured before the run. i.e. ['firecode_search>mol.xyz']
 
-    operators_dict: dict[int, str] = field(default_factory=dict)
+    operators_dict: dict[int, list[str]] = field(default_factory=dict)
     # Analogous dictionary that will contain the seuquences of operators for each molecule
 
     single_thread: bool = SINGLE_THREAD_BOOL
@@ -557,4 +558,4 @@ class OptionSetter:
 
     def sorted_keywords(self) -> Iterable[str]:
         """Returns all the keywords sorted in the optimal execution order."""
-        return sorted(self.keywords, key=keywords_dict.get)
+        return sorted(self.keywords, key=lambda kw: keywords_dict.get(kw, 3))
