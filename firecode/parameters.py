@@ -20,7 +20,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
-orb_dim_dict = {
+orb_dim_dict: dict[str, float] = {
     "H Single Bond": 0.85,
     "C Single Bond": 1,
     "O Single Bond": 1,

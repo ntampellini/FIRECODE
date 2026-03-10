@@ -20,7 +20,10 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 import numpy as np
 from networkx import (
@@ -29,34 +32,15 @@ from networkx import (
     get_node_attributes,
     set_node_attributes,
 )
-from prism_pruner.graph_manipulations import find_paths, get_sp_n
+from prism_pruner.graph_manipulations import get_sp_n
 
-from firecode.algebra import norm_of
+if TYPE_CHECKING:
+    from networkx import Graph
 
-
-def _get_planar_angles(graph):
-    """Returns list of triplets that indicate angles."""
-    allpaths = []
-    for node in graph:
-        allpaths.extend(find_paths(graph, node, 2))
-    # get all possible continuous indices triplets
-
-    triplets, t_ids = [], []
-    for path in allpaths:
-        i1, _, i3 = path
-        t_id = tuple(sorted((i1, i3)))
-
-        if t_id not in t_ids:
-            triplets.append(path)
-            t_ids.append(t_id)
-
-    # Yields non-redundant triplets
-    # Rejects (3,2,1) if (1,2,3) is present
-
-    return np.array(triplets)
+    from firecode.hypermolecule_class import Hypermolecule
 
 
-def is_sigmatropic(mol, conf):
+def is_sigmatropic(mol: Hypermolecule, conf: int) -> bool:
     """mol: Hypermolecule object
     conf: conformer index
 
@@ -73,7 +57,7 @@ def is_sigmatropic(mol, conf):
     sp2_types = ("Ketone", "Imine", "sp2", "sp", "bent carbene")
     if len(mol.reactive_indices) == 2:
         i1, i2 = mol.reactive_indices
-        if norm_of(mol.coords[conf][i1] - mol.coords[conf][i2]) < 3:
+        if np.linalg.norm(mol.coords[conf][i1] - mol.coords[conf][i2]) < 3:
             if all(
                 [
                     str(r_atom) in sp2_types
@@ -96,7 +80,7 @@ def is_sigmatropic(mol, conf):
     return False
 
 
-def is_vicinal(mol):
+def is_vicinal(mol: Hypermolecule) -> bool:
     """A hypermolecule is considered vicinal when:
     - has 2 reactive atoms
     - they are of sp3 or Single Bond type
@@ -122,7 +106,7 @@ def is_vicinal(mol):
     return False
 
 
-def is_sp_n(index, graph, n):
+def is_sp_n(index: int, graph: Graph, n: int) -> bool:
     """Returns True if the sp_n value matches the input"""
     sp_n = get_sp_n(index, graph)
     if sp_n == n:
@@ -130,7 +114,9 @@ def is_sp_n(index, graph, n):
     return False
 
 
-def get_sum_graph(graphs, extra_edges=None):
+def get_sum_graph(
+    graphs: Sequence[Graph], extra_edges: Iterable[Iterable[int]] | None = None
+) -> Graph:
     """Creates a graph containing all graphs, added in
     sequence, and then adds the specified extra edges
     (with cumulative numbering).

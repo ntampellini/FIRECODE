@@ -11,11 +11,11 @@ from firecode.utils import FolderContext, HiddenPrints, clean_directory, read_xy
 HERE = Path(__file__).resolve().parent
 
 
-def run_calculator_test(calculator) -> None:
+def run_calculator_test(calculator: str) -> None:
     """Tests a generic calculator."""
-    mol = read_xyz(HERE / "C2H4.xyz")
+    mol = read_xyz(str(HERE / "C2H4.xyz"))
     dispatcher = Opt_func_dispatcher(calculator)
-    _, _, success = dispatcher.opt_func(
+    _, _, success = dispatcher.opt_func(  # type: ignore[operator]
         atoms=mol.atoms,
         coords=mol.coords[0],
         calculator=calculator,
@@ -51,9 +51,9 @@ def test_calc_uma() -> None:
     run_calculator_test("UMA")
 
 
-def run_firecode_input(name) -> None:
+def run_firecode_input(name: str) -> None:
     """Runs a FIRECODE input file and checks that it exits successfully."""
-    with FolderContext(HERE / name):
+    with FolderContext(str(HERE / name)):
         with pytest.raises(SystemExit) as result:
             with HiddenPrints():
                 embedder = Embedder(f"{name}.txt", stamp=name)

@@ -22,19 +22,20 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from dataclasses import dataclass
 
+from numpy import str_
 from prism_pruner.periodic_table import INDEX_TABLE, MASSES_TABLE, RADII_TABLE
 
 
 @dataclass
 class PeriodicTable:
-    def covalent_radius(self, symbol):
-        return RADII_TABLE[symbol]
+    def covalent_radius(self, symbol: str | str_) -> float:
+        return RADII_TABLE[symbol]  # type: ignore[no-any-return]
 
-    def mass(self, symbol):
-        return MASSES_TABLE[symbol]
+    def mass(self, symbol: str | str_) -> float:
+        return MASSES_TABLE[symbol]  # type: ignore[no-any-return]
 
-    def number(self, symbol):
-        return INDEX_TABLE[symbol]
+    def number(self, symbol: str | str_) -> float:
+        return INDEX_TABLE[symbol]  # type: ignore[no-any-return]
 
 
 pt = PeriodicTable()

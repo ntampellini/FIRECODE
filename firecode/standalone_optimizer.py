@@ -20,10 +20,16 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 import os as op_sys
+from copy import deepcopy
+from dataclasses import dataclass
 from time import perf_counter
+from typing import TYPE_CHECKING, Iterable, Sequence, cast
 
 import numpy as np
+from ase.calculators.calculator import Calculator as ASECalculator
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
@@ -31,70 +37,177 @@ from prism_pruner.algebra import dihedral
 from prism_pruner.utils import time_to_string
 
 from firecode.algebra import point_angle
+from firecode.ase_manipulations import Constraint, ase_popt
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.pt import pt
+from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.settings import CALCULATOR
 from firecode.solvents import epsilon_dict, solvent_synonyms
+from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
-from firecode.utils import Constraint, read_xyz, write_xyz
+from firecode.utils import ConformerEnsemble, read_xyz, write_xyz
+
+if TYPE_CHECKING:
+    from firecode.ase_manipulations import ASEConstraint
 
 
-class Optimizer:
-    def __init__(self, calc=None, method=None, solvent=None):
-        if any((calc is None, method is None)):
-            choices = (
-                Choice(value=("AIMNET2", "wB97M-D3"), name="AIMNet2/wB97M-D3"),
-                Choice(value=("TBLITE", "GFN2-xTB"), name="GFN2-xTB (TBLITE)"),
-                # Choice(value=('TBLITE', 'g-xTB'), name='g-xTB (TBLITE)'),
-                Choice(value=("XTB", "GFN-FF"), name="GFN-FF (XTB)"),
-                Choice(value=("UMA", "OMOL"), name="UMA/OMol25"),
-                Choice(value=("ORCA", "B97-3c"), name="ORCA/B97-3c"),
-            )
+@dataclass
+class OptimizerOptions:
+    """Standalone Optimizer Options Class."""
 
-            calc, method = inquirer.select(
-                message="Which level of theory would you like to use?:",
-                choices=choices,
-                default=next(c.value for c in choices if c.value[0] == CALCULATOR),
+    calc: str
+    method: str
+    solvent: str | None
+    filenames: Sequence[str]
+
+    auto_charge_and_mult: bool = True
+    constraint_file: str | None = None
+    sp: bool = False
+    newfile: bool = False
+    free_energy: bool = False
+    smarts_string: str | None = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization processing."""
+        self.dispatcher = Opt_func_dispatcher(self.calc)
+        self.constraints: dict[str, list[Constraint]] = {f: [] for f in self.filenames}
+        self.mols: dict[str, ConformerEnsemble] = {f: read_xyz(f) for f in self.filenames}
+        self.charge_and_mult_dict = {f: self._get_charge_mult_for_file(f) for f in self.filenames}
+        self._set_constraints_from_file()
+
+    def _get_charge_mult_for_file(self, filename: str) -> tuple[int, int]:
+        """Get charge and multiplicity for a given file."""
+        if self.auto_charge_and_mult:
+            charge = filename.count("+") - filename.count("-")
+
+            if multiplicity_check(self.mols[filename].atomnos, charge):
+                mult = 1
+            else:
+                mult = 2
+                print(
+                    f'--> Multiplicity of "{filename}" assumed to be 2 based on filename charge and atom types'
+                )
+
+        else:
+            charge, mult = inquirer.text(  # type: ignore[attr-defined]
+                message=f'Manually specify charge and multiplicity for "{filename}":',
+                filter=lambda string: tuple(int(s) for s in string.split()),
+                validate=lambda string: (
+                    string.replace(" ", "").isdigit() and len(string.split()) == 2
+                ),
+                invalid_message="Please specify two integers separated by a space",
             ).execute()
 
-        if solvent is None:
-            solvents = (
-                list(epsilon_dict.keys())
-                + list(solvent_synonyms.keys())
-                + [Choice(value=None, name="vacuum")]
-            )
-            solvent = inquirer.fuzzy(
-                message="Which solvent would you like to use?",
-                choices=solvents,
-                default="toluene",
-                validate=lambda x: (x in solvents) or x is None,
-                filter=solvent_synonyms.get(solvent, solvent),
-            ).execute()
+        return charge, mult
 
-        self.calc = calc
-        self.method = method
-        self.solvent = solvent
+    def _set_constraints_from_file(self) -> None:
+        """Set self.constraints from reading self.constraint_file."""
+        if self.constraint_file is not None:
+            # set constraints from file
+            with open(self.constraint_file, "r") as f:
+                lines = f.readlines()
 
-        self.dispatcher = Opt_func_dispatcher(calc)
+            n_constr: int = 0
 
-        # try:
-        #     self.dispatcher.get_ase_calc(method, solvent)
-        # except NotImplementedError:
-        #     pass
+            # see if we are pattern matching
+            if lines[0].startswith("SMARTS"):
+                self.smarts_string = lines.pop(0).lstrip("SMARTS ")
+                print(
+                    "--> SMARTS line found: will pattern match and translate constrained indices on a per-molecule basis."
+                )
 
-    def __repr__(self):
+            for line in lines:
+                data = line.split()
+                try:
+                    assert len(data) in (2, 3, 4, 5), (
+                        "Only 2-4 indices as ints + optional target as a float"
+                    )
+
+                    if "." in data[-1]:
+                        auto_value = False
+                        value = float(data.pop(-1))
+                        initial_constr = Constraint([int(i) for i in data], value=value)
+
+                    else:
+                        auto_value = True
+                        initial_constr = Constraint([int(i) for i in data])
+
+                    # add to dict of constraints, tweaking for each filename if needed
+                    for filename in self.filenames:
+                        constraint = deepcopy(initial_constr)
+                        mol = self.mols[filename]
+
+                        if self.smarts_string is not None:
+                            constraint = convert_constraint_with_smarts(
+                                constraint, mol.coords[0], mol.atomnos, self.smarts_string
+                            )
+
+                        if auto_value:
+                            constraint.set_auto_value(mol.coords[0])
+
+                        self.constraints[filename].append(constraint)
+
+                    n_constr += 1
+
+                except Exception as e:
+                    print(e)
+
+            print(f"--> Read {n_constr} constraints from {self.constraint_file}")
+
+    @property
+    def ase_calc(self) -> ASECalculator:
+        """Get the appropriate ASE Calculator."""
+        return cast("ASECalculator", self.dispatcher.get_ase_calc(self.method, self.solvent))
+
+    def __repr__(self) -> str:
+        """Return string representation of object."""
         s = ""
         for attr in ("calc", "method", "solvent"):
             s += f"--> {attr} : {getattr(self, attr)}\n"
         return s
 
 
-def main(filenames):
+def main(filenames: Sequence[str]) -> None:
     """Standalone optimizer entry point.
     args: iterable of strings of structure filenames.
 
     """
-    optimizer = Optimizer()
+    optimizer = inquire_optimizer_options(filenames)
+    standalone_optimize(optimizer)
+
+
+def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
+    """Inquire optimizer options from user input.
+    args: iterable of strings of structure filenames.
+
+    """
+    choices: list[Choice] = [
+        Choice(value=("AIMNET2", "wB97M-D3"), name="AIMNet2/wB97M-D3"),
+        Choice(value=("TBLITE", "GFN2-xTB"), name="GFN2-xTB (TBLITE)"),
+        # Choice(value=('TBLITE', 'g-xTB'), name='g-xTB (TBLITE)'),
+        Choice(value=("XTB", "GFN-FF"), name="GFN-FF (XTB)"),
+        Choice(value=("UMA", "OMOL"), name="UMA/OMol25"),
+        Choice(value=("ORCA", "B97-3c"), name="ORCA/B97-3c"),
+    ]
+
+    calc, method = inquirer.select(  # type: ignore[attr-defined]
+        message="Which level of theory would you like to use?:",
+        choices=choices,
+        default=next(c.value for c in choices if c.value[0] == CALCULATOR),
+    ).execute()
+
+    solvents = (
+        list(epsilon_dict.keys())
+        + list(solvent_synonyms.keys())
+        + [Choice(value=None, name="vacuum")]
+    )
+    solvent = inquirer.fuzzy(  # type: ignore[attr-defined]
+        message="Which solvent would you like to use?",
+        choices=solvents,
+        default="toluene",
+        validate=lambda x: (x in solvents) or x is None,
+        filter=lambda solvent: solvent_synonyms.get(solvent, solvent),
+    ).execute()
 
     choices = [
         Choice(
@@ -117,7 +230,7 @@ def main(filenames):
         Choice(value="free_energy", name="Free Energy      - Calculate free energy (G)."),
     ]
 
-    options_to_set = inquirer.checkbox(
+    options_to_set = inquirer.checkbox(  # type: ignore[attr-defined]
         message="Select options (spacebar to toggle, enter to confirm):",
         choices=choices,
         cycle=False,
@@ -125,23 +238,29 @@ def main(filenames):
         enabled_symbol="⬢",
     ).execute()
 
-    # set options as booleans, will change idenity later
-    for option in choices:
-        setattr(optimizer, option.value, option.value in options_to_set)
+    if "constraint_file" in options_to_set:
+        constraint_file = inquirer.filepath(  # type: ignore[attr-defined]
+            message="Select a constraint file:",
+            default="./" if op_sys.name == "posix" else "C:\\",
+            validate=PathValidator(is_file=True, message="Input is not a file"),
+            only_files=True,
+        ).execute()
 
-    optimizer.constraints = []
-    smarts_string = None
-    optimizer.opt = not optimizer.sp
+    else:
+        constraint_file = None
 
-    if not optimizer.auto_charge_and_mult:
-        optimizer.manual_charge = inquirer.text(
-            message="Manually specify charge:",
-            filter=int,
-            validate=lambda x: x.isdigit(),
-            invalid_message="Please specify an integer",
-        )
+    optimizer = OptimizerOptions(
+        filenames=filenames,
+        calc=calc,
+        method=method,
+        solvent=solvent,
+        auto_charge_and_mult="auto_charge_and_mult" in options_to_set,
+        sp="sp" in options_to_set,
+        newfile="newfile" in options_to_set,
+        free_energy="free_energy" in options_to_set,
+        constraint_file=constraint_file,
+    )
 
-    # manually set constraints
     if "constraints" in options_to_set:
         while True:
             data = input(
@@ -158,57 +277,38 @@ def main(filenames):
                 "Only 2-4 indices as ints + optional target as a float"
             )
 
-            value = None
+            # make initial constraint object
             if "." in data[-1]:
+                auto_value = False
                 value = float(data.pop(-1))
+                initial_constr = Constraint([int(i) for i in data], value=value)
+            else:
+                auto_value = True
+                initial_constr = Constraint([int(i) for i in data])
 
-            constraint = Constraint([int(i) for i in data], value=value)
-            optimizer.constraints.append(constraint)
+            # add to dict of constraints, tweaking for each filename if needed
+            for filename in optimizer.filenames:
+                constraint = deepcopy(initial_constr)
+                mol = optimizer.mols[filename]
 
-        print(f"Specified {len(optimizer.constraints)} constraints")
+                if auto_value:
+                    constraint.set_auto_value(mol.coords[0])
 
-    # set constraint_file to textfile filename
-    if optimizer.constraint_file:
-        optimizer.constraint_file = inquirer.filepath(
-            message="Select a constraint file:",
-            default="./" if op_sys.name == "posix" else "C:\\",
-            validate=PathValidator(is_file=True, message="Input is not a file"),
-            only_files=True,
-        ).execute()
+                optimizer.constraints[filename].append(constraint)
 
-        # set constraints from file
-        with open(optimizer.constraint_file, "r") as f:
-            lines = f.readlines()
+        print(f"Specified {len(optimizer.constraints)} global constraints")
 
-        # see if we are pattern matching
-        if lines[0].startswith("SMARTS"):
-            smarts_string = lines.pop(0).lstrip("SMARTS ")
-            print(
-                "--> SMARTS line found: will pattern match and interpret constrained indices relative to the pattern"
-            )
+    return optimizer
 
-        for line in lines:
-            data = line.split()
-            try:
-                assert len(data) in (2, 3, 4, 5), (
-                    "Only 2-4 indices as ints + optional target as a float"
-                )
 
-                value = None
-                if "." in data[-1]:
-                    value = float(data.pop(-1))
+def standalone_optimize(optimizer: OptimizerOptions) -> None:
+    """Standalone optimizer main function.
+    args: OptimizerOptions object, iterable of strings of structure filenames.
 
-                constraint = Constraint([int(i) for i in data], value=value)
-                optimizer.constraints.append(constraint)
-
-            except Exception as e:
-                print(e)
-
-        print(f"--> Read constraints from {optimizer.constraint_file}")
-
+    """
     if optimizer.free_energy:
         print("--> Requested free energy calculation - performing vibrational analysis")
-        from firecode.ase_manipulations import ase_get_free_energy
+        from firecode.ase_manipulations import ase_vib
 
     if optimizer.sp:
         print("--> Single point calculation requested (no optimization)")
@@ -216,31 +316,14 @@ def main(filenames):
     if optimizer.newfile:
         print("--> Writing optimized structures to new files")
 
-    # if "charge" in [kw.split("=")[0] for kw in sys.argv]:
-    # options["charge"] = next((kw.split("=")[-1] for kw in sys.argv if "charge" in kw))
-    # sys.argv.remove(f"charge={options['charge']}")
-
-    # if "planar" in sys.argv:
-    #     sys.argv.remove(f"planar")
-    #     options["constrain_string"] = "dihedral: 7, 8, 9, 15, 180\ndihedral: 9, 8, 15, 7, 180\ndihedral: 15, 8, 7, 9, 180\n force constant=1.0"
-    #     print("--> !PLANAR")
-
-    # for option, value in options.items():
-    #     print(f"--> {option} = {value}")
-
     print(optimizer)
-
-    op_sys.chdir(op_sys.getcwd())
 
     energies, names_confs = [], []
 
-    # load ase_calc only now
-    optimizer.dispatcher.get_ase_calc(optimizer.method, optimizer.solvent)
-
     # start optimizing
-    for i, name in enumerate(filenames):
+    for i, name in enumerate(optimizer.filenames):
         try:
-            data = read_xyz(name)
+            mol = optimizer.mols[name]
 
             print()
 
@@ -251,83 +334,34 @@ def main(filenames):
             write_type = "a" if optimizer.newfile else "w"
 
             # set charge
-            if optimizer.auto_charge_and_mult:
-                charge = name.count("+") - name.count("-")
-            else:
-                charge = optimizer.manual_charge
+            charge, mult = optimizer.charge_and_mult_dict[name]
 
-            # set multiplicity
-            if multiplicity_check(data.atomnos, int(charge)):
-                mult = 1
-            elif optimizer.auto_charge_and_mult:
-                mult = 2
-            else:
-                mult = inquirer.text(
-                    message=f"It appears {name} is not a singlet. Please specify multiplicity:",
-                    validate=lambda inp: inp.isdigit() and int(inp) > 1,
-                    default="2",
-                    filter=int,
-                ).execute()
+            for c_n, coords in enumerate(mol.coords):
+                active_ase_constraints: list[ASEConstraint] = []
 
-            for c_n, coords in enumerate(data.coords):
-                (
-                    constrained_indices,
-                    constrained_distances,
-                    constrained_dihedrals,
-                    constrained_dih_angles,
-                ) = [], [], [], []
-                constrained_angles_indices, constrained_angles_values = [], []
-
-                for constraint in optimizer.constraints:
-                    if smarts_string is not None:
-                        # save original indices to revert them later, for the next conformer/molecule
-                        constraint.old_indices = constraint.indices[:]
-
-                        # correct indices from relative to the SMARTS
-                        # string to absolute for this molecule
-                        constraint.convert_constraint_with_smarts(
-                            coords, data.atomnos, smarts_string
-                        )
-
-                    if constraint.type == "B":
+                for constraint in optimizer.constraints[name]:
+                    if constraint.type_ == "B":
                         a, b = constraint.indices
-                        if constraint.value is None:
-                            constraint.value = np.linalg.norm(coords[a] - coords[b])
-
-                        constrained_indices.append(constraint.indices)
-                        constrained_distances.append(constraint.value)
-
                         print(
                             f"CONSTRAIN -> d({a}-{b}) = {round(np.linalg.norm(coords[a] - coords[b]), 3)} A at start of optimization (target is {round(constraint.value, 3)} A)"
                         )
 
-                    elif constraint.type == "A":
+                    elif constraint.type_ == "A":
                         a, b, c = constraint.indices
-                        if constraint.value is None:
-                            constraint.value = point_angle(coords[a], coords[b], coords[c])
-
-                        constrained_angles_indices.append(constraint.indices)
-                        constrained_angles_values.append(constraint.value)
-
                         print(
                             f"CONSTRAIN ANGLE -> Angle({a}-{b}-{c}) = {round(point_angle(coords[a], coords[b], coords[c]), 3)}° at start of optimization, target {round(constraint.value, 3)}°"
                         )
 
-                    elif constraint.type == "D":
+                    elif constraint.type_ == "D":
                         a, b, c, d = constraint.indices
-                        if constraint.value is None:
-                            constraint.value = dihedral(
-                                np.array([coords[a], coords[b], coords[c], coords[d]])
-                            )
-
-                        constrained_dihedrals.append(constraint.indices)
-                        constrained_dih_angles.append(constraint.value)
-
                         print(
                             f"CONSTRAIN DIHEDRAL -> Dih({a}-{b}-{c}-{d}) = {round(dihedral(np.array([coords[a], coords[b], coords[c], coords[d]])), 3)}° at start of optimization, target {round(constraint.value, 3)}°"
                         )
 
-                action = "Optimizing" if optimizer.opt else "Calculating SP energy on"
+                    # convert to ASE constraint and add to list of active
+                    active_ase_constraints.append(constraint.ase_constraint)
+
+                action = "Calculating SP energy on" if optimizer.sp else "Optimizing"
 
                 if optimizer.calc in ("AIMNET2", "UMA") and optimizer.solvent is not None:
                     post = f"+ALPB({optimizer.solvent})"
@@ -335,26 +369,21 @@ def main(filenames):
                     post = ""
 
                 print(
-                    f"{action} {name} - {i + 1} of {len(filenames)}, conf {c_n + 1} of {len(data.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
+                    f"{action} {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
                 )
                 t_start = perf_counter()
 
-                coords, energy, _ = optimizer.dispatcher.opt_func(
-                    data.atoms,
+                coords, energy, _ = ase_popt(
+                    mol.atoms,
                     coords,
                     method=optimizer.method,
-                    constrained_indices=constrained_indices,
-                    constrained_distances=constrained_distances,
-                    constrained_angles_indices=constrained_angles_indices,
-                    constrained_angles_values=constrained_angles_values,
-                    constrained_dihedrals_indices=constrained_dihedrals,
-                    constrained_dihedrals_values=constrained_dih_angles,
-                    ase_calc=optimizer.dispatcher.ase_calc,
+                    ase_calc=optimizer.ase_calc,
+                    ase_constraints=active_ase_constraints,
+                    charge=charge,
                     mult=mult,
                     traj=name[:-4] + "_traj",
                     logfunction=print,
-                    charge=charge,
-                    maxiter=500 if optimizer.opt else 1,
+                    maxiter=1 if optimizer.sp else 750,
                     solvent=optimizer.solvent,
                     # title='OPT_temp',
                     # debug=True,
@@ -365,9 +394,9 @@ def main(filenames):
                 if energy is None:
                     print(f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})")
 
-                elif optimizer.opt:
+                elif not optimizer.sp:
                     with open(outname, write_type) as f:
-                        write_xyz(data.atoms, coords, f, title=f"Energy = {energy} kcal/mol")
+                        write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
                     print(
                         f"{'Appended' if write_type == 'a' else 'Wrote'} optimized structure at {outname} - {time_to_string(elapsed)}\n"
                     )
@@ -380,15 +409,14 @@ def main(filenames):
                     # energy += gcorr
 
                     print(
-                        f"Performing vibrational analysis on {name} - {i + 1} of {len(filenames)}, conf {c_n + 1} of {len(data.coords)} ({optimizer.method})"
+                        f"Performing vibrational analysis on {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method})"
                     )
                     t_start = perf_counter()
 
-                    energy = ase_get_free_energy(
-                        data.atoms,
+                    energy += ase_vib(
+                        mol.atoms,
                         coords,
-                        ase_calc=optimizer.dispatcher.ase_calc,
-                        energy=energy,
+                        ase_calc=optimizer.ase_calc,
                         charge=charge,
                         mult=mult,
                         title=f"{name[:-4]}",
@@ -403,35 +431,34 @@ def main(filenames):
         except Exception as e:
             print("--> ", name, " - ", e)
             raise (e)
-            continue
 
-        if optimizer.constraints:
+        if optimizer.constraints[name]:
             print("Constraints: final values")
 
-            for constraint in optimizer.constraints:
-                if constraint.type == "B":
+            for constraint in optimizer.constraints[name]:
+                if constraint.type_ == "B":
                     a, b = constraint.indices
-                    final_value = np.linalg.norm(coords[a] - coords[b])
+                    final_value = float(np.linalg.norm(coords[a] - coords[b]))
                     uom = " Å"
 
-                elif constraint.type == "A":
+                elif constraint.type_ == "A":
                     a, b, c = constraint.indices
                     final_value = point_angle(coords[a], coords[b], coords[c])
                     uom = "°"
 
-                elif constraint.type == "D":
+                elif constraint.type_ == "D":
                     a, b, c, d = constraint.indices
                     final_value = dihedral(np.array([coords[a], coords[b], coords[c], coords[d]]))
                     uom = "°"
 
                 indices_string = "-".join([str(i) for i in constraint.indices])
                 print(
-                    f"CONSTRAIN -> {constraint.type}({indices_string}) = {round(final_value, 3)}{uom}"
+                    f"CONSTRAIN -> {constraint.type_}({indices_string}) = {round(final_value, 3)}{uom}"
                 )
 
                 # revert original indices for the next molecule
-                if smarts_string is not None:
-                    constraint.indices = constraint.old_indices
+                if optimizer.smarts_string is not None:
+                    constraint.indices = constraint.old_indices  # type: ignore[attr-defined]
 
             print()
 
@@ -458,7 +485,7 @@ def main(filenames):
         print(table.get_string())
 
 
-def multiplicity_check(atomnos, charge, multiplicity=1) -> bool:
+def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1) -> bool:
     """Returns True if the multiplicity and the nuber of
     electrons are one odd and one even, and vice versa.
 
@@ -468,7 +495,9 @@ def multiplicity_check(atomnos, charge, multiplicity=1) -> bool:
     return (multiplicity % 2) != (electrons % 2)
 
 
-def get_ts_d_estimate(filename, indices, factor=1.35, verbose=True):
+def get_ts_d_estimate(
+    filename: str, indices: Iterable[int], factor: float = 1.35, verbose: bool = True
+) -> float:
     """Returns an estimate for the distance between two
     specific atoms in a transition state, by multipling
     the sum of covalent radii for a constant.

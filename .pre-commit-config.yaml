@@ -12,7 +12,7 @@ repos:
   hooks:
   - id: ruff
     name: ruff-format
-    stages: [pre-commit, pre-push]
+    stages: [pre-commit]
     language: system
     entry: pixi run fmt
     types: [python]
@@ -20,23 +20,23 @@ repos:
 
   - id: ruff
     name: ruff-check
-    stages: [pre-commit, pre-push]
+    stages: [pre-commit]
     language: system
     entry: pixi run lint
     types: [python]
     pass_filenames: false
 
-  # - id: Mypy
-  #   name: mypy
-  #   stages: [pre-commit, pre-push]
-  #   language: system
-  #   entry: pixi run types
-  #   types: [python]
-  #   pass_filenames: false
+  - id: Mypy
+    name: mypy
+    stages: [pre-commit]
+    language: system
+    entry: pixi run types
+    types: [python]
+    pass_filenames: false
 
   - id: pytest
     name: pytest
-    stages: [pre-commit, pre-push]
+    stages: [pre-push]
     language: system
     entry: pixi run -e dev test_cov
     types: [python]

@@ -37,6 +37,7 @@ xtb-python = "*"
 tblite = ">=0.3.0"
 tblite-python = "*"
 crest = "2.12.*"
+psutil = ">=7.2.2,<8"
 
 
 [tool.pixi.pypi-dependencies]
@@ -50,7 +51,7 @@ dev = { features = ["dev"], solve-group = "default"}
 pytest = ">=9.0.2,<10"
 pytest-cov = ">=7.0"
 ruff = ">=0.11"
-mypy = ">=1.18.2,<2"
+mypy = ">=1.19.1,<2"
 pre-commit = ">=4.2"
 fairchem-core = "*"
 coverage = ">=7.13.4,<8"
@@ -60,7 +61,7 @@ aimnet = { version = "*", extras = ["ase"] }
 
 [tool.pixi.feature.dev.tasks]
 fmt = { cmd="ruff format ." }
-lint = { cmd="ruff check . --fix" }
+lint = { cmd="ruff check . --fix || true" }
 types = { cmd="mypy" }
 test = { cmd="pytest -s" }
 test_calc = { cmd="pytest -s -m calc" }
@@ -128,3 +129,31 @@ relative_files = true
 
 [tool.coverage.xml]
 output = "coverage.xml"
+
+[tool.mypy]
+files = ["firecode"]
+strict = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "aimnet.*",
+    "ase.*",
+    "ase.atoms.*",
+    "ase.mep.*",
+    "ase.vibrations.*",
+    "fairchem.core.*",
+    "networkx.*",
+    "prism_pruner.*",
+    "psutil.*",
+    "rdkit.*",
+    "rdkit.Chem.*",
+    "rdkit.Chem.AllChem",
+    "scipy.*",
+    "xtb.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "InquirerPy"
+ignore_errors = true

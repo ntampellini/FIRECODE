@@ -20,19 +20,22 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Iterable, Sequence, Union, cast
 
 import numpy as np
+from numpy.typing import NDArray
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
 
 from firecode.algebra import align_vec_pair
-from firecode.ase_manipulations import ase_bend
-from firecode.errors import TriangleError, ZeroCandidatesError
+from firecode.errors import ZeroCandidatesError
 from firecode.graph_manipulations import get_sum_graph
-from firecode.numba_functions import compenetration_check, get_torsion_fingerprint, tfd_similarity
-from firecode.torsion_module import get_quadruplets
+from firecode.typing_ import Array1D_float, Array1D_int, Array2D_float, Array2D_int, Array3D_float
 from firecode.utils import (
     cartesian_product,
+    compenetration_check,
     loadbar,
     polygonize,
     pretty_num,
@@ -40,14 +43,25 @@ from firecode.utils import (
     rotation_matrix_from_vectors,
 )
 
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
+    from firecode.hypermolecule_class import Hypermolecule, Pivot
 
-def string_embed(embedder):
+
+def string_embed(embedder: Embedder) -> Array3D_float:
     """Return poses: return embedded structures, ready to be refined
     Algorithm used is the "string" algorithm (see docs).
     """
     assert len(embedder.objects) == 2
 
-    def is_new_structure(coords, quadruplets, lru_cache, cache_size=5):
+    from firecode.torsion_module import get_quadruplets, get_torsion_fingerprint, tfd_similarity
+
+    def is_new_structure(
+        coords: Array1D_float,
+        quadruplets: Array2D_int,
+        lru_cache: list[Array1D_float],
+        cache_size: int = 5,
+    ) -> bool:
         """Checks if the torsion fingerprint of a structure is
         similar to the ones present in lru_cache. If the
         structure is new, updates the cache.
@@ -72,11 +86,13 @@ def string_embed(embedder):
     embedder.log(f"\n--> Performing string embed ({pretty_num(embedder.candidates)} candidates)")
 
     conf_number = [len(mol.coords) for mol in embedder.objects]
-    conf_indices = cartesian_product(*[np.array(range(i)) for i in conf_number])
-    # (n,2) vectors where the every element is the conformer index for that molecule
+    conf_indices: list[Array1D_int] = list(
+        cartesian_product(*[np.array(range(i)) for i in conf_number])
+    )
+    # (n,2) vectors with pair of indices for each molecule
 
     r_atoms_centers_indices = cartesian_product(
-        *[np.array(range(len(mol.get_centers(0)[0]))) for mol in embedder.objects]
+        *[np.arange(len(mol.get_centers(0)[0])) for mol in embedder.objects]
     )
     # for two mols with 3 and 2 centers: [[0 0][0 1][1 0][1 1][2 0][2 1]]
 
@@ -93,8 +109,8 @@ def string_embed(embedder):
 
     quadruplets = get_quadruplets(get_sum_graph((mol1.graph, mol2.graph), constrained_indices))
 
-    lru_cache = []
-    poses = []
+    lru_cache: list[Array1D_float] = []
+    poses: list[Array2D_float] = []
     for i, (c1, c2) in enumerate(conf_indices):
         loadbar(
             i, len(conf_indices), prefix="Embedding structures ", suffix=f"({len(poses)} found)"
@@ -142,7 +158,7 @@ def string_embed(embedder):
     return np.array(poses)
 
 
-def _get_string_constrained_indices(embedder, n):
+def _get_string_constrained_indices(embedder: Embedder, n: int) -> NDArray[Any]:
     """Get constrained indices referring to the emebdded structures, repeated n times.
     :params n: int
     :return: list of lists consisting in atomic pairs to be constrained.
@@ -161,15 +177,15 @@ def _get_string_constrained_indices(embedder, n):
     )
 
 
-def cyclical_embed(embedder, max_norm_delta=5):
+def cyclical_embed(embedder: Embedder, max_norm_delta: float = 5.0) -> Array3D_float:
     """Return threads: return embedded structures, with position and rotation attributes set, ready to be pumped
     into embedder.structures. Algorithm used is the "cyclical" algorithm (see docs).
     """
-    if len(embedder.objects) == 2 and embedder.options.rigid:
+    if len(embedder.objects) == 2:
         return _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=max_norm_delta)
         # shortened, simplified version that is somewhat faster
 
-    def _get_directions(norms):
+    def _get_directions(norms: list[float]) -> Array2D_float:
         """Returns two or three vectors specifying the direction in which each molecule should be aligned
         in the cyclical TS, pointing towards the center of the polygon.
         """
@@ -238,8 +254,13 @@ def cyclical_embed(embedder, max_norm_delta=5):
         return np.vstack((dir1, dir2, dir3))
 
     def _adjust_directions(
-        embedder, directions, constrained_indices, triangle_vectors, pivots, conf_ids
-    ):
+        embedder: Embedder,
+        directions: Array2D_float,
+        constrained_indices: Sequence[Sequence[int]],
+        triangle_vectors: Array3D_float,
+        pivots: list[Pivot],
+        conf_ids: list[int],
+    ) -> Array2D_float:
         """For trimolecular TSs, correct molecules pre-alignment. That is, after the initial estimate
         based on pivot triangle circocentrum, systematically rotate each molecule around its pivot
         by fixed increments and look for the arrangement with the smallest deviation from orbital
@@ -306,7 +327,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
         ############### set up pairings between reactive atoms
 
-        pairings = [[None, None] for _ in constrained_indices]
+        pairings: list[list[tuple[int, int]]] = [[(-1, -1), (-1, -1)] for _ in constrained_indices]
         for i, c in enumerate(constrained_indices):
             for m, mol in enumerate(embedder.objects):
                 for index, r_atom in mol.reactive_atoms_classes_dict[0].items():
@@ -381,7 +402,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
         ############### choose the one with the best alignment, that is minor cost
 
-        cost, angles, directions = sorted(candidates, key=lambda x: x[0])[0]
+        cost, angles, directions = sorted(candidates, key=lambda x: x[0])[0]  # type: ignore[assignment]
 
         return np.array(directions)
 
@@ -389,23 +410,10 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
     embedder.log(s)
 
-    if not embedder.options.rigid:
-        embedder.ase_bent_mols_dict = {}
-        # used as molecular cache for ase_bend
-        # keys are tuples with: ((identifier, pivot.index, target_pivot_length), obtained with:
-        # (np.sum(original_mol.coords[0]), tuple(sorted(pivot.index)), round(threshold,3))
-
-    # if not embedder.options.let:
-    #     for mol in embedder.objects:
-    #         if len(mol.coords) > 10:
-    #             mol.coords = most_diverse_conformers(10, mol.coords)
-    #             embedder.log(f'Using only the most diverse 10 conformers of molecule {mol.filename} (override with LET keyword)')
-    # Do not keep more than 10 conformations, unless LET keyword is provided
-
     conf_number = [len(mol.coords) for mol in embedder.objects]
     conf_indices = cartesian_product(*[np.array(range(i)) for i in conf_number])
 
-    poses = []
+    poses: list[Array2D_float] = []
     constrained_indices = []
     for ci, conf_ids in enumerate(conf_indices):
         pivots_indices = cartesian_product(
@@ -447,138 +455,8 @@ def cyclical_embed(embedder, max_norm_delta=5):
 
             elif norms_type == "impossible_triangle":
                 # Accessed if we cannot build a triangle with the given norms.
-                # Try to bend the structure if it was close or just skip this triangle and go on.
-
-                deltas = [norms[i] - (norms[i - 1] + norms[i - 2]) for i in range(3)]
-
-                rel_delta = max([deltas[i] / norms[i] for i in range(3)])
-                # s = 'Rejected triangle, delta was %s, %s of side length' % (round(delta, 3), str(round(100*rel_delta, 3)) + ' %')
-                # embedder.log(s, p=False)
-
-                if rel_delta < 0.2 and not embedder.options.rigid:
-                    # correct the molecule structure with the longest
-                    # side if the distances are at most 20% off.
-
-                    index = deltas.index(max(deltas))
-                    mol = embedder.objects[index]
-
-                    if tuple(sorted(mol.reactive_indices)) not in list(mol.graph.edges):
-                        # do not try to bend molecules where the two reactive indices are bonded
-
-                        pivot = pivots[index]
-
-                        maxval = norms[index - 1] + norms[index - 2]
-
-                        traj = (
-                            f"bend_{mol.filename}_p{p}_tgt_{round(0.9 * maxval, 3)}"
-                            if embedder.options.debug
-                            else None
-                        )
-
-                        bent_mol = ase_bend(
-                            embedder,
-                            mol,
-                            conf_ids[index],
-                            pivot,
-                            0.9 * maxval,
-                            title=f"{mol.rootname} - pivot {p}",
-                            traj=traj,
-                        )
-
-                        embedder.objects[index] = bent_mol
-
-                        try:
-                            pivots = [
-                                embedder.objects[m].pivots[conf_ids[m]][pi[m]]
-                                for m, _ in enumerate(embedder.objects)
-                            ]
-                            # updating the active pivot for each molecule for this run
-                        except IndexError:
-                            raise Exception(
-                                (
-                                    f"The number of pivots for molecule {index} ({bent_mol.filename}) most likely decreased during "
-                                    + "its bending, causing this error. Adding the RIGID (and maybe also SHRINK) keyword to the "
-                                    + "input file should solve the issue. I do not think this should ever happen under common "
-                                    + "circumstances, but if it does, it may be reasonable to print a statement on the log, "
-                                    + "discard the bent molecule, and then proceed with the embed. If you see this error, "
-                                    + "please report your input and structures on a GitHub issue. Thank you."
-                                )
-                            )
-
-                        norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
-                        # updating the pivots norms to feed into the polygonize function
-
-                        try:
-                            polygon_vectors = polygonize(norms)
-                            # repeating the failed polygon creation. If it fails again, skip these pivots
-
-                        except TriangleError:
-                            continue
-
-                    else:
-                        continue
-
-                else:
-                    continue
-            # norms type == 'impossible_digon', that is sides are too different in length
-            elif not embedder.options.rigid:
-                if embedder.embed == "chelotropic":
-                    target_length = min(norms)
-
-                else:
-                    maxgap = 3  # in Angstrom
-                    gap = abs(norms[0] - norms[1])
-                    r = 0.3 + 0.5 * (gap / maxgap)
-                    r = np.clip(5, 0.5, 0.8)
-
-                    # r is the ratio for calculating target_length based
-                    # on the gap that deformations will need to cover.
-                    # It ranges from 0.5 to 0.8 and is shifted more toward
-                    # the shorter norm as the gap rises. For gaps of more
-                    # than maxgap Angstroms, the target length is very close
-                    # to the shortest molecule, and only the molecule
-                    # with the longest pivot is bent.
-
-                    target_length = min(norms) * r + max(norms) * (1 - r)
-
-                for i, mol in enumerate(deepcopy(embedder.objects)):
-                    if len(mol.reactive_indices) > 1:
-                        # do not try to bend molecules that react with a single atom
-
-                        if tuple(sorted(mol.reactive_indices)) not in list(mol.graph.edges):
-                            # do not try to bend molecules where the two reactive indices are bonded
-
-                            traj = (
-                                f"bend_{mol.filename}_p{p}_tgt_{round(target_length, 3)}"
-                                if embedder.options.debug
-                                else None
-                            )
-
-                            bent_mol = ase_bend(
-                                embedder,
-                                mol,
-                                conf_ids[i],
-                                pivots[i],
-                                target_length,
-                                title=f"{mol.rootname} - pivot {p}",
-                                traj=traj,
-                            )
-
-                            embedder.objects[i] = bent_mol
-
-                # Repeating the previous polygonization steps with the bent molecules
-
-                pivots = [
-                    embedder.objects[m].pivots[conf_ids[m]][pi[m]]
-                    for m, _ in enumerate(embedder.objects)
-                ]
-                # updating the active pivot for each molecule for this run
-
-                norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
-                # updating the pivots norms to feed into the polygonize function
-
-                polygon_vectors = polygonize(norms)
-                # repeating the failed polygon creation
+                # [bending removed] - just skip this triangle and go on.
+                continue
 
             else:
                 continue  # do not embed digons with too different lengths if RIGID
@@ -593,12 +471,12 @@ def cyclical_embed(embedder, max_norm_delta=5):
                 # get indices of atoms that face each other
 
                 if not embedder.pairings_table or all(
-                    (pair in ids) or (pair in embedder.internal_constraints)
+                    (pair in ids) or tuple_in_collection(pair, embedder.internal_constraints)
                     for pair in embedder.pairings_table.values()
                 ):
                     # ensure that the active arrangement has all the pairings that the user specified
 
-                    angular_poses = []
+                    angular_poses: list[Array2D_float] = []
                     # initialize a container for the poses generated for this combination of conformations,
                     # pairing and polygon_vectors orientation. These will be used not to generate poses
                     # that are too similar to each other.
@@ -612,6 +490,7 @@ def cyclical_embed(embedder, max_norm_delta=5):
                         # for the specific case through another algorithm.
 
                     for angles in embedder.systematic_angles:
+                        angles = cast("Sequence[float]", angles)
                         for i, vec_pair in enumerate(vecs):
                             # setting molecular positions and rotations (embedding)
                             # i is the molecule index, vecs is a tuple of start and end positions
@@ -682,7 +561,9 @@ def cyclical_embed(embedder, max_norm_delta=5):
                             ids=embedder.ids,
                             thresh=embedder.options.clash_thresh,
                         ):
-                            if not rmsd_similarity(embedded_structure, angular_poses, rmsd_thr=1):
+                            if not rmsd_similarity(
+                                embedded_structure, np.array(angular_poses), rmsd_thr=1
+                            ):
                                 poses.append(embedded_structure)
                                 angular_poses.append(embedded_structure)
                                 constrained_indices.append(ids)
@@ -704,7 +585,9 @@ def cyclical_embed(embedder, max_norm_delta=5):
     return np.array(poses)
 
 
-def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
+def _fast_bimol_rigid_cyclical_embed(
+    embedder: Embedder, max_norm_delta: float = 10.0
+) -> Array3D_float:
     """Return threads: return embedded structures, with position and rotation attributes set, ready to be pumped
     into embedder.structures. Algorithm used is the "cyclical" algorithm (see docs).
     """
@@ -728,42 +611,41 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
                 prefix="Embedding structures ",
             )
 
+            # getting the active pivot for each molecule for this run
             pivots = [
                 embedder.objects[m].pivots[conf_ids[m]][pi[m]]
                 for m, _ in enumerate(embedder.objects)
             ]
-            # getting the active pivot for each molecule for this run
 
-            norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
             # getting the pivots norms to feed into the polygonize function
+            norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
 
+            # skip if norms are too different
             if abs(norms[0] - norms[1]) > max_norm_delta:
                 continue
-            # skip if norms are too different
 
             polygon_vectors = polygonize(norms)
 
-            directions = np.array([[0, 1, 0], [0, -1, 0]])
             # directions to orient the molecules toward, orthogonal to each vec_pair
+            directions = np.array([[0, 1, 0], [0, -1, 0]])
 
+            # getting vertices to embed molecules with and iterating over start/end points
             for v, vecs in enumerate(polygon_vectors):
-                # getting vertices to embed molecules with and iterating over start/end points
-
-                ids = _get_cyclical_reactive_indices(embedder, pivots, v)
                 # get indices of atoms that face each other
+                ids = _get_cyclical_reactive_indices(embedder, pivots, v)
 
+                # ensure that the active arrangement has all the pairings that the user specified
                 if not embedder.pairings_table or all(
-                    (pair in ids) or (pair in embedder.internal_constraints)
+                    (pair in ids) or tuple_in_collection(pair, embedder.internal_constraints)
                     for pair in embedder.pairings_table.values()
                 ):
-                    # ensure that the active arrangement has all the pairings that the user specified
-
-                    angular_poses = []
                     # initialize a container for the poses generated for this combination of conformations,
                     # pairing and polygon_vectors orientation. These will be used not to generate poses
                     # that are too similar to each other.
+                    angular_poses: list[Array2D_float] = []
 
                     for angles in embedder.systematic_angles:
+                        angles = cast("Sequence[float]", angles)
                         for i, vec_pair in enumerate(vecs):
                             # setting molecular positions and rotations (embedding)
                             # i is the molecule index, vecs is a tuple of start and end positions
@@ -772,13 +654,13 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
                             start, end = vec_pair
                             angle = angles[i]
 
+                            # coordinates for the reactive atoms in this run
                             reactive_coords = embedder.objects[i].coords[conf_ids[i]][
                                 embedder.objects[i].reactive_indices
                             ]
-                            # coordinates for the reactive atoms in this run
 
-                            atomic_pivot_mean = np.mean(reactive_coords, axis=0)
                             # mean position of the atoms active in this run
+                            atomic_pivot_mean = np.mean(reactive_coords, axis=0)
 
                             mol_direction = pivots[i].meanpoint - atomic_pivot_mean
                             if np.all(mol_direction == 0.0):
@@ -834,7 +716,9 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
                             ids=embedder.ids,
                             thresh=embedder.options.clash_thresh,
                         ):
-                            if not rmsd_similarity(embedded_structure, angular_poses, rmsd_thr=1):
+                            if not rmsd_similarity(
+                                embedded_structure, np.array(angular_poses), rmsd_thr=1
+                            ):
                                 poses.append(embedded_structure)
                                 angular_poses.append(embedded_structure)
                                 constrained_indices.append(ids)
@@ -856,22 +740,24 @@ def _fast_bimol_rigid_cyclical_embed(embedder, max_norm_delta=10):
     return np.array(poses)
 
 
-def _get_cyclical_reactive_indices(embedder, pivots, n):
+def _get_cyclical_reactive_indices(
+    embedder: Embedder, pivots: list[Pivot], n: int
+) -> list[tuple[int, int]]:
     """:params n: index of the n-th disposition of vectors yielded by the polygonize function.
     :return: list of index couples, to be constrained during the partial optimization.
     """
     cumulative_pivots_ids = [[p.start_atom.cumnum, p.end_atom.cumnum] for p in pivots]
 
-    def orient(i, ids, n):
+    def orient(i: int, ids: list[int], n: int) -> list[int]:
         if swaps[n][i]:
             return list(reversed(ids))
         return ids
 
     if len(embedder.objects) == 2:
-        swaps = [(0, 0), (0, 1)]
+        swaps: list[tuple[int, ...]] = [(0, 0), (0, 1)]
 
         oriented = [orient(i, ids, n) for i, ids in enumerate(cumulative_pivots_ids)]
-        couples = [[oriented[0][0], oriented[1][0]], [oriented[0][1], oriented[1][1]]]
+        couples = [(oriented[0][0], oriented[1][0]), (oriented[0][1], oriented[1][1])]
 
         return couples
 
@@ -879,76 +765,37 @@ def _get_cyclical_reactive_indices(embedder, pivots, n):
 
     oriented = [orient(i, ids, n) for i, ids in enumerate(cumulative_pivots_ids)]
     couples = [
-        [oriented[0][1], oriented[1][0]],
-        [oriented[1][1], oriented[2][0]],
-        [oriented[2][1], oriented[0][0]],
+        (oriented[0][1], oriented[1][0]),
+        (oriented[1][1], oriented[2][0]),
+        (oriented[2][1], oriented[0][0]),
     ]
-    couples = [sorted(c) for c in couples]
+    couples = [tuple(sorted(c)) for c in couples]  # type: ignore[misc]
 
     return couples
 
 
-def monomolecular_embed(embedder):
+def monomolecular_embed(embedder: Embedder) -> Array3D_float:
     """Return threads: embeds structures by bending molecules, storing them
     in embedder.structures. Algorithm used is the "monomolecular" algorithm (see docs).
     """
     assert len(embedder.objects) == 1
-
-    embedder.log(f"\n--> Performing monomolecular embed ({embedder.candidates} candidates)")
-
-    mol = embedder.objects[0]
-
-    embedder.structures = []
-
-    for c, _ in enumerate(mol.coords):
-        for p, pivot in enumerate(mol.pivots[c]):
-            loadbar(p, len(mol.pivots[c]), prefix="Bending structures ")
-
-            traj = f"bend_{p}_monomol" if embedder.options.debug else None
-
-            bent_mol = ase_bend(
-                embedder,
-                mol,
-                c,
-                pivot,
-                1,  # bend until we are within 1 A to
-                # the target distance between atoms
-                title=f"{mol.rootname} - pivot {p}",
-                traj=traj,
-                check=False,  # avoid returning the non-bent molecule,
-                # even if this means having it scrambled
-            )
-
-            for conformer in bent_mol.coords:
-                embedder.structures.append(conformer)
-
-    loadbar(1, 1, prefix="Bending structures ")
-
-    embedder.structures = np.array(embedder.structures)
-
-    embedder.atomnos = mol.atomnos
-    embedder.atoms = mol.atoms
-    embedder.energies = np.zeros(len(embedder.structures))
-    embedder.exit_status = np.zeros(len(embedder.structures), dtype=bool)
-    embedder.graphs = [mol.graph]
-
-    embedder.constrained_indices = _get_monomolecular_reactive_indices(embedder)
-
-    return embedder.structures
+    raise NotImplementedError("Deprecated feature.")
 
 
-def _get_monomolecular_reactive_indices(embedder):
+def _get_monomolecular_reactive_indices(embedder: Embedder) -> Array2D_int:
     """ """
     if embedder.pairings_table:
-        return np.array([list(embedder.pairings_table.values()) for _ in embedder.structures])
+        return np.array(
+            [list(embedder.pairings_table.values()) for _ in embedder.structures], dtype=int
+        )
     # This option gives the possibility to specify pairings in
     # refine>/REFINE runs, so as to make constrained optimizations
     # accessible.
 
-    return np.array([[] for _ in embedder.structures])
+    return np.array([[] for _ in embedder.structures], dtype=int)
 
 
-def get_embed(mols, conf_ids):
+def get_embed(mols: Iterable[Hypermolecule], conf_ids: Iterable[int]) -> Array3D_float:
     """mols: iterable of Hypermolecule objects
     conf_ids: iterable of conformer indices for each mol
 
@@ -958,3 +805,12 @@ def get_embed(mols, conf_ids):
     return np.concatenate(
         [(mol.rotation @ mol.coords[c].T).T + mol.position for mol, c in zip(mols, conf_ids)]
     )
+
+
+def tuple_in_collection(
+    tup: tuple[int, int], collection: Union[list[tuple[int, int]], Array2D_int]
+) -> bool:
+    """Check if tuple is in a list or numpy array."""
+    if isinstance(collection, np.ndarray):
+        collection = collection.tolist()
+    return tup in collection

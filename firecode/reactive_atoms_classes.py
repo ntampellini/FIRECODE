@@ -20,20 +20,50 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from __future__ import annotations
+
 from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
 
-from firecode.algebra import norm_of
 from firecode.parameters import orb_dim_dict
+from firecode.typing_ import Array1D_float, Array2D_float, MaybeNone
+
+if TYPE_CHECKING:
+    from networkx import Graph
+
+    from firecode.hypermolecule_class import Hypermolecule
 
 
-class Single:
-    def __repr__(self):
+@dataclass
+class RAtom:
+    """Reactive atom stub class."""
+
+    index: int = field(init=False)
+    cumnum: int = field(init=False)
+    symbol: str = field(init=False)
+    init: Callable[..., None] = field(init=False)
+    center: Array1D_float = field(init=False)
+    coord: Array1D_float = field(init=False)
+    orb_vecs: Array2D_float = field(init=False)
+    neighbors_symbols: list[str] = field(init=False)
+
+
+class Single(RAtom):
+    def __repr__(self) -> str:
         return "Single Bond"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
         self.symbol = mol.atoms[i]
@@ -42,6 +72,9 @@ class Single:
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
         self.coord = mol.coords[conf][i]
         self.other = mol.coords[conf][neighbors_indices][0]
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
 
         if not mol.sp3_sigmastar:
             self.orb_vecs = np.array([normalize(self.coord - self.other)])
@@ -80,19 +113,30 @@ class Single:
                 orb_dim = orb_dim_dict.get(key)
 
                 if orb_dim is None:
-                    orb_dim = norm_of(self.coord - self.other)
+                    orb_dim = float(np.linalg.norm(self.coord - self.other))
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
 
             self.center = orb_dim * self.orb_vecs + self.coord
 
 
-class Sp2:
-    def __repr__(self):
+class Sp2(RAtom):
+    def __repr__(self) -> str:
         return "sp2"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -130,12 +174,23 @@ class Sp2:
             self.center += self.coord
 
 
-class Sp3:
-    def __repr__(self):
+class Sp3(RAtom):
+    def __repr__(self) -> str:
         return "sp3"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
         self.neighbors_symbols = [mol.atoms[i] for i in neighbors_indices]
@@ -144,7 +199,7 @@ class Sp3:
 
         if not mol.sp3_sigmastar:
             if not hasattr(self, "leaving_group_index"):
-                self.leaving_group_index = None
+                self.leaving_group_index: int | None = None
 
             if (
                 len(
@@ -169,40 +224,9 @@ class Sp3:
                     )
                 ]
 
-            else:  # if we cannot infer, ask user if we didn't have already
-                try:
-                    # self.leaving_group_coords = self._set_leaving_group(mol, neighbors_indices)
-
-                    # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
-                    self.leaving_group_coords = self.others[0]
-
-                except Exception:
-                    # if something goes wrong, we fallback to command line input for reactive atom index collection
-
-                    if self.leaving_group_index is None:
-                        while True:
-                            self.leaving_group_index = input(
-                                f"Please insert the index of the leaving group atom bonded to the sp3 reactive atom (index {self.index}) of molecule {mol.rootname} : "
-                            )
-
-                            if (
-                                self.leaving_group_index == ""
-                                or self.leaving_group_index.lower().islower()
-                            ):
-                                pass
-
-                            elif int(self.leaving_group_index) in neighbors_indices:
-                                self.leaving_group_index = int(self.leaving_group_index)
-                                break
-
-                            else:
-                                print(
-                                    f"Atom {self.leaving_group_index} is not bonded to the sp3 center with index {self.index}."
-                                )
-
-                    self.leaving_group_coords = self.others[
-                        neighbors_indices.index(self.leaving_group_index)
-                    ]
+            else:
+                # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
+                self.leaving_group_coords = self.others[0]
 
             self.orb_vecs = np.array([self.coord - self.leaving_group_coords])
             self.orb_vers = normalize(self.orb_vecs[0])
@@ -245,55 +269,25 @@ class Sp3:
 
             self.center = np.array([orb_dim * normalize(vec) + self.coord for vec in self.orb_vecs])
 
-    def _set_leaving_group(self, mol, neighbors_indices):
-        """Manually set the molecule leaving group from the ASE GUI, imposing
-        a constraint on the desired atom.
 
-        """
-        if self.leaving_group_index is None:
-            from ase import Atoms
-            from ase.gui.gui import GUI
-            from ase.gui.images import Images
-
-            atoms = Atoms(mol.atoms, positions=mol.coords[0])
-
-            while True:
-                print(
-                    (
-                        "\nPlease, manually select the leaving group atom for molecule %s"
-                        "\nbonded to the sp3 reactive atom with index %s."
-                        "\nRotate with right click and select atoms by clicking."
-                        "\nThen go to Tools -> Constraints -> Constrain, and close the GUI."
-                    )
-                    % (mol.filename, self.index)
-                )
-
-                GUI(images=Images([atoms]), show_bonds=True).run()
-
-                if atoms.constraints != []:
-                    if len(list(atoms.constraints[0].get_indices())) == 1:
-                        if list(atoms.constraints[0].get_indices())[0] in neighbors_indices:
-                            self.leaving_group_index = list(atoms.constraints[0].get_indices())[0]
-                            break
-                        else:
-                            print(
-                                "\nSeems that the atom you selected is not bonded to the reactive center or is the reactive atom itself.\nThis is probably an error, please try again."
-                            )
-                            atoms.constraints = []
-                    else:
-                        print("\nPlease only select one leaving group atom.")
-                        atoms.constraints = []
-
-        return self.others[neighbors_indices.index(self.leaving_group_index)]
-
-
-class Ether:
-    def __repr__(self):
+class Ether(RAtom):
+    def __repr__(self) -> str:
         return "Ether"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -329,13 +323,24 @@ class Ether:
             # two vectors defining the position of the two orbital lobes centers
 
 
-class Ketone:
-    def __repr__(self):
+class Ketone(RAtom):
+    def __repr__(self) -> str:
         return f"Ketone ({self.subtype})"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
         self.subtype = "pre-init"
@@ -420,13 +425,24 @@ class Ketone:
             # two vectors defining the position of the two orbital lobes centers
 
 
-class Imine:
-    def __repr__(self):
+class Imine(RAtom):
+    def __repr__(self) -> str:
         return "Imine"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -460,12 +476,23 @@ class Imine:
             # two vectors defining the position of the two orbital lobes centers
 
 
-class Sp_or_carbene:
-    def __repr__(self):
+class Sp_or_carbene(RAtom):
+    def __repr__(self) -> str:
         return self.type
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -588,12 +615,23 @@ class Sp_or_carbene:
                 # three vectors defining the position of the two p lobes and main sp2 lobe centers
 
 
-class Metal:
-    def __repr__(self):
+class Metal(RAtom):
+    def __repr__(self) -> str:
         return "Metal"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         self.index = i
+
+        if not hasattr(self, "cumnum"):
+            self.cumnum: int | MaybeNone = None
+
         self.symbol = mol.atoms[i]
         neighbors_indices = list(mol.graph.neighbors(i))
 
@@ -629,16 +667,24 @@ class Metal:
             self.center = (self.orb_vecs * orb_dim) + self.coord
 
 
-class SingleAtom:
-    def __repr__(self):
+class SingleAtom(RAtom):
+    def __repr__(self) -> str:
         return "SingleAtom"
 
-    def init(self, mol, i, update=False, orb_dim=None, conf=0) -> None:
+    def init(
+        self,
+        mol: Hypermolecule,
+        i: int,
+        update: bool = False,
+        orb_dim: float | None = None,
+        conf: int = 0,
+    ) -> None:
         """ """
         self.index = i
+        self.cumnum: int | MaybeNone = None
         self.symbol = mol.atoms[i]
 
-        self.neighbors_symbols = []
+        self.neighbors_symbols: list[str] = []
         self.coord = mol.coords[conf][i]
         self.other = mol.coords[conf][i] + np.array([0, 0, 1], dtype=float)
         self.orb_vecs = np.array([normalize(self.coord - self.other)])
@@ -650,7 +696,7 @@ class SingleAtom:
                 orb_dim = orb_dim_dict.get(key)
 
                 if orb_dim is None:
-                    orb_dim = norm_of(self.coord - self.other)
+                    orb_dim = float(np.linalg.norm(self.coord - self.other))
                     # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using the bonding distance ({round(orb_dim, 3)} A).')
 
             self.center = orb_dim * self.orb_vecs + self.coord
@@ -711,11 +757,10 @@ metals = (
 
 for metal in metals:
     for bonds in range(1, 9):
-        bonds = str(bonds)
-        atom_type_dict[metal + bonds] = Metal
+        atom_type_dict[metal + str(bonds)] = Metal
 
 
-def get_atom_type(graph, index, override=None):
+def get_atom_type(graph: Graph, index: int, override: str | None = None) -> type[RAtom]:
     """Returns the appropriate class to represent
     the atom with the given index on the graph.
     If override is not None, returns the class
