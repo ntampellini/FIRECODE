@@ -26,7 +26,7 @@ from __future__ import annotations
 import time
 from shutil import which
 from subprocess import CalledProcessError
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,12 +38,11 @@ from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
 from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
-from firecode.mep_relaxer import ase_mep_relax
 from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
-from firecode.typing_ import Array2D_int, Array3D_float
+from firecode.typing_ import Array2D_float, Array3D_float, MaybeNone
 from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
 
 if TYPE_CHECKING:
@@ -103,48 +102,6 @@ def operate(input_string: str, embedder: Embedder) -> str:
         pka_routine(filename, embedder)
         outname = filename
 
-    elif "mep_relax>" in input_string:
-        data = read_xyz(filename)
-
-        # can implement a smart safety feature that is
-        # disabled when some bonds have to be let free to break
-        no_bonds_breaking = True
-
-        if no_bonds_breaking:
-            mep, _, exit_status = ase_mep_relax(
-                embedder,
-                data.atoms,
-                data.coords,
-                title=embedder.stamp + "_safe",
-                n_images=embedder.options.neb.n_images,
-                logfunction=embedder.log,
-                write_plot=True,
-                verbose_print=True,
-                safe=True,
-            )
-
-        else:
-            mep = data.coords
-            exit_status = True
-
-        if exit_status:
-            if no_bonds_breaking:
-                print("--> Completed safe optimization, relaxing bond distance constraints.")
-
-            ase_mep_relax(
-                embedder,
-                data.atoms,
-                mep,
-                title=embedder.stamp,
-                n_images=embedder.options.images if hasattr(embedder.options, "images") else None,
-                logfunction=embedder.log,
-                write_plot=True,
-                verbose_print=True,
-                safe=True,
-            )
-
-        embedder.normal_termination()
-
     else:
         op = input_string.split(">", maxsplit=1)[0]
         raise Exception(f"Operator {op} not recognized.")
@@ -172,7 +129,7 @@ def csearch_operator(
             + "an individual search from each conformer (might be time-consuming)."
         )
 
-    conformers = []
+    conformers: list[Array2D_float] = []
 
     for i, coords in enumerate(data.coords):
         opt_coords = coords
@@ -198,17 +155,14 @@ def csearch_operator(
 
         conformers.extend(conf_batch)
 
-    conformers = np.concatenate(conformers)
-    # batch_size = conformers.shape[1]
-
-    conformers = conformers.reshape(-1, data.atomnos.shape[0], 3)
+    conformers_array = np.concatenate(conformers).reshape(-1, data.atomnos.shape[0], 3)
     # merging structures from each run in a single array
 
     print(f"Writing conformers to file...{' ' * 10}", end="\r")
 
     confname = filename[:-4] + "_confs.xyz"
     with open(confname, "w") as f:
-        for i, conformer in enumerate(conformers):
+        for i, conformer in enumerate(conformers_array):
             write_xyz(data.atoms, conformer, f, title=f"Generated conformer {i}")
 
     print(f"{' ' * 30}", end="\r")
@@ -219,7 +173,7 @@ def csearch_operator(
 
 
 def opt_operator(
-    filename: str, embedder: Embedder, logfunction: Callable[[str], None] = None
+    filename: str, embedder: Embedder, logfunction: Callable[[str], None] | None = None
 ) -> str:
     """ """
 
@@ -252,11 +206,10 @@ def opt_operator(
         + len(constrained_angles_indices)
         + len(constrained_dihedrals_indices)
     )
-    logfunction(
-        f"    {n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}"
-    )
-
-    energies = []
+    if logfunction is not None:
+        logfunction(
+            f"    {n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}"
+        )
 
     t_start = time.perf_counter()
 
@@ -270,9 +223,9 @@ def opt_operator(
         mult=embedder.options.mult,
         constrained_indices=constrained_indices,
         constrained_distances=constrained_distances,
-        constrained_angles_indices=constrained_angles_indices,
+        constrained_angles_indices=list(constrained_angles_indices),
         constrained_angles_values=constrained_angles_values,
-        constrained_dihedrals_indices=constrained_dihedrals_indices,
+        constrained_dihedrals_indices=list(constrained_dihedrals_indices),
         constrained_dihedrals_values=constrained_dihedrals_values,
         loadstring="Optimizing conformer",
         logfunction=lambda s: embedder.log(s, p=False),
@@ -309,8 +262,9 @@ def opt_operator(
                 title=f"Optimized conformer {i} - E(kcal/mol) = {energies[i]:.3f} - Rel. E. = {rel_energies[i]:.3f} kcal/mol",
             )
 
-    logfunction(s + "\n")
-    logfunction(f"Wrote {len(conformers)} optimized structures to {optname}\n")
+    if logfunction is not None:
+        logfunction(s + "\n")
+        logfunction(f"Wrote {len(conformers)} optimized structures to {optname}\n")
 
     return optname
 
@@ -466,6 +420,8 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
     with open(f"{title}_TS.xyz", "w") as f:
         write_xyz(data.atoms, ts_coords, f, title="NEB TS - see log for relative energies")
 
+    return f"{title}_TS.xyz"
+
 
 def crest_search_operator(filename: str, embedder: Embedder) -> str:
     """Run a CREST metadynamic conformational search and return the output filename."""
@@ -589,7 +545,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
         )
 
     t_start = time.perf_counter()
-    conformers = []
+    conformers: list[Array2D_float] = []
     for i, coords in enumerate(mol.coords):
         t_start_conf = time.perf_counter()
         try:
@@ -691,7 +647,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
     return f"{mol.rootname}_crest_confs.xyz"
 
 
-def scan_operator(filename: str, embedder: Embedder) -> str:
+def scan_operator(filename: str, embedder: Embedder) -> str | MaybeNone:
     """Scan operator dispatcher:
     2 indices: distance_scan
     4 indices: dihedral_scan
@@ -700,15 +656,18 @@ def scan_operator(filename: str, embedder: Embedder) -> str:
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
 
     assert len(mol.coords) == 1, "The scan> operator works on a single .xyz geometry."
-    assert len(mol.reactive_indices) in (2, 4), "The scan> operator needs two or four indices" + (
-        f"({len(mol.reactive_indices)} were provided)"
-    )
 
     if len(mol.reactive_indices) == 2:
         return distance_scan(embedder)
 
     elif len(mol.reactive_indices) == 4:
-        return dihedral_scan(embedder)
+        dihedral_scan(embedder)
+        return None
+
+    else:
+        raise InputError(
+            f"The scan> operator needs two or four indices ({len(mol.reactive_indices)} were provided)"
+        )
 
 
 def distance_scan(embedder: Embedder) -> str:
@@ -724,7 +683,7 @@ def distance_scan(embedder: Embedder) -> str:
     coords = mol.coords[0]
 
     # getting the start distance between scan indices and start energy
-    d = np.linalg.norm(coords[i1] - coords[i2])
+    d = float(np.linalg.norm(coords[i1] - coords[i2]))
 
     # deciding if moving atoms closer or further apart based on distance
     bonds = list(mol.graph.edges)
@@ -776,7 +735,7 @@ def distance_scan(embedder: Embedder) -> str:
             coords,
             calculator=embedder.options.calculator,
             ase_calc=embedder.dispatcher.ase_calc,
-            constrained_indices=np.array([mol.reactive_indices]),
+            constrained_indices=[list(mol.reactive_indices)],
             constrained_distances=(d,),
             solvent=embedder.options.solvent,
             charge=embedder.options.charge,
@@ -898,7 +857,7 @@ def crest_is_installed() -> bool:
     return which("crest") is not None
 
 
-def _get_internal_constraints(filename: str, embedder: Embedder) -> Array2D_int:
+def _get_internal_constraints(filename: str, embedder: Embedder) -> list[tuple[int, int]]:
     """Returns an array with distance constraints indices."""
     mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
     # get embedder,objects index of molecule to get internal constraints of
@@ -908,4 +867,4 @@ def _get_internal_constraints(filename: str, embedder: Embedder) -> Array2D_int:
         if isinstance(tgt, tuple):
             out.append(tgt)
 
-    return np.array(out)
+    return out

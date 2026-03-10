@@ -1,17 +1,25 @@
+from __future__ import annotations
+
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from itertools import permutations
 from shutil import copy
+from typing import TYPE_CHECKING
 
 import numpy as np
 from prism_pruner.utils import time_to_string
 
 from firecode.errors import InputError, ZeroCandidatesError
-from firecode.utils import HiddenPrints, NewFolderContext, cartesian_product, timing_wrapper
+from firecode.typing_ import Array2D_int, Array3D_float
+from firecode.utils import HiddenPrints, NewFolderContext, cartesian_product, timing_decorator
+
+if TYPE_CHECKING:
+    from firecode.embedder import Embedder
+    from firecode.embedder_options import Options
 
 
-def multiembed_dispatcher(embedder):
+def multiembed_dispatcher(embedder: Embedder) -> Array3D_float:
     """Calls the appropriate multiembed subfunction
     based on embedder attributes.
     """
@@ -21,7 +29,7 @@ def multiembed_dispatcher(embedder):
     raise InputError("The multiembed requested is currently unavailable.")
 
 
-def multiembed_bifunctional(embedder):
+def multiembed_bifunctional(embedder: Embedder) -> Array3D_float:
     """Run multiple concurrent bifunctional cyclical embeds
     exploring all relative arrangement of each pair of
     reactive_indices between the two molecules.
@@ -50,11 +58,10 @@ def multiembed_bifunctional(embedder):
         # for each arrangement, perform a dedicated embed
         for i, arrangement in enumerate(arrangements):
             process = executor.submit(
-                timing_wrapper,
                 run_child_embedder,
                 mol1.filename,
                 mol2.filename,
-                constrained_indices=arrangement,
+                constrained_indices=np.array(arrangement),
                 i=i,
                 options=embedder.options,
             )
@@ -72,8 +79,6 @@ def multiembed_bifunctional(embedder):
                 constr_ids.append(constrained_indices)
                 embedder.write_structures("embedded", energies=False)
 
-    structures_out = np.concatenate(structures_out)
-
     embedder.log(
         f"\n--> Multiembed completed: generated {len(structures_out)} candidates in {time_to_string(time.perf_counter() - embedder.t_start_run, verbose=True)}."
     )
@@ -81,22 +86,23 @@ def multiembed_bifunctional(embedder):
     # only get interaction constraints, as the internal will be added later during refinement
     embedder.constrained_indices = np.concatenate(constr_ids)
 
-    return structures_out
+    return np.concatenate(structures_out)
 
 
+@timing_decorator()
 def run_child_embedder(
     mol1_name: str,
     mol2_name: str,
-    constrained_indices,
+    constrained_indices: Array2D_int,
     i: int,
-    options,
-):
+    options: Options,
+) -> tuple[Array3D_float, Array2D_int]:
     from firecode.embedder import Embedder, RunEmbedding
 
     foldername = f"firecode_embed{i + 1}"
     (ix_1, ix_2), (iy_1, iy_2) = constrained_indices
 
-    parent_dir = os.getcwd()
+    # parent_dir = os.getcwd()
 
     # work in a dedicated folder
     with NewFolderContext(foldername, delete_after=not options.debug):
@@ -135,7 +141,7 @@ def run_child_embedder(
                 child_embedder.write_structures("unoptimized", energies=False)
 
             except ZeroCandidatesError:
-                child_embedder.structures = []
+                child_embedder.structures = np.array([], dtype=float)
 
             child_embedder.log(
                 f"\n--> Child process terminated ({time_to_string(time.perf_counter() - child_embedder.t_start_run, verbose=True)})"

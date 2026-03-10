@@ -26,14 +26,25 @@ import os
 import re
 import shutil
 import sys
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import rmtree
 from subprocess import getoutput
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional, ParamSpec, Self, TypeVar
+from time import perf_counter
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterable,
+    Optional,
+    ParamSpec,
+    Self,
+    Sequence,
+    TypeVar,
+)
 
 import numpy as np
+from numpy.typing import NDArray
 from prism_pruner.algebra import rot_mat_from_pointer
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import rmsd_and_max
@@ -42,14 +53,7 @@ from scipy.spatial.distance import cdist
 from firecode.algebra import count_clashes
 from firecode.errors import TriangleError
 from firecode.pt import pt
-from firecode.typing_ import (
-    Array1D_float,
-    Array1D_int,
-    Array1D_str,
-    Array2D_float,
-    Array3D_float,
-    IntIterable,
-)
+from firecode.typing_ import Array1D_float, Array1D_int, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import EH_TO_KCAL
 
 if TYPE_CHECKING:
@@ -290,8 +294,9 @@ def loadbar(
         print()
 
 
-def cartesian_product(*arrays: Iterable[Any]) -> np.ndarray:
-    return np.stack(np.meshgrid(*arrays), -1).reshape(-1, len(arrays))
+def cartesian_product(*arrays: Iterable[Any]) -> NDArray[Any]:
+    arrays_converted = [np.asarray(arr) for arr in arrays]
+    return np.stack(np.meshgrid(*arrays_converted), -1).reshape(-1, len(arrays))
 
 
 def rotation_matrix_from_vectors(vec1: Array1D_float, vec2: Array1D_float) -> Array2D_float:
@@ -322,7 +327,7 @@ def rotation_matrix_from_vectors(vec1: Array1D_float, vec2: Array1D_float) -> Ar
     return np.eye(3)
 
 
-def polygonize(lengths: Array1D_float) -> np.ndarray:
+def polygonize(lengths: Array1D_float) -> NDArray[Any]:
     """Returns coordinates for the polygon vertices used in cyclical TS construction,
     as a list of vector couples specifying starting and ending point of each pivot
     vector. For bimolecular TSs, returns vertices for the centered superposition of
@@ -429,7 +434,7 @@ def molecule_check(
 def scramble_check(
     embedded_atoms: Array1D_str,
     embedded_structure: Array2D_float,
-    excluded_atoms: IntIterable,
+    excluded_atoms: Iterable[int],
     mols_graphs: Iterable[Graph],
     max_newbonds: int = 0,
     logfunction: Callable[[str], None] | None = None,
@@ -514,23 +519,57 @@ def str_to_var(
     return string
 
 
-def timing_wrapper(
-    function: Callable[P, R], *args: Any, payload: T | None = None, **kwargs: Any
-) -> tuple[R, float] | tuple[R, T, float]:
+def timing_wrapper(function: Callable[P, R], *args: Any, **kwargs: Any) -> tuple[R, float]:
     """Generic function wrapper that appends the
     execution time in seconds at the end of return.
-    If payload is not None, appends it at the end
-    of the function return, before the elapsed time.
-
     """
-    start_time = time.perf_counter()
+    start_time = perf_counter()
     func_return = function(*args, **kwargs)
-    elapsed = time.perf_counter() - start_time
+    elapsed = perf_counter() - start_time
 
-    if payload is None:
-        return func_return, elapsed
+    return func_return, elapsed
 
+
+def timing_wrapper_with_payload(
+    function: Callable[P, R], *args: Any, payload: T, **kwargs: Any
+) -> tuple[R, T, float]:
+    """Generic function wrapper that appends a specific payload and the
+    execution time in seconds at the end of return.
+    """
+    start_time = perf_counter()
+    func_return = function(*args, **kwargs)
+    elapsed = perf_counter() - start_time
     return func_return, payload, elapsed
+
+
+def timing_decorator() -> Callable[[Callable[P, R]], Callable[P, tuple[R, float]]]:
+    """Generic function wrapper that appends the
+    execution time in seconds at the end of return.
+    """
+
+    def decorator(func: Callable[P, R]) -> Callable[P, tuple[R, float]]:
+        def wrapper(*args: Any, **kwargs: Any) -> tuple[R, float]:
+            return timing_wrapper(func, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def timing_decorator_with_payload() -> Callable[
+    [Callable[P, R]], Callable[..., tuple[R, T, float]]
+]:
+    """Generic function decorator that appends a specific payload and the
+    execution time in seconds at the end of return.
+    """
+
+    def decorator(func: Callable[P, R]) -> Callable[..., tuple[R, T, float]]:
+        def wrapper(*args: Any, payload: T, **kwargs: Any) -> tuple[R, T, float]:
+            return timing_wrapper_with_payload(func, *args, payload=payload, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def saturation_check(atoms: Array1D_str, charge: int = 0) -> bool:
@@ -640,7 +679,10 @@ def rmsd_similarity(ref: Array2D_float, structures: Array3D_float, rmsd_thr: flo
 
 
 def compenetration_check(
-    coords: Array2D_float, ids: IntIterable | None = None, thresh: float = 1.5, max_clashes: int = 0
+    coords: Array2D_float,
+    ids: Sequence[int] | Array1D_int | None = None,
+    thresh: float = 1.5,
+    max_clashes: int = 0,
 ) -> bool:
     """coords: 3D molecule coordinates
     ids: 1D array with the number of atoms for each

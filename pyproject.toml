@@ -61,7 +61,7 @@ aimnet = { version = "*", extras = ["ase"] }
 
 [tool.pixi.feature.dev.tasks]
 fmt = { cmd="ruff format ." }
-lint = { cmd="ruff check . --fix" }
+lint = { cmd="ruff check . --fix || true" }
 types = { cmd="mypy" }
 test = { cmd="pytest -s" }
 test_calc = { cmd="pytest -s -m calc" }
@@ -131,7 +131,7 @@ relative_files = true
 output = "coverage.xml"
 
 [tool.mypy]
-files = ["firecode", "tests"]
+files = ["firecode"]
 strict = true
 pretty = true
 

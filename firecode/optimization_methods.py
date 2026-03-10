@@ -28,11 +28,10 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
 from ase.calculators.calculator import Calculator as ASECalculator
-from prism_pruner.pruner import prune_by_rmsd
+from prism_pruner.pruner import prune
 from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
-from firecode.calculators._orca import orca_opt
 from firecode.calculators._xtb import xtb_opt
 from firecode.settings import DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
@@ -48,7 +47,7 @@ class Opt_func_dispatcher:
     def __init__(self, calculator: str) -> None:
         """Init method."""
         self.opt_func = {
-            "ORCA": orca_opt,
+            "ORCA": ase_popt,
             "XTB": xtb_opt,
             "TBLITE": ase_popt,
             "UMA": ase_popt_with_alpb,
@@ -68,6 +67,9 @@ class Opt_func_dispatcher:
         if self.ase_calc is not None and not force_reload:
             pass
 
+        elif self.calculator == "ORCA":
+            self.ase_calc = self.load_orca_calc(method, solvent)
+
         elif self.calculator == "AIMNET2":
             self.ase_calc = self.load_aimnet2_calc(method)
 
@@ -86,6 +88,9 @@ class Opt_func_dispatcher:
             )
 
         return self.ase_calc
+
+    def load_orca_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
+        raise NotImplementedError("Open an issue on GitHub if you would like to use ORCA via ASE.")
 
     def load_aimnet2_calc(
         self, theory_level: str | None, logfunction: Callable[[str], None] | None = print
@@ -169,7 +174,7 @@ class Opt_func_dispatcher:
     ) -> ASECalculator:
         from firecode.calculators._ase_uma import get_uma_calc
 
-        self.uma_calc = get_uma_calc(method, logfunction=logfunction)
+        self.uma_calc = cast("ASECalculator", get_uma_calc(method, logfunction=logfunction))
         self.ase_calc = self.uma_calc
         return self.uma_calc
 
@@ -181,14 +186,14 @@ def optimize(
     method: str | None = None,
     maxiter: int | None = None,
     conv_thr: str = "tight",
-    constrained_indices: list[Sequence[int]] | None = None,
-    constrained_distances: list[float] | None = None,
-    constrained_dihedrals_indices: list[Sequence[int]] | None = None,
-    constrained_dihedrals_values: list[float] | None = None,
-    constrained_angles_indices: list[Sequence[int]] | None = None,
-    constrained_angles_values: list[float] | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
+    constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
+    constrained_angles_indices: Sequence[Sequence[int]] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
     mols_graphs: Sequence[Graph] | None = None,
-    procs: int = 1,
+    procs: int | None = 1,
     solvent: str | None = None,
     charge: int = 0,
     mult: int = 1,
@@ -230,17 +235,19 @@ def optimize(
         method = DEFAULT_LEVELS[calculator]
 
     if constrained_distances is not None:
-        assert len(constrained_distances) == len(constrained_indices), (
-            f"len(cd) = {len(constrained_distances)} != len(ci) = {len(constrained_indices)}"
+        len_ci = len(constrained_indices) if constrained_indices is not None else 0
+        assert len(constrained_distances) == len_ci, (
+            f"len(cd) = {len(constrained_distances)} != len(ci) = {len_ci}"
         )
-
-    constrained_indices = np.array(()) if constrained_indices is None else constrained_indices
 
     opt_func = dispatcher.opt_func
     t_start = time.perf_counter()
 
+    constrained_indices = constrained_indices or []
+    procs = procs or 1
+
     # success checks that calculation had a normal termination
-    opt_coords, energy, success = opt_func(
+    opt_coords, energy, success = opt_func(  # type: ignore[operator]
         atoms,
         coords,
         constrained_indices=constrained_indices,
@@ -270,7 +277,11 @@ def optimize(
             # check boolean ensures that no scrambling occurred during the optimization
             if mols_graphs is not None:
                 success = scramble_check(
-                    atoms, opt_coords, constrained_indices, mols_graphs, max_newbonds=max_newbonds
+                    atoms,
+                    opt_coords,
+                    np.array(constrained_indices),
+                    mols_graphs,
+                    max_newbonds=max_newbonds,
                 )
             else:
                 success = molecule_check(atoms, coords, opt_coords, max_newbonds=max_newbonds)
@@ -317,12 +328,12 @@ def refine_structures(
     procs: int | None,
     charge: int = 0,
     mult: int = 1,
-    constrained_indices: list[Sequence[int]] | None = None,
-    constrained_distances: list[float] | None = None,
-    constrained_dihedrals_indices: list[Sequence[int]] | None = None,
-    constrained_dihedrals_values: list[float] | None = None,
-    constrained_angles_indices: list[Sequence[int]] | None = None,
-    constrained_angles_values: list[float] | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
+    constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
+    constrained_angles_indices: Sequence[Sequence[int]] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
     solvent: str | None = None,
     loadstring: str = "",
     logfunction: Callable[[str], None] | None = None,
@@ -332,7 +343,7 @@ def refine_structures(
     """Refine a set of structures - optimize them and remove similar
     ones and high energy ones (>20 kcal/mol above lowest)
     """
-    energies = []
+    energies = np.empty(len(structures), dtype=float)
     for i, conformer in enumerate(deepcopy(structures)):
         loadbar(i, len(structures), f"{loadstring} {i + 1}/{len(structures)} ")
 
@@ -360,19 +371,18 @@ def refine_structures(
 
         if success:
             structures[i] = opt_coords
-            energies.append(energy)
+            np.append(energies, energy)
         else:
-            energies.append(1e10)
+            np.append(energies, 1e10)
 
     loadbar(len(structures), len(structures), f"{loadstring} {len(structures)}/{len(structures)} ")
-    energies = np.array(energies)
-
-    # remove similar ones
-    structures, mask = prune_by_rmsd(structures, atoms)
-    energies = energies[mask]
 
     # remove high energy ones
     mask = (energies - np.min(energies)) < 20
     structures, energies = structures[mask], energies[mask]
+
+    # remove similar ones
+    structures, mask = prune(structures, atoms, energies=energies, max_dE=2.0)
+    energies = energies[mask]
 
     return structures, energies

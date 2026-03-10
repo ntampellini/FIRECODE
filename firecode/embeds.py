@@ -23,9 +23,10 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Iterable, Sequence, cast
+from typing import TYPE_CHECKING, Any, Iterable, Sequence, Union, cast
 
 import numpy as np
+from numpy.typing import NDArray
 from prism_pruner.algebra import normalize, rot_mat_from_pointer, vec_angle
 
 from firecode.algebra import align_vec_pair
@@ -85,8 +86,10 @@ def string_embed(embedder: Embedder) -> Array3D_float:
     embedder.log(f"\n--> Performing string embed ({pretty_num(embedder.candidates)} candidates)")
 
     conf_number = [len(mol.coords) for mol in embedder.objects]
-    conf_indices = cartesian_product(*[np.array(range(i)) for i in conf_number])
-    # (n,2) vectors where the every element is the conformer index for that molecule
+    conf_indices: list[Array1D_int] = list(
+        cartesian_product(*[np.array(range(i)) for i in conf_number])
+    )
+    # (n,2) vectors with pair of indices for each molecule
 
     r_atoms_centers_indices = cartesian_product(
         *[np.arange(len(mol.get_centers(0)[0])) for mol in embedder.objects]
@@ -155,7 +158,7 @@ def string_embed(embedder: Embedder) -> Array3D_float:
     return np.array(poses)
 
 
-def _get_string_constrained_indices(embedder: Embedder, n: int) -> np.ndarray:
+def _get_string_constrained_indices(embedder: Embedder, n: int) -> NDArray[Any]:
     """Get constrained indices referring to the emebdded structures, repeated n times.
     :params n: int
     :return: list of lists consisting in atomic pairs to be constrained.
@@ -253,8 +256,8 @@ def cyclical_embed(embedder: Embedder, max_norm_delta: float = 5.0) -> Array3D_f
     def _adjust_directions(
         embedder: Embedder,
         directions: Array2D_float,
-        constrained_indices: list[list[int]],
-        triangle_vectors: np.ndarray,
+        constrained_indices: Sequence[Sequence[int]],
+        triangle_vectors: Array3D_float,
         pivots: list[Pivot],
         conf_ids: list[int],
     ) -> Array2D_float:
@@ -399,7 +402,7 @@ def cyclical_embed(embedder: Embedder, max_norm_delta: float = 5.0) -> Array3D_f
 
         ############### choose the one with the best alignment, that is minor cost
 
-        cost, angles, directions = sorted(candidates, key=lambda x: x[0])[0]
+        cost, angles, directions = sorted(candidates, key=lambda x: x[0])[0]  # type: ignore[assignment]
 
         return np.array(directions)
 
@@ -468,7 +471,7 @@ def cyclical_embed(embedder: Embedder, max_norm_delta: float = 5.0) -> Array3D_f
                 # get indices of atoms that face each other
 
                 if not embedder.pairings_table or all(
-                    (pair in ids) or (pair in embedder.internal_constraints)
+                    (pair in ids) or tuple_in_collection(pair, embedder.internal_constraints)
                     for pair in embedder.pairings_table.values()
                 ):
                     # ensure that the active arrangement has all the pairings that the user specified
@@ -608,40 +611,38 @@ def _fast_bimol_rigid_cyclical_embed(
                 prefix="Embedding structures ",
             )
 
+            # getting the active pivot for each molecule for this run
             pivots = [
                 embedder.objects[m].pivots[conf_ids[m]][pi[m]]
                 for m, _ in enumerate(embedder.objects)
             ]
-            # getting the active pivot for each molecule for this run
 
-            norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
             # getting the pivots norms to feed into the polygonize function
+            norms = np.linalg.norm(np.array([p.pivot for p in pivots]), axis=1)
 
+            # skip if norms are too different
             if abs(norms[0] - norms[1]) > max_norm_delta:
                 continue
-            # skip if norms are too different
 
             polygon_vectors = polygonize(norms)
 
-            directions = np.array([[0, 1, 0], [0, -1, 0]])
             # directions to orient the molecules toward, orthogonal to each vec_pair
+            directions = np.array([[0, 1, 0], [0, -1, 0]])
 
+            # getting vertices to embed molecules with and iterating over start/end points
             for v, vecs in enumerate(polygon_vectors):
-                # getting vertices to embed molecules with and iterating over start/end points
-
-                ids = _get_cyclical_reactive_indices(embedder, pivots, v)
                 # get indices of atoms that face each other
+                ids = _get_cyclical_reactive_indices(embedder, pivots, v)
 
+                # ensure that the active arrangement has all the pairings that the user specified
                 if not embedder.pairings_table or all(
-                    (pair in ids) or (pair in embedder.internal_constraints)
+                    (pair in ids) or tuple_in_collection(pair, embedder.internal_constraints)
                     for pair in embedder.pairings_table.values()
                 ):
-                    # ensure that the active arrangement has all the pairings that the user specified
-
-                    angular_poses: list[Array2D_float] = []
                     # initialize a container for the poses generated for this combination of conformations,
                     # pairing and polygon_vectors orientation. These will be used not to generate poses
                     # that are too similar to each other.
+                    angular_poses: list[Array2D_float] = []
 
                     for angles in embedder.systematic_angles:
                         angles = cast("Sequence[float]", angles)
@@ -653,13 +654,13 @@ def _fast_bimol_rigid_cyclical_embed(
                             start, end = vec_pair
                             angle = angles[i]
 
+                            # coordinates for the reactive atoms in this run
                             reactive_coords = embedder.objects[i].coords[conf_ids[i]][
                                 embedder.objects[i].reactive_indices
                             ]
-                            # coordinates for the reactive atoms in this run
 
-                            atomic_pivot_mean = np.mean(reactive_coords, axis=0)
                             # mean position of the atoms active in this run
+                            atomic_pivot_mean = np.mean(reactive_coords, axis=0)
 
                             mol_direction = pivots[i].meanpoint - atomic_pivot_mean
                             if np.all(mol_direction == 0.0):
@@ -741,7 +742,7 @@ def _fast_bimol_rigid_cyclical_embed(
 
 def _get_cyclical_reactive_indices(
     embedder: Embedder, pivots: list[Pivot], n: int
-) -> list[list[int]]:
+) -> list[tuple[int, int]]:
     """:params n: index of the n-th disposition of vectors yielded by the polygonize function.
     :return: list of index couples, to be constrained during the partial optimization.
     """
@@ -756,7 +757,7 @@ def _get_cyclical_reactive_indices(
         swaps: list[tuple[int, ...]] = [(0, 0), (0, 1)]
 
         oriented = [orient(i, ids, n) for i, ids in enumerate(cumulative_pivots_ids)]
-        couples = [[oriented[0][0], oriented[1][0]], [oriented[0][1], oriented[1][1]]]
+        couples = [(oriented[0][0], oriented[1][0]), (oriented[0][1], oriented[1][1])]
 
         return couples
 
@@ -764,11 +765,11 @@ def _get_cyclical_reactive_indices(
 
     oriented = [orient(i, ids, n) for i, ids in enumerate(cumulative_pivots_ids)]
     couples = [
-        [oriented[0][1], oriented[1][0]],
-        [oriented[1][1], oriented[2][0]],
-        [oriented[2][1], oriented[0][0]],
+        (oriented[0][1], oriented[1][0]),
+        (oriented[1][1], oriented[2][0]),
+        (oriented[2][1], oriented[0][0]),
     ]
-    couples = [sorted(c) for c in couples]
+    couples = [tuple(sorted(c)) for c in couples]  # type: ignore[misc]
 
     return couples
 
@@ -780,49 +781,8 @@ def monomolecular_embed(embedder: Embedder) -> Array3D_float:
     assert len(embedder.objects) == 1
     raise NotImplementedError("Deprecated feature.")
 
-    # embedder.log(f"\n--> Performing monomolecular embed ({embedder.candidates} candidates)")
 
-    # mol = embedder.objects[0]
-
-    # structures = []
-
-    # for c, _ in enumerate(mol.coords):
-    #     for p, pivot in enumerate(mol.pivots[c]):
-    #         loadbar(p, len(mol.pivots[c]), prefix="Bending structures ")
-
-    #         traj = f"bend_{p}_monomol" if embedder.options.debug else None
-
-    #         bent_mol = ase_bend(
-    #             embedder,
-    #             mol,
-    #             c,
-    #             pivot,
-    #             1,  # bend until we are within 1 A to
-    #             # the target distance between atoms
-    #             title=f"{mol.rootname} - pivot {p}",
-    #             traj=traj,
-    #             check=False,  # avoid returning the non-bent molecule,
-    #             # even if this means having it scrambled
-    #         )
-
-    #         for conformer in bent_mol.coords:
-    #             structures.append(conformer)
-
-    # loadbar(1, 1, prefix="Bending structures ")
-
-    # embedder.structures = np.array(structures)
-    # embedder.atomnos = mol.atomnos
-    # embedder.atoms = mol.atoms
-    # embedder.energies = np.zeros(len(embedder.structures))
-    # embedder.exit_status = np.zeros(len(embedder.structures), dtype=bool)
-    # embedder.graphs = [mol.graph]
-
-    # embedder.constrained_indices = _get_monomolecular_reactive_indices(embedder)
-
-    # return embedder.structures
-
-
-def _get_monomolecular_reactive_indices(embedder: Embedder) -> Array1D_int:
+def _get_monomolecular_reactive_indices(embedder: Embedder) -> Array2D_int:
     """ """
     if embedder.pairings_table:
         return np.array(
@@ -835,9 +795,9 @@ def _get_monomolecular_reactive_indices(embedder: Embedder) -> Array1D_int:
     return np.array([[] for _ in embedder.structures], dtype=int)
 
 
-def get_embed(mols: Iterable[Hypermolecule], conf_ids: list[int]) -> Array3D_float:
+def get_embed(mols: Iterable[Hypermolecule], conf_ids: Iterable[int]) -> Array3D_float:
     """mols: iterable of Hypermolecule objects
-    conf_ids: list of conformer indices for each mol
+    conf_ids: iterable of conformer indices for each mol
 
     Returns an np.array with the coordinates
     of every molecule as a concatenated array.
@@ -845,3 +805,12 @@ def get_embed(mols: Iterable[Hypermolecule], conf_ids: list[int]) -> Array3D_flo
     return np.concatenate(
         [(mol.rotation @ mol.coords[c].T).T + mol.position for mol, c in zip(mols, conf_ids)]
     )
+
+
+def tuple_in_collection(
+    tup: tuple[int, int], collection: Union[list[tuple[int, int]], Array2D_int]
+) -> bool:
+    """Check if tuple is in a list or numpy array."""
+    if isinstance(collection, np.ndarray):
+        collection = collection.tolist()
+    return tup in collection

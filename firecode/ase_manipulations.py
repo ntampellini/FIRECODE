@@ -514,15 +514,15 @@ def ase_neb(
         ase_ts_guess = Atoms(atoms, positions=ts_guess)
 
         images_1 = (
-            [first] + [first.copy() for _ in range(round((n_images - 3) / 2))] + [ase_ts_guess]
-        )  # type: ignore[no-untyped-call]
+            [first] + [first.copy() for _ in range(round((n_images - 3) / 2))] + [ase_ts_guess]  # type: ignore[no-untyped-call]
+        )
         interp_1 = DyNEB(images_1)  # type: ignore[no-untyped-call]
         interp_1.interpolate(method="idpp")  # type: ignore[no-untyped-call]
 
         images_2 = (
             [ase_ts_guess]
-            + [last.copy() for _ in range(n_images - len(interp_1.images) - 1)]
-            + [last]  # type: ignore[no-untyped-call]
+            + [last.copy() for _ in range(n_images - len(interp_1.images) - 1)]  # type: ignore[no-untyped-call]
+            + [last]
         )
         interp_2 = DyNEB(images_2)  # type: ignore[no-untyped-call]
         interp_2.interpolate(method="idpp")  # type: ignore[no-untyped-call]
@@ -835,12 +835,12 @@ def ase_popt(
     method: str | None = None,
     add_alpb_solvation: bool = False,
     solvent: str | None = None,
-    constrained_indices: list[Sequence[int]] | None = None,
-    constrained_distances: list[float] | None = None,
-    constrained_dihedrals_indices: list[Sequence[int]] | None = None,
-    constrained_dihedrals_values: list[float] | None = None,
-    constrained_angles_indices: list[Sequence[int]] | None = None,
-    constrained_angles_values: list[float] | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
+    constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
+    constrained_angles_indices: Sequence[Sequence[int]] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
     ase_constraints: list[ASEConstraint] | None = None,
     maxiter: int | None = None,
     conv_thr: str = "tight",
@@ -877,30 +877,41 @@ def ase_popt(
     if constrained_indices is not None:
         for i, c in enumerate(constrained_indices):
             i1, i2 = c
-            tgt_dist = (
-                constrained_distances[i]
-                if constrained_distances is not None
-                else float(np.linalg.norm(coords[i1] - coords[i2]))
+            tgt_dist = cast(
+                "float",
+                (
+                    constrained_distances[i]
+                    if constrained_distances is not None and constrained_distances[i] is not None
+                    else float(np.linalg.norm(coords[i1] - coords[i2]))
+                ),
             )
             constraints.append(Spring(i1, i2, tgt_dist))
 
     if constrained_angles_indices is not None:
         for i, c in enumerate(constrained_angles_indices):
             i1, i2, i3 = c
-            tgt_angle = (
-                constrained_angles_values[i]
-                if constrained_angles_values is not None
-                else point_angle(coords[i1], coords[i2], coords[i3])
+            tgt_angle = cast(
+                "float",
+                (
+                    constrained_angles_values[i]
+                    if constrained_angles_values is not None
+                    and constrained_angles_values[i] is not None
+                    else point_angle(coords[i1], coords[i2], coords[i3])
+                ),
             )
             constraints.append(PlanarAngleSpring(i1, i2, i3, tgt_angle))
 
     if constrained_dihedrals_indices is not None:
         for i, c in enumerate(constrained_dihedrals_indices):
             i1, i2, i3, i4 = c
-            tgt_angle = (
-                constrained_dihedrals_values[i]
-                if constrained_dihedrals_values is not None
-                else dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
+            tgt_angle = cast(
+                "float",
+                (
+                    constrained_dihedrals_values[i]
+                    if constrained_dihedrals_values is not None
+                    and constrained_dihedrals_values[i] is not None
+                    else dihedral((coords[i1], coords[i2], coords[i3], coords[i4]))
+                ),
             )
             constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
 
@@ -1038,7 +1049,7 @@ def ase_vib(
     ase_atoms = Atoms(atoms, positions=coords)
     ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge=charge, mult=mult)
 
-    ase_calc.verbosity = 0
+    ase_calc.verbosity = 0  # type: ignore[attr-defined]
     ase_atoms.calc = ase_calc
 
     vib = Vibrations(ase_atoms, delta=0.005)  # type: ignore[no-untyped-call]

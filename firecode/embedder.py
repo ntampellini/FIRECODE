@@ -35,9 +35,10 @@ from getpass import getuser
 from importlib.metadata import version
 from itertools import groupby
 from string import ascii_lowercase
-from typing import TYPE_CHECKING, Any, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 
 import numpy as np
+from numpy.typing import NDArray
 from prism_pruner.algebra import dihedral
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.pruner import prune_by_moment_of_inertia, prune_by_rmsd, prune_by_rmsd_rot_corr
@@ -47,7 +48,6 @@ from psutil import virtual_memory
 
 from firecode.algebra import count_clashes, point_angle
 from firecode.ase_manipulations import Constraint
-from firecode.calculators._xtb import xtb_opt, xtb_pre_opt
 from firecode.embedder_options import Options, OptionSetter, keywords_dict
 from firecode.embeds import (
     _get_monomolecular_reactive_indices,
@@ -73,7 +73,8 @@ from firecode.utils import (
     saturation_check,
     scramble_check,
     str_to_var,
-    timing_wrapper,
+    timing_decorator,
+    timing_decorator_with_payload,
     write_xyz,
 )
 
@@ -82,7 +83,7 @@ if TYPE_CHECKING:
 
 from typing import Iterable
 
-from firecode.typing_ import Array1D_bool, Array1D_float, Array2D_float
+from firecode.typing_ import Array1D_bool, Array1D_float, Array2D_float, MaybeNone
 from firecode.units import R
 
 
@@ -140,7 +141,7 @@ class Embedder:
             self.options = Options()
             # initialize option subclass
 
-            self.embed: str | None = None
+            self.embed: str | MaybeNone = None
             self.warnings: list[str] = []
             # initialize embed type variable and warnings list
 
@@ -150,7 +151,7 @@ class Embedder:
             self.objects = [Hypermolecule(name, reactive_indices=c_ids) for name, c_ids in inp]
             # load designated molecular files
 
-            self.ids = np.array([len(mol.atoms) for mol in self.objects])
+            self.ids: Array1D_int | MaybeNone = np.array([len(mol.atoms) for mol in self.objects])
             # Compute length of each molecule coordinates. Used to divide molecules in TSs
 
             self.graphs = [mol.graph for mol in self.objects]
@@ -613,7 +614,7 @@ class Embedder:
 
             self.log()
 
-            pairings: list[list[int | str]] = []
+            pairings: list[tuple[int, str]] = []
             unlabeled: list[int] = []
 
             for fragment in fragments:
@@ -621,23 +622,23 @@ class Embedder:
                     unlabeled.append(int(fragment))
 
                 else:
-                    index, letters = ["".join(g) for _, g in groupby(fragment, str.isalpha)]
+                    index_, letters = ["".join(g) for _, g in groupby(fragment, str.isalpha)]
 
                     for letter in letters:
-                        pairings.append([int(index), letter])
+                        pairings.append((int(index_), letter))
 
             # adding distance constraints from mol.constraints
             for constr in self.objects[0].constraints:
                 if constr.type_ == "B":
                     i1, i2 = constr.indices
-                    used_letters = (p[1].lower() for p in pairings)
+                    used_letters = (letter.lower() for _, letter in pairings)
                     letter = next((_l for _l in ascii_lowercase if _l not in used_letters))
 
                     if constr.fixed:
                         letter = letter.upper()
 
-                    pairings.append([i1, letter])
-                    pairings.append([i2, letter])
+                    pairings.append((i1, letter))
+                    pairings.append((i2, letter))
 
             # appending pairing to dict before
             # calculating their cumulative index
@@ -645,7 +646,7 @@ class Embedder:
             # (refine> runs)
             for index, letter in pairings:
                 if self.pairings_dict[i].get(letter) is not None:
-                    prev = self.pairings_dict[i][letter]
+                    prev = cast("int", self.pairings_dict[i][letter])
                     self.pairings_dict[i][letter] = (prev, index)
 
                 else:
@@ -654,15 +655,15 @@ class Embedder:
             if i > 0:
                 cumulative_offset = int(sum(self.ids[:i]))
                 for z in pairings:
-                    z[0] += cumulative_offset
+                    z = (z[0] + cumulative_offset, z[1])
 
                 if unlabeled != []:
-                    for z in unlabeled:
-                        z += cumulative_offset
-                        unlabeled_list.append(z)
+                    for zz in unlabeled:
+                        unlabeled_list.append(zz + cumulative_offset)
+
             elif unlabeled != []:
-                for z in unlabeled:
-                    unlabeled_list.append(z)
+                for zz in unlabeled:
+                    unlabeled_list.append(zz)
 
             # getting the cumulative index rather than the molecule index
 
@@ -671,18 +672,17 @@ class Embedder:
         # parsed looks like [[1, 'a'], [9, 'a']] where numbers are
         # cumulative indices for embeddings
 
-        links = {j: [] for j in set([i[1] for i in parsed])}
+        # storing couples into a dictionary
+        links: dict[str, list[int]] = {j: [] for j in set([lett for _, lett in parsed])}
         for index, tag in parsed:
             links[tag].append(index)
-        # storing couples into a dictionary
 
-        pairings = sorted(list(links.items()), key=lambda x: x[0])
         # sorting values so that 'a' is the first pairing
-
-        self.pairings_table: dict[str, list[int]] = {i[0]: sorted(i[1]) for i in pairings}
         # cumulative, looks like {'a':[3,45]}
-
-        letters = tuple(self.pairings_table.keys())
+        self.pairings_table: dict[str, tuple[int, int]] = {
+            lett: tuple(sorted(indices))  # type: ignore[misc]
+            for lett, indices in sorted(links.items(), key=lambda x: x[0])
+        }
 
         for letter, ids in self.pairings_table.items():
             if len(ids) == 1:
@@ -699,19 +699,17 @@ class Embedder:
             # adding third pairing if we have three molecules and user specified two pairings
             # (used to adjust distances for trimolecular TSs)
             if len(unlabeled_list) == 2:
-                third_constraint = sorted(unlabeled_list)
-                self.pairings_table["?"] = third_constraint
+                self.pairings_table["?"] = tuple(sorted(unlabeled_list))  # type: ignore[assignment]
 
         elif len(self.mol_lines) == 2:
             # adding second pairing if we have two molecules and user specified one pairing
             # (used to adjust distances for bimolecular TSs)
             if len(unlabeled_list) == 2:
-                second_constraint = sorted(unlabeled_list)
-                self.pairings_table["?"] = second_constraint
+                self.pairings_table["?"] = tuple(sorted(unlabeled_list))  # type: ignore[assignment]
 
         # Now record the internal constraints, that is the intramolecular
         # distances/angles to freeze and later relax or enforce to the imposed values
-        self.internal_constraints = []
+        internal_constraints: list[tuple[int, int]] = []
 
         # making sure we set the kw_line attribute
         self.kw_line = self.kw_line if hasattr(self, "kw_line") else ""
@@ -723,11 +721,9 @@ class Embedder:
                     # to impose later on. We are checking this way because the
                     # set_options function is still to be called at this stage
                     if f"{letter}=" in self.kw_line:
-                        self.internal_constraints.append([pair])
+                        internal_constraints.append(pair)
 
-        self.internal_constraints = (
-            np.concatenate(self.internal_constraints) if self.internal_constraints else []
-        )
+        self.internal_constraints = np.array(internal_constraints)
 
         # finally, define the internal angle/dihedral constraints for the embedder
         self.internal_angle_dih_constraints = []
@@ -817,8 +813,8 @@ class Embedder:
 
                     else:
                         for r_i in r_index:
-                            r_atom = mol.reactive_atoms_classes_dict[c].get(r_i)
-                            if r_atom:
+                            r_atom = mol.reactive_atoms_classes_dict[c].get(r_i)  # type: ignore[assignment]
+                            if r_atom is not None:
                                 r_atom.init(mol, r_i, update=True, orb_dim=dist / 2, conf=c)
 
         # saves the last orb_string executed so that operators can
@@ -1027,7 +1023,7 @@ class Embedder:
                     # if user specified a custom value, use it.
                     self.options.rotation_steps = self.options.custom_rotation_steps
 
-                self.systematic_angles: list[Sequence[float] | float] = [
+                self.systematic_angles: list[Sequence[float] | float] = list(
                     cartesian_product(
                         *[range(self.options.rotation_steps + 1) for _ in self.objects]
                     )
@@ -1035,7 +1031,7 @@ class Embedder:
                     * self.options.rotation_range
                     / self.options.rotation_steps
                     - self.options.rotation_range
-                ][0]
+                )
 
                 if p:
                     # avoid calculating pivots if this is an early call
@@ -1145,8 +1141,8 @@ class Embedder:
         if self.embed == "multiembed":
             return 0
 
-        candidates = (
-            2 * len(self.systematic_angles) * np.prod([len(mol.coords) for mol in self.objects])
+        candidates: float = (
+            2.0 * len(self.systematic_angles) * np.prod([len(mol.coords) for mol in self.objects])
         )
 
         if _l == 3:
@@ -1178,7 +1174,12 @@ class Embedder:
 
     def _get_angle_dih_constraints(
         self, filename: str | None = None, only_fixed_constraints: bool = False
-    ) -> tuple[list[list[int]], list[float], list[list[int]], list[float]]:
+    ) -> tuple[
+        list[tuple[int, int, int]],
+        list[float | None],
+        list[tuple[int, int, int, int]],
+        list[float | None],
+    ]:
         """Gets angle and dihedral constraints for a molecule or for the whole embed.
 
         If filename is None, it will return the angle and dihedral constraints of the overall embed.
@@ -1195,12 +1196,14 @@ class Embedder:
             for constraint in self.internal_angle_dih_constraints:
                 if constraint.type_ == "A":
                     if (not only_fixed_constraints) or constraint.fixed:
-                        constrained_angles_indices.append(constraint.indices)
+                        angle_indices = cast("tuple[int, int, int]", tuple(constraint.indices))
+                        constrained_angles_indices.append(angle_indices)
                         constrained_angles_values.append(constraint.value)
 
                 elif constraint.type_ == "D":
                     if (not only_fixed_constraints) or constraint.fixed:
-                        constrained_dihedrals_indices.append(constraint.indices)
+                        dih_indices = cast("tuple[int, int, int, int]", tuple(constraint.indices))
+                        constrained_dihedrals_indices.append(dih_indices)
                         constrained_dihedrals_values.append(constraint.value)
         else:
             for hypmol in self.objects:
@@ -1208,11 +1211,17 @@ class Embedder:
                     for constraint in hypmol.constraints:
                         if constraint.type_ == "A":
                             if (not only_fixed_constraints) or constraint.fixed:
-                                constrained_angles_indices.append(constraint.indices)
+                                angle_indices = cast(
+                                    "tuple[int, int, int]", tuple(constraint.indices)
+                                )
+                                constrained_angles_indices.append(angle_indices)
                                 constrained_angles_values.append(constraint.value)
                         elif constraint.type_ == "D":
                             if (not only_fixed_constraints) or constraint.fixed:
-                                constrained_dihedrals_indices.append(constraint.indices)
+                                dih_indices = cast(
+                                    "tuple[int, int, int, int]", tuple(constraint.indices)
+                                )
+                                constrained_dihedrals_indices.append(dih_indices)
                                 constrained_dihedrals_values.append(constraint.value)
                     break
 
@@ -1310,7 +1319,11 @@ class Embedder:
                     self.log(
                         f"--> Dynamically adjusted energy threshold to {thr:.1f} kcal/mol to retain at least {(keep / active) * 100:.2f}% of structures."
                     )
-                return thr
+                return float(thr)
+
+        # we won't actually get here, but
+        # this keeps the type checker happy
+        return self.options.kcal_thresh
 
     def rel_energies(self) -> Array1D_float:
         return self.energies - np.min(self.energies)
@@ -1456,7 +1469,7 @@ class Embedder:
 
                     # replacing the old molecule with the one post-operators
                     self.objects[index] = Hypermolecule(
-                        outname, reactive_indices=reactive_indices, charge=charge, mult=mult
+                        outname, reactive_indices=list(reactive_indices), charge=charge, mult=mult
                     )
                     self.objects[index].constraints = constraints
 
@@ -1505,7 +1518,7 @@ class Embedder:
 
         return input_string
 
-    def scramble(self, array: np.ndarray[Any], sequence: Sequence[Any]) -> np.ndarray[Any]:
+    def scramble(self, array: NDArray[Any], sequence: Sequence[Any]) -> NDArray[Any]:
         return np.array([array[s] for s in sequence])
 
     def get_pairing_dist_from_letter(
@@ -1539,10 +1552,10 @@ class Embedder:
             return d
 
         # If no orbitals were built, raise Error
-        except NoOrbitalError as noe:
+        except NoOrbitalError:
             if allow_none_return:
                 return None
-            raise noe(f'The distance associated with letter "{letter}" was not found.')
+            raise NoOrbitalError(f'The distance associated with letter "{letter}" was not found.')
 
     def get_pairing_dists_from_constrained_indices(
         self, constrained_pair: Sequence[int]
@@ -1745,7 +1758,7 @@ class RunEmbedding(Embedder):
             return
 
         # Embed structures and assign them to self.structures
-        self.structures = embed_functions[self.embed](self)
+        self.structures = embed_functions[self.embed](self)  # type: ignore[operator]
 
         # cumulative list of atomic numbers associated with coordinates
         self.atomnos = np.concatenate([molecule.atomnos for molecule in self.objects])
@@ -1974,8 +1987,9 @@ class RunEmbedding(Embedder):
 
         processes = []
         cum_time: float = 0.0
-
-        opt_function = xtb_pre_opt if prevent_scrambling else xtb_opt
+        timed_opt_func_with_payload: Callable[
+            ..., tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
+        ] = timing_decorator_with_payload()(self.dispatcher.opt_func)  # type: ignore[arg-type]
 
         # Running as many threads as we have procs
         # since FF does not parallelize well with more cores
@@ -2005,8 +2019,7 @@ class RunEmbedding(Embedder):
                 ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
                 process = executor.submit(
-                    timing_wrapper,
-                    opt_function,
+                    timed_opt_func_with_payload,
                     self.atoms,
                     structure,
                     graphs=self.graphs,
@@ -2066,7 +2079,7 @@ class RunEmbedding(Embedder):
                         title=f"Candidate_{i + 1}",
                     )
 
-                cum_time += cast("float", t_struct)
+                cum_time += t_struct
 
                 if self.options.debug:
                     exit_status = "REFINED  " if self.exit_status[i] else "SCRAMBLED"
@@ -2251,6 +2264,9 @@ class RunEmbedding(Embedder):
         t_start = time.perf_counter()
         processes = []
         cum_time: float = 0.0
+        timed_opt_func_with_payload: Callable[
+            ..., tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
+        ] = timing_decorator_with_payload()(self.dispatcher.opt_func)  # type: ignore[arg-type]
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             for i, structure in enumerate(deepcopy(self.structures)):
@@ -2285,8 +2301,7 @@ class RunEmbedding(Embedder):
                 ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
                 process = executor.submit(
-                    timing_wrapper,
-                    self.dispatcher.opt_func,
+                    timed_opt_func_with_payload,
                     self.atoms,
                     structure,
                     method=self.options.theory_level,
@@ -2326,10 +2341,7 @@ class RunEmbedding(Embedder):
                     # from payload
                     t_struct,
                     # from timing_wrapper
-                ) = cast(
-                    "tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]",
-                    process.result(),
-                )
+                ) = process.result()
 
                 # assert that the structure did not scramble during optimization
                 if self.options.scramble_check and self.exit_status[i]:
@@ -2347,7 +2359,7 @@ class RunEmbedding(Embedder):
                         max_newbonds=0,
                     )
 
-                cum_time += float, t_struct
+                cum_time += t_struct
 
                 if self.options.debug:
                     exit_status = "REFINED  " if self.exit_status[i] else "SCRAMBLED"
@@ -2519,7 +2531,10 @@ class RunEmbedding(Embedder):
         # Resetting all energies since we changed theory level
 
         t_start = time.perf_counter()
-        cum_time = 0
+        cum_time: float = 0.0
+        opt_func_time_wrapped: Callable[..., tuple[tuple[Array2D_float, float, bool], float]] = (
+            timing_decorator()(self.dispatcher.opt_func)  # type: ignore[arg-type]
+        )
 
         for i, structure in enumerate(deepcopy(self.structures)):
             loadbar(
@@ -2551,29 +2566,26 @@ class RunEmbedding(Embedder):
                 constrained_dihedrals_values,
             ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
-            result: tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float] = (
-                timing_wrapper(
-                    function=self.dispatcher.opt_func,
-                    atoms=self.atoms,
-                    coords=structure,
-                    ase_calc=self.dispatcher.ase_calc,
-                    solvent=self.options.solvent,
-                    charge=self.options.charge,
-                    mult=self.options.mult,
-                    maxiter=maxiter,
-                    conv_thr=conv_thr,
-                    constrained_indices=constraints,
-                    constrained_distances=pairing_dists,
-                    constrained_angles_indices=constrained_angles_indices,
-                    constrained_angles_values=constrained_angles_values,
-                    constrained_dihedrals_indices=constrained_dihedrals_indices,
-                    constrained_dihedrals_values=constrained_dihedrals_values,
-                    title=f"Candidate_{i + 1}",
-                    debug=self.options.debug,
-                    traj=None,
-                    logfunction=self.log,
-                    payload=(self.constrained_indices[i],),
-                )
+            result = opt_func_time_wrapped(
+                atoms=self.atoms,
+                coords=structure,
+                ase_calc=self.dispatcher.ase_calc,
+                solvent=self.options.solvent,
+                charge=self.options.charge,
+                mult=self.options.mult,
+                maxiter=maxiter,
+                conv_thr=conv_thr,
+                constrained_indices=constraints,
+                constrained_distances=pairing_dists,
+                constrained_angles_indices=constrained_angles_indices,
+                constrained_angles_values=constrained_angles_values,
+                constrained_dihedrals_indices=constrained_dihedrals_indices,
+                constrained_dihedrals_values=constrained_dihedrals_values,
+                title=f"Candidate_{i + 1}",
+                debug=self.options.debug,
+                traj=None,
+                logfunction=self.log,
+                payload=(self.constrained_indices[i],),
             )
 
             loadbar(
@@ -2585,8 +2597,6 @@ class RunEmbedding(Embedder):
             (
                 (new_structure, new_energy, self.exit_status[i]),
                 # from optimization function
-                (self.constrained_indices[i],),
-                # from payload
                 t_struct,
                 # from timing_wrapper
             ) = result
@@ -2668,7 +2678,7 @@ class RunEmbedding(Embedder):
         )
 
         if self.options.only_refined:
-            mask = self.exit_status
+            mask: Array1D_bool = self.exit_status
             self.apply_mask(("structures", "constrained_indices", "energies", "exit_status"), mask)
 
             if False in mask:
@@ -2815,13 +2825,13 @@ class RunEmbedding(Embedder):
                 s = f'    {i + 1}. "{letter}" - {kind}\n'
 
                 for mol_id, d in self.pairings_dict.items():
-                    atom_id = d.get(letter)
+                    atom_id: int | tuple[int, ...] | None = d.get(letter)
 
                     if atom_id is not None:
-                        mol = self.objects[mol_id]
-
                         if isinstance(atom_id, int):
-                            atom_id = [atom_id]
+                            atom_id = (atom_id,)
+
+                        mol = self.objects[mol_id]
 
                         for a in atom_id:
                             s += f"       Index {a} ({mol.atoms[a]:2s}) on {mol.rootname}\n"
@@ -3099,7 +3109,7 @@ class RunEmbedding(Embedder):
         plt.figure()
 
         for mol in self.objects:
-            if hasattr(mol, "scan_data"):
+            if mol.scan_data is not None:
                 plt.plot(*mol.scan_data, label=mol.rootname)
 
         plt.legend()

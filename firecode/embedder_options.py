@@ -68,7 +68,7 @@ keywords_dict = {
     "FFCALC": 1,  # Manually overrides the force field calculator in "settings.py"
     "FFLEVEL": 1,  # Manually set the theory level to be used.
     # . Syntax: `FFLEVEL=UFF
-    "IMAGES": 1,  # Number of images to be used in NEB and mep_relax> jobs
+    "IMAGES": 1,  # Number of images to be used in neb>/NEB jobs
     "KCAL": 1,  # Trim output structures to a given value of relative energy.
     # Syntax: `KCAL=n`, where n can be an integer or float.
     "LET": 1,  # Overrides safety checks that prevent the
@@ -156,7 +156,7 @@ class Options:
 
     # Set later by the _setup() function based on embed type,
     # since it is used by both cyclical and string embeds
-    rotation_steps: int | None = None
+    rotation_steps: int | MaybeNone = None
     custom_rotation_steps: int | None = None
 
     rmsd: float = 0.5

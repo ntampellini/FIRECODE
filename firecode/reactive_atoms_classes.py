@@ -49,6 +49,7 @@ class RAtom:
     center: Array1D_float = field(init=False)
     coord: Array1D_float = field(init=False)
     orb_vecs: Array2D_float = field(init=False)
+    neighbors_symbols: list[str] = field(init=False)
 
 
 class Single(RAtom):
@@ -683,7 +684,7 @@ class SingleAtom(RAtom):
         self.cumnum: int | MaybeNone = None
         self.symbol = mol.atoms[i]
 
-        self.neighbors_symbols: list[int] = []
+        self.neighbors_symbols: list[str] = []
         self.coord = mol.coords[conf][i]
         self.other = mol.coords[conf][i] + np.array([0, 0, 1], dtype=float)
         self.orb_vecs = np.array([normalize(self.coord - self.other)])

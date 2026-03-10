@@ -41,12 +41,12 @@ if TYPE_CHECKING:
 def xtb_opt(
     atoms: Array1D_str,
     coords: Array2D_float,
-    constrained_indices: list[Sequence[int]] | None = None,
-    constrained_distances: list[float] | None = None,
-    constrained_dihedrals_indices: list[Sequence[int]] | None = None,
-    constrained_dihedrals_values: list[float] | None = None,
-    constrained_angles_indices: list[Sequence[int]] | None = None,
-    constrained_angles_values: list[float] | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
+    constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
+    constrained_angles_indices: Sequence[Sequence[int]] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
     method: str = "GFN2-xTB",
     maxiter: int | None = 500,
     solvent: str | None = None,
@@ -137,7 +137,7 @@ def xtb_opt(
                     delta = d - target_d
 
                     if abs(delta) > recursive_stepsize:
-                        recursive_c_d = constrained_distances.copy()
+                        recursive_c_d = list(constrained_distances).copy()
                         recursive_c_d[i] = target_d + (recursive_stepsize * np.sign(d - target_d))
                         # print(f"-------->  d is {round(d, 3)}, target d is {round(target_d, 3)}, delta is {round(delta, 3)}, setting new pretarget at {recursive_c_d}")
                         coords, _, _ = xtb_opt(  # type: ignore
@@ -184,24 +184,31 @@ def xtb_opt(
         maxiter = maxiter if maxiter is not None else 0
         s = f"$opt\n   logfile={trajname}\n   output={outname}\n   maxcycle={maxiter}\n"
 
-        if constrained_indices is not None and constrained_distances is not None:
+        if constrained_indices is not None:
             s += f"\n$constrain\n   force constant={spring_constant}\n"
 
-            for (a, b), d in zip(constrained_indices, constrained_distances):
-                distance = str(d) if d else "auto"
-                s += f"   distance: {a + 1}, {b + 1}, {distance}\n"
+            constrained_distances = constrained_distances or [None for _ in constrained_indices]
 
-        if constrained_angles_indices is not None and constrained_angles_values is not None:
-            assert len(constrained_angles_indices) == len(constrained_angles_values)
+            for (a, b), dist in zip(constrained_indices, constrained_distances):
+                dist_ = str(d) if d is not None else "auto"
+                s += f"   distance: {a + 1}, {b + 1}, {dist_}\n"
+
+        if constrained_angles_indices is not None:
+            constrained_angles_values = constrained_angles_values or [
+                None for _ in constrained_angles_indices
+            ]
 
             if constrained_indices is None:
                 s += "\n$constrain\n"
 
             for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
-                s += f"   angle: {a + 1}, {b + 1}, {c + 1}, {angle}\n"
+                angle_ = str(angle) if angle is not None else "auto"
+                s += f"   angle: {a + 1}, {b + 1}, {c + 1}, {angle_}\n"
 
-        if constrained_dihedrals_indices is not None and constrained_dihedrals_values is not None:
-            assert len(constrained_dihedrals_indices) == len(constrained_dihedrals_values)
+        if constrained_dihedrals_indices is not None:
+            constrained_dihedrals_values = constrained_dihedrals_values or [
+                None for _ in constrained_dihedrals_indices
+            ]
 
             if constrained_indices is None:
                 s += "\n$constrain\n"
@@ -209,7 +216,8 @@ def xtb_opt(
             for (a, b, c, d), angle in zip(
                 constrained_dihedrals_indices, constrained_dihedrals_values
             ):
-                s += f"   dihedral: {a + 1}, {b + 1}, {c + 1}, {d + 1}, {angle}\n"
+                angle_ = str(angle) if angle is not None else "auto"
+                s += f"   dihedral: {a + 1}, {b + 1}, {c + 1}, {d + 1}, {angle_}\n"
 
         if constrain_string is not None:
             s += "\n$constrain\n"
@@ -317,8 +325,8 @@ def xtb_pre_opt(
     atoms: Array1D_str,
     coords: Array2D_float,
     graphs: Sequence[Graph],
-    constrained_indices: list[Sequence[int]] | None = None,
-    constrained_distances: list[float] | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
     **kwargs: Any,
 ) -> tuple[Array2D_float, float | None, Literal[True]] | None:
     """Wrapper for xtb_opt that preserves the distance of every bond present in each subgraph provided
@@ -510,13 +518,13 @@ def crest_mtd_search(
     atoms: Array1D_str,
     coords: Array2D_float,
     constrained_indices: Sequence[Sequence[int]] | None = None,
-    constrained_distances: Sequence[float] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
     constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
-    constrained_dihedrals_values: Sequence[float] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
     constrained_angles_indices: Sequence[Sequence[int]] | None = None,
-    constrained_angles_values: Sequence[float] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
     method: str = "GFN2-XTB//GFN-FF",
-    solvent: str = "CH2Cl2",
+    solvent: str | None = "CH2Cl2",
     charge: int = 0,
     kcal: float | None = None,
     ncimode: bool = False,
@@ -574,23 +582,31 @@ def crest_mtd_search(
             # for i in np.unique(np.array(constrained_indices).flatten()):
             #     s += f"{i+1},"
 
-            for (c1, c2), cd in zip(constrained_indices, constrained_distances):
-                cd = "auto" if cd is None else round(cd, 3)
-                s += f"    distance: {c1 + 1}, {c2 + 1}, {cd}\n"
+            constrained_distances = constrained_distances or [None for _ in constrained_indices]
 
-        if constrained_angles_indices is not None and constrained_angles_values is not None:
-            assert len(constrained_angles_indices) == len(constrained_angles_values)
+            for (c1, c2), cd in zip(constrained_indices, constrained_distances):
+                cd_ = "auto" if cd is None else str(round(cd, 3))
+                s += f"    distance: {c1 + 1}, {c2 + 1}, {cd_}\n"
+
+        if constrained_angles_indices is not None:
+            constrained_angles_values = constrained_angles_values or [
+                None for _ in constrained_angles_indices
+            ]
             s += "\n$constrain\n" if constrained_indices is None else ""
             for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
-                s += f"   angle: {a + 1}, {b + 1}, {c + 1}, {angle:.3f}\n"
+                angle_ = "auto" if angle is None else str(round(angle, 3))
+                s += f"   angle: {a + 1}, {b + 1}, {c + 1}, {angle_}\n"
 
-        if constrained_dihedrals_indices is not None and constrained_dihedrals_values is not None:
-            assert len(constrained_dihedrals_indices) == len(constrained_dihedrals_values)
+        if constrained_dihedrals_indices is not None:
+            constrained_dihedrals_values = constrained_dihedrals_values or [
+                None for _ in constrained_dihedrals_indices
+            ]
             s += "\n$constrain\n" if constrained_indices is None else ""
             for (a, b, c, d), angle in zip(
                 constrained_dihedrals_indices, constrained_dihedrals_values
             ):
-                s += f"   dihedral: {a + 1}, {b + 1}, {c + 1}, {d + 1}, {angle:.3f}\n"
+                angle_ = "auto" if angle is None else str(round(angle, 3))
+                s += f"   dihedral: {a + 1}, {b + 1}, {c + 1}, {d + 1}, {angle_}\n"
 
         s += "\n$metadyn\n  atoms: "
 

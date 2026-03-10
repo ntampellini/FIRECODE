@@ -12,4 +12,8 @@ Array1D_str = Annotated[NDArray[np.str_], "shape: (nsymbols,)"]
 Array1D_bool = Annotated[NDArray[np.bool_], "shape: (nbool,)"]
 FloatIterable = Union[tuple[float, ...], list[float], NDArray[np.floating[Any]]]
 IntIterable = Union[tuple[int, ...], list[int], NDArray[np.int_]]
+
+# Marker for return types that include None, but where forcing the user to
+# check for None can be detrimental. Sometimes called "the Any trick". See
+# https://stackoverflow.com/questions/79448057/how-does-maybenone-also-known-as-the-any-trick-work-in-python-type-hints
 MaybeNone: TypeAlias = Any

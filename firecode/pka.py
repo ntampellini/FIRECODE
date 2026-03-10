@@ -85,9 +85,9 @@ def _get_anions(
             anions.append(opt_coords)
             energies.append(energy)
 
-    anions, energies = zip(*sorted(zip(anions, energies), key=lambda x: x[1]))
+    anions_sorted, energies_sorted = zip(*sorted(zip(anions, energies), key=lambda x: x[1]))
 
-    return np.array(anions), np.array(energies), atoms
+    return np.array(anions_sorted), np.array(energies_sorted), atoms
 
 
 def _get_cations(
@@ -106,16 +106,14 @@ def _get_cations(
     cation_atoms = np.append(atoms, "H")
     # adding proton to atoms
 
-    ##FROMHERE
-
     solvent = embedder.options.solvent
-    if solvent is None:
+    if solvent is None and logfunction is not None:
         logfunction("Solvent for pKa calculation not specified: defaulting to gas phase")
 
     cations, energies = [], []
 
     for s, structure in enumerate(structures):
-        coords = protonate(structure, atoms, index)
+        coords = protonate(atoms, structure, index)
         # new coordinates which include an additional proton
 
         print(f"Optimizing cation conformer {s + 1}/{len(structures)} ...", end="\r")
@@ -138,9 +136,9 @@ def _get_cations(
             cations.append(opt_coords)
             energies.append(energy)
 
-    cations, energies = zip(*sorted(zip(cations, energies), key=lambda x: x[1]))
+    cations_sorted, energies_sorted = zip(*sorted(zip(cations, energies), key=lambda x: x[1]))
 
-    return np.array(cations), np.array(energies), cation_atoms
+    return np.array(cations_sorted), np.array(energies_sorted), cation_atoms
 
 
 def protonate(
@@ -215,7 +213,7 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
     free_energies = get_free_energies(
         embedder, mol.atoms, conformers, charge=mol.charge, title="Starting structure"
     )
-    conformers, free_energies = zip(*sorted(zip(conformers, free_energies), key=lambda x: x[1]))
+    conformers, free_energies = zip(*sorted(zip(conformers, free_energies), key=lambda x: x[1]))  # type: ignore[assignment]
 
     with open(f"{mol.rootname}_confs_opt.xyz", "w") as f:
         solvent_string = (
@@ -240,7 +238,7 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
         anions_free_energies = get_free_energies(
             embedder, anions_atoms, anions, charge=-1, title="Anion"
         )
-        anions, anions_free_energies = zip(
+        anions, anions_free_energies = zip(  # type: ignore[assignment]
             *sorted(zip(anions, anions_free_energies), key=lambda x: x[1])
         )
 
@@ -267,9 +265,9 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
         )
 
         cations_free_energies = get_free_energies(
-            embedder, cations, cations_atoms, charge=+1, title="Cation"
+            embedder, cations_atoms, cations, charge=+1, title="Cation"
         )
-        cations, cations_free_energies = zip(
+        cations, cations_free_energies = zip(  # type: ignore[assignment]
             *sorted(zip(cations, cations_free_energies), key=lambda x: x[1])
         )
 
@@ -322,4 +320,4 @@ def get_free_energies(
         len(structures), len(structures), f"{title} Hessian {len(structures)}/{len(structures)} "
     )
 
-    return free_energies
+    return np.array(free_energies)

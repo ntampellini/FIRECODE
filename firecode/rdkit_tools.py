@@ -45,7 +45,6 @@ if TYPE_CHECKING:
 
 
 def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 1000) -> str:
-
     # import rdkit functions only if we need them for perforance reasons
     from rdkit.Chem import AddHs, MolFromXYZFile, RWMol, SanitizeMol
     from rdkit.Chem.rdDetermineBonds import DetermineBonds
@@ -69,7 +68,7 @@ def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 100
     t_start = perf_counter()
 
     # Generate conformers
-    conf_ids = EmbedMultipleConfs(  # type: ignore[attr-defined]
+    conf_ids = EmbedMultipleConfs(
         rdkit_mol,
         numConfs=embedder.options.max_confs,
         numThreads=0,  # Use all available threads
@@ -308,7 +307,7 @@ def match_smarts_pattern(
             mol.AddConformer(conf)
 
         # Determine connectivity and bond orders
-        DetermineBonds(mol, charge=charge)  # type: ignore[attr-defined]
+        DetermineBonds(mol, charge=charge)
 
         # Sanitize it
         SanitizeMol(mol)
@@ -396,7 +395,9 @@ def convert_constraint_with_smarts(
     is chosen.
 
     """
-    match_indices_list = match_smarts_pattern((coords, atomnos), smarts)
+    # let's use only the first symmetric group,
+    # since it should not matter for the constraint value
+    match_indices_list = match_smarts_pattern((coords, atomnos), smarts)[0]
 
     if constraint.type_ == "B":
         a, b = constraint.indices
@@ -428,6 +429,6 @@ def convert_constraint_with_smarts(
         best_match_indices = match_indices_list[deltas.index(min(deltas))]
 
     new_constraint = deepcopy(constraint)
-    new_constraint.indices = best_match_indices
+    new_constraint.indices = list(best_match_indices)
 
     return new_constraint

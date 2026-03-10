@@ -15,7 +15,7 @@ def run_calculator_test(calculator: str) -> None:
     """Tests a generic calculator."""
     mol = read_xyz(str(HERE / "C2H4.xyz"))
     dispatcher = Opt_func_dispatcher(calculator)
-    _, _, success = dispatcher.opt_func(
+    _, _, success = dispatcher.opt_func(  # type: ignore[operator]
         atoms=mol.atoms,
         coords=mol.coords[0],
         calculator=calculator,

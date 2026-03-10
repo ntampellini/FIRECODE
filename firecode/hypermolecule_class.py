@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import os
 import warnings
-from copy import deepcopy
 from typing import TYPE_CHECKING, Callable, Sequence
 
 import numpy as np
@@ -26,7 +25,6 @@ from numpy.linalg import LinAlgError
 from prism_pruner.algebra import get_inertia_moments
 from prism_pruner.graph_manipulations import graphize
 from prism_pruner.rmsd import get_alignment_matrix
-from prism_pruner.utils import flatten
 
 from firecode.errors import NoOrbitalError
 from firecode.graph_manipulations import is_sigmatropic, is_vicinal
@@ -38,8 +36,8 @@ from firecode.utils import read_xyz
 if TYPE_CHECKING:
     from networkx import Graph
 
+    from firecode.ase_manipulations import Constraint
     from firecode.reactive_atoms_classes import RAtom
-    from firecode.utils import Constraint
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -104,6 +102,7 @@ class Hypermolecule:
         reactive_indices: Sequence[int] | None = None,
         charge: int = 0,
         mult: int = 1,
+        T: float = 298.15,
         debug_logfunction: Callable[[str], None] | None = None,
     ) -> None:
         """Initializing class properties."""
@@ -117,6 +116,7 @@ class Hypermolecule:
         self.filename = filename
         self.charge = charge
         self.mult = mult
+        self.T = T
         self.debug_logfunction = debug_logfunction
 
         # properties that can be set/overwritten later
@@ -124,6 +124,7 @@ class Hypermolecule:
         self.pivots: list[list[Pivot]]
         self.pka_data: tuple[str, float] | None = None
         self.sp3_sigmastar: bool = False
+        self.scan_data: tuple[list[float], list[float]] | None = None
 
         if reactive_indices is None:
             self.reactive_indices = np.array([])
@@ -242,52 +243,6 @@ class Hypermolecule:
         """c: conformer number"""
         return np.array([[v for v in atom.center] for atom in self.get_r_atoms(c)])
 
-    # def calc_positioned_conformers(self):
-    #     self.positioned_conformers = np.array([[self.rotation @ v + self.position for v in conformer] for conformer in self.coords])
-
-    def _compute_hypermolecule(self) -> None:
-        """ """
-
-        self.energies: Array1D_float = np.array([0.0 for _ in self.coords], dtype=float)
-
-        self.hypermolecule_atomnos = []
-        clusters = {
-            i: {} for i, _ in enumerate(self.atomnos)
-        }  # {atom_index:{cluster_number:[position,times_found]}}
-
-        for i, atom_number in enumerate(self.atomnos):
-            atoms_arrangement = [conformer[i] for conformer in self.coords]
-            cluster_number = 0
-            clusters[i][cluster_number] = [
-                atoms_arrangement[0],
-                1,
-            ]  # first structure has rel E = 0 so its weight is surely 1
-            self.hypermolecule_atomnos.append(atom_number)
-            radii = pt.covalent_radius(self.atoms[i])
-            for j, atom in enumerate(atoms_arrangement[1:]):
-                weight = np.exp(-self.energies[j + 1] * 503.2475342795285 / self.T)
-                # print(f'Atom {i} in conf {j+1} weight is {weight} - rel. E was {self.energies[j+1]}')
-
-                for cluster_number, reference in deepcopy(clusters[i]).items():
-                    if np.linalg.norm(atom - reference[0]) < radii:
-                        clusters[i][cluster_number][1] += weight
-                    else:
-                        clusters[i][max(clusters[i].keys()) + 1] = [atom, weight]
-                        self.hypermolecule_atomnos.append(atom_number)
-
-        self.weights = [[] for _ in self.atomnos]
-        self.hypermolecule = []
-
-        for i, _ in enumerate(self.atomnos):
-            for _, data in clusters[i].items():
-                self.weights[i].append(data[1])
-                self.hypermolecule.append(data[0])
-
-        self.hypermolecule = np.asarray(self.hypermolecule)
-        self.weights = np.array(self.weights).flatten()
-        self.weights = np.array([weights / np.sum(weights) for weights in self.weights])
-        self.weights = flatten(self.weights)
-
     def write_hypermolecule(self) -> None:
         """ """
 
@@ -308,10 +263,10 @@ class Hypermolecule:
                 f.write(
                     f"\nFIRECODE Hypermolecule {c} for {self.rootname} - reactive indices {self.reactive_indices}\n"
                 )
-                orbs = np.vstack(
+                orbs_stacked = np.vstack(
                     [atom_type.center for atom_type in self.reactive_atoms_classes_dict[c].values()]
                 ).ravel()
-                orbs = orbs.reshape((int(len(orbs) / 3), 3))
+                orbs = orbs_stacked.reshape((int(len(orbs_stacked) / 3), 3))
                 for i, atom in enumerate(self.coords[c]):
                     f.write(
                         "%-5s %-8s %-8s %-8s\n"

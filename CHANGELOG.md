@@ -6,16 +6,17 @@
 <!-- FINALSPLEVEL keyword? -->
  <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
 
-## FIRECODE 1.5.4 🔥 (WIP)
+## FIRECODE 1.6.0 🔥 (WIP)
 - Refreshed constraints handling in operators.
 - Added non-inline constraints specification after a molecule line. Syntax: "B/A/D i1 i2 [i3] [i4] [auto/value]"
-- These constraints can be fixed (default, same as uppercase in-line constraints) or temporary (like "interactions", i.e. "D 1 2 3 4 fixed=false") 
+- These constraints can be fixed (default, same as uppercase in-line constraints) or temporary (like "interactions", i.e. "D 1 2 3 4 fixed=false")
 - Clearer, more explicit printouts for all constraints at any step.
 - the mtd>/mtd_search> operator now has more explicit synonyms: crest> and crest_search>
 - Added tests for the crest_search>, neb> and fsm> operators, as well as a "neb> scan>" chain.
 - Updated documentation: usage and operators (`neb>`, `fsm>`, `rdkit_search>`, `crest_search>`, ...) as well as keywords (general vs. legacy).
-- Started to type annotate the codebase.
+- Type annotated the whole codebase.
 - Removed molecular bending and RIGID keyword.
+- Removed standalone ORCA calculator (can use ASE in the future, but throws NotImplementedError for now.)
 
 ## FIRECODE 1.5.3 🔥 (February 19 2026)
 - Fixes a bug with reactive_atoms_classes_dict and embedder.options.charge.
