@@ -519,6 +519,16 @@ def str_to_var(
     return string
 
 
+def charge_to_str(charge: int) -> str:
+    """Return a string representation of molecular charge."""
+    if charge == 0:
+        return ""
+    elif charge > 0:
+        return "+" * charge
+    else:
+        return "-" * abs(charge)
+
+
 def timing_wrapper(function: Callable[P, R], *args: Any, **kwargs: Any) -> tuple[R, float]:
     """Generic function wrapper that appends the
     execution time in seconds at the end of return.

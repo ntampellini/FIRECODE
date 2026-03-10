@@ -60,6 +60,7 @@ class OptimizerOptions:
     solvent: str | None
     filenames: Sequence[str]
 
+    T: float = 298.15
     auto_charge_and_mult: bool = True
     constraint_file: str | None = None
     sp: bool = False
@@ -249,8 +250,19 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
     else:
         constraint_file = None
 
+    if "free_energy" in options_to_set:
+        temp_C = inquirer.number(  # type: ignore[attr-defined]
+            message="Specify temperature for free energy calculation (°C):",
+            default=25,
+            validate=lambda x: float(x) + 273.15 > 0,
+            filter=float,
+        ).execute()
+    else:
+        temp_C = 25
+
     optimizer = OptimizerOptions(
         filenames=filenames,
+        T=temp_C + 273.15,
         calc=calc,
         method=method,
         solvent=solvent,
@@ -419,6 +431,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         ase_calc=optimizer.ase_calc,
                         charge=charge,
                         mult=mult,
+                        temp=optimizer.T,
                         title=f"{name[:-4]}",
                     )
 

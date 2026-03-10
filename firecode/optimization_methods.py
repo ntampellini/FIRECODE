@@ -34,7 +34,7 @@ from prism_pruner.utils import time_to_string
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._xtb import xtb_opt
 from firecode.settings import DEFAULT_LEVELS
-from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
+from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.utils import loadbar, molecule_check, scramble_check
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ class Opt_func_dispatcher:
         solvent: str | None = None,
         force_reload: bool = False,
         raise_err: bool = True,
-    ) -> ASECalculator | None:
+    ) -> ASECalculator | MaybeNone:
         if self.ase_calc is not None and not force_reload:
             pass
 

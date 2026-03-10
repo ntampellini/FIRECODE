@@ -153,3 +153,10 @@ def test_operator_neb() -> None:
 def test_operator_fsm() -> None:
     """Tests the fsm operator."""
     run_firecode_input("operator_fsm")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_pka() -> None:
+    """Tests the pka operator."""
+    run_firecode_input("operator_pka")

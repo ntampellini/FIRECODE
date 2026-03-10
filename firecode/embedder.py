@@ -3042,7 +3042,7 @@ class RunEmbedding(Embedder):
         from prettytable import PrettyTable
 
         table = PrettyTable()
-        table.field_names = ["Name", "#(Symb)", "Process", "Energy (kcal/mol)"]
+        table.field_names = ["Name", "#(Symb)", "Process", "ΔG (kcal/mol)"]
 
         for mol in self.objects:
             if mol.pka_data is not None:
@@ -3058,7 +3058,7 @@ class RunEmbedding(Embedder):
         # Add pKa column if we were given a reference
         if self.options.pka_ref is not None:
             ref_name, ref_value = self.options.pka_ref
-            pkas = []
+            pkas, ddGs = [], []
             for mol in self.objects:
                 if mol.filename == ref_name:
                     dG_ref = cast("tuple[str, float]", mol.pka_data)[1]
@@ -3071,10 +3071,12 @@ class RunEmbedding(Embedder):
                 # The free energy difference has a different sign for acids or bases, since
                 # the pKa for a base is the one of its conjugate acid, BH+
 
-                pka = dG / (np.log(10) * R * 298.15) + ref_value
-                pkas.append(round(pka, 3))
+                pka = dG / (np.log(10) * R * self.options.T) + ref_value
+                ddGs.append(round(dG, 2))
+                pkas.append(round(pka, 2))
 
-            table.add_column(f"pKa ({solv}, 298.15 K)", pkas)
+            table.add_column("ΔΔG deprot. (kcal/mol)", ddGs)
+            table.add_column(f"pKa ({solv}, {self.options.T:.2f} K)", pkas)
 
         self.log(table.get_string())
         self.log(
@@ -3092,18 +3094,18 @@ class RunEmbedding(Embedder):
                     dG = mol0.pka_data[1] + mol1.pka_data[1]
                     self.log("\n  Equilibrium data:")
                     self.log(
-                        f"\n    HA + B -> BH+ + A-    K({solv}, 298.15 K) = {round(np.exp(-dG / (1.9872036e-3 * 298.15)), 3)}"
+                        f"\n    HA + B -> BH+ + A-    K({solv}, {self.options.T:.2f} K)"
+                        f" = {round(np.exp(-dG / (R * self.options.T)), 3)}"
                     )
                     self.log(
-                        f"\n                         dG({solv}, 298.15 K) = {round(dG, 3)} kcal/mol"
+                        f"\n                         dG({solv}, {self.options.T:.2f} K)"
+                        f" = {round(dG, 3)} kcal/mol"
                     )
 
     def scan_termination(self) -> None:
         """Print the unified data and write the cumulative plot
         for the approach of all the molecules in input
         """
-        # import pickle
-
         import matplotlib.pyplot as plt
 
         plt.figure()

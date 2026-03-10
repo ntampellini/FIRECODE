@@ -674,7 +674,7 @@ def csearch(
         # otherwise, add the new HBs linking the pieces
         # and make sure that now we only have one connected component
 
-    double_bonds = get_double_bonds_indices(atoms, coords)
+    double_bonds = get_double_bonds_indices(coords, atoms)
     # get all double bonds - do not rotate these
 
     torsions = _get_torsions(graph, hydrogen_bonds, double_bonds)

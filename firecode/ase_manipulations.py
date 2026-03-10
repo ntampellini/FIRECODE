@@ -864,10 +864,10 @@ def ase_popt(
 
         from firecode.optimization_methods import Opt_func_dispatcher
 
-        # with HiddenPrints():
         ase_calc = Opt_func_dispatcher(calculator).get_ase_calc(method, solvent)
 
     ase_atoms.calc = ase_calc
+    ase_calc.verbosity = 0  # type: ignore[union-attr]
 
     ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
     maxiter = maxiter or 750
@@ -1040,7 +1040,7 @@ def ase_vib(
     ase_calc: ASECalculator,
     charge: int,
     mult: int,
-    temp_C: float = 25.0,
+    temp: float = 298.15,
     title: str = "temp",
     return_gcorr: bool = True,
     write_log: bool = True,
@@ -1094,13 +1094,13 @@ def ase_vib(
             )
 
             EE = energy / EH_TO_EV  # was eV, now Eh
-            G = thermo.get_gibbs_energy(temperature=(temp_C + 273.15), pressure=101325.0) / EH_TO_EV  # type: ignore[no-untyped-call]
-            H = thermo.get_enthalpy(temperature=(temp_C + 273.15)) / EH_TO_EV  # type: ignore[no-untyped-call]
-            S = thermo.get_entropy(temperature=(temp_C + 273.15), pressure=101325.0) / EH_TO_EV  # type: ignore[no-untyped-call]
+            G = thermo.get_gibbs_energy(temperature=temp, pressure=101325.0) / EH_TO_EV  # type: ignore[no-untyped-call]
+            H = thermo.get_enthalpy(temperature=temp) / EH_TO_EV  # type: ignore[no-untyped-call]
+            S = thermo.get_entropy(temperature=temp, pressure=101325.0) / EH_TO_EV  # type: ignore[no-untyped-call]
             gcorr = G - EE
 
             f.write("\n--> What follows mocks an ORCA output for scraping purposes:\n\n")
-            f.write(f"T: {temp_C + 273.15:.2f} K ({temp_C:.2f} °C)\n")
+            f.write(f"T: {temp:.2f} K ({temp - 273.15:.2f} °C)\n")
             f.write(f"FINAL SINGLE POINT ENERGY {EE:.8f} Eh\n")
             f.write(f"FINAL GIBBS FREE ENERGY {G:.8f} Eh\n")
             f.write(f"G-E(el) ... {gcorr:.8f} Eh     {gcorr * EH_TO_KCAL:.2f} kcal/mol\n")

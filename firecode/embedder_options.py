@@ -108,6 +108,8 @@ keywords_dict = {
     # twelve 20 degrees turns.
     "SUPRAFAC": 1,  # Only retain suprafacial orbital configurations in cyclical TSs.
     # Thought for Diels-Alder and other cycloaddition reactions.
+    "T": 1,  # Set temperature, in Kelvin. Syntax: `T=300`
+    "T_C": 1,  # Set temperature, in Celsius. Syntax: `T_C=27`
 }
 
 
@@ -175,6 +177,7 @@ class Options:
     scramble_check: bool = False
     charge: int = 0
     mult: int = 1
+    T: float = 298.15
     ff_opt: bool = FF_OPT_BOOL
     ff_calc: str | None = FF_CALC
 
@@ -448,6 +451,7 @@ class OptionSetter:
                             + "Correct syntax looks like: NEB(images=7, preopt=true, ci=false)"
                         )
                     )
+        self.embedder.log(f"--> Set NEB options: {options.neb}")
 
     def level(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("LEVEL")]
@@ -458,6 +462,8 @@ class OptionSetter:
         # in place of round, so that the LEVEL keyword is not
         # mistaken for one with sub-arguments. To be better addressed
         # when/if a major rewrite of the option setting happens.
+
+        self.embedder.log(f"--> Set LEVEL to {options.theory_level}")
 
     def fflevel(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("FFLEVEL")]
@@ -478,6 +484,7 @@ class OptionSetter:
     def kcal(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("KCAL")]
         options.kcal_thresh = float(kw.split("=")[1])
+        self.embedder.log(f"--> Set KCAL to {options.kcal_thresh!s}")
 
     def shrink(self, options: Options, *args: Any) -> None:
         options.shrink = True
@@ -503,6 +510,7 @@ class OptionSetter:
     def procs(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("PROCS")]
         self.embedder.procs = int(kw.split("=")[1])
+        self.embedder.log(f"--> Set PROCS to {self.embedder.procs!s}")
 
     def ezprot(self, options: Options, *args: Any) -> None:
         options.double_bond_protection = True
@@ -510,10 +518,12 @@ class OptionSetter:
     def calc(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CALC")]
         options.calculator = kw.split("=")[1]
+        self.embedder.log(f"--> Set CALC to {options.calculator}")
 
     def ffcalc(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("FFCALC")]
         options.ff_calc = kw.split("=")[1]
+        self.embedder.log(f"--> Set FFCALC to {options.ff_calc}")
 
     def solvent(self, options: Options, *args: Any) -> None:
         from firecode.solvents import solvent_synonyms
@@ -521,6 +531,7 @@ class OptionSetter:
         kw = self.keywords_simple[self.keywords.index("SOLVENT")]
         solvent = kw.split("=")[1].lower()
         options.solvent = solvent_synonyms.get(solvent, solvent)
+        self.embedder.log(f"--> Set SOLVENT to {options.solvent}")
 
     def pka(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple_case_sensitive[self.keywords.index("PKA")]
@@ -541,9 +552,20 @@ class OptionSetter:
     def crestlevel(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CRESTLEVEL")]
         options.crestlevel = kw.split("=")[1]
+        self.embedder.log(f"--> Set CREST level to {options.crestlevel}")
 
     def scramblecheck(self, options: Options, *args: Any) -> None:
         options.scramble_check = True
+
+    def t(self, options: Options, *args: Any) -> None:
+        kw = self.keywords_simple[self.keywords.index("T")]
+        options.T = float(kw.split("=")[1])
+        self.embedder.log(f"--> Set temperature to {options.T:.2f} K ({options.T - 273.15:.2f} °C)")
+
+    def t_c(self, options: Options, *args: Any) -> None:
+        kw = self.keywords_simple[self.keywords.index("T_C")]
+        options.T = float(kw.split("=")[1]) + 273.15
+        self.embedder.log(f"--> Set temperature to {options.T:.2f} K ({options.T - 273.15:.2f} °C)")
 
     def set_options(self) -> None:
         for kw in self.sorted_keywords():

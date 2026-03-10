@@ -100,7 +100,7 @@ class Hypermolecule:
         self,
         filename: str,
         reactive_indices: Sequence[int] | None = None,
-        charge: int = 0,
+        charge: int | None = None,
         mult: int = 1,
         T: float = 298.15,
         debug_logfunction: Callable[[str], None] | None = None,
@@ -114,7 +114,7 @@ class Hypermolecule:
 
         self.rootname = filename.split(".", maxsplit=1)[0]
         self.filename = filename
-        self.charge = charge
+        self.charge = charge or self.filename.count("+") - self.filename.count("-")
         self.mult = mult
         self.T = T
         self.debug_logfunction = debug_logfunction
