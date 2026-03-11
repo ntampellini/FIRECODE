@@ -21,6 +21,7 @@ Nicolo' Tampellini - nicolo.tampellini@yale.edu
 import argparse
 import os
 import sys
+from io import TextIOWrapper
 
 from rich.traceback import install
 
@@ -28,8 +29,11 @@ install(show_locals=True)
 
 
 def main() -> None:
-    sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf8", buffering=1)
-    sys.stderr = open(sys.stdout.fileno(), mode="w", encoding="utf8", buffering=1)
+
+    # Redirect stdout and stderr to handle encoding errors
+    sys.stdout = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+    sys.stderr = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
     usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
     🔥 python -m firecode -cl "refine> crest_search> mol.xyz"
