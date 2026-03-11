@@ -2,10 +2,22 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_package"]
+exclude = [
+    "docs/",
+    "firecode/tests/",
+    ".git/",
+    ".github/",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["docs/"]
+
 [project]
 name = "firecode"
 license = "LGPL-3.0-or-later"
-version = "1.5.3"
+version = "1.6.0"
 readme = "README.md"
 description = "FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles"
 keywords = []
