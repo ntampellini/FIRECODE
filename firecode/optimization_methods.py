@@ -34,6 +34,7 @@ from prism_pruner.utils import time_to_string
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._xtb import xtb_opt
 from firecode.settings import DEFAULT_LEVELS
+from firecode.solvents import epsilon_dict, to_xtb_solvents
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.utils import loadbar, molecule_check, scramble_check
 
@@ -120,6 +121,7 @@ class Opt_func_dispatcher:
     def load_tblite_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
         try:
             from tblite.ase import TBLite
+            from tblite.exceptions import TBLiteValueError
 
         except ImportError as e:
             print(e)
@@ -131,7 +133,6 @@ class Opt_func_dispatcher:
                 )
             )
 
-        solvation = None if solvent is None else ("alpb", solvent)
         method = method or DEFAULT_LEVELS["TBLITE"]
 
         # tblite is picky with names
@@ -142,7 +143,30 @@ class Opt_func_dispatcher:
         }
 
         method = synonyms.get(method, method)
-        self.ase_calc = TBLite(method=method, solvation=solvation)
+
+        if solvent is None:
+            self.ase_calc = TBLite(method=method)
+            return self.ase_calc
+
+        try:
+            if solvent in epsilon_dict:
+                epsilon = epsilon_dict[solvent]
+
+                # add ALPB solvation via solvent epsilon
+                self.ase_calc = TBLite(method=method, solvation=("alpb", epsilon))
+
+            else:
+                # translate if needed
+                xtb_solvent_name = to_xtb_solvents.get(solvent, solvent)
+
+                # add ALPB solvation via solvent name
+                self.ase_calc = TBLite(method=method, solvation=("alpb", xtb_solvent_name))
+
+        except TBLiteValueError:
+            print(
+                "--> WARNING: TBLITE was not able to set up ALPB solvation correctly. Defaulted to vacuum."
+            )
+            self.ase_calc = TBLite(method=method)
 
         return self.ase_calc
 

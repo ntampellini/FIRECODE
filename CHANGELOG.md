@@ -6,6 +6,11 @@
 <!-- FINALSPLEVEL keyword? -->
  <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
 
+
+## FIRECODE 1.7.0 🔥 (WIP)
+- Implemented vibrational analysis via ASE including quasi-RRHO thermochemistry (as in GoodVibes) to get free energies.
+- Restructured solvent module.
+
 ## FIRECODE 1.6.0 🔥 (March 11 2026)
 - Refreshed constraints handling in operators.
 - Added non-inline constraints specification after a molecule line. Syntax: "B/A/D i1 i2 [i3] [i4] [auto/value]"

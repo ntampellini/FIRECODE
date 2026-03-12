@@ -28,8 +28,8 @@ import numpy as np
 from prism_pruner.algebra import normalize
 from prism_pruner.graph_manipulations import graphize
 
-from firecode.ase_manipulations import ase_vib
 from firecode.optimization_methods import optimize, refine_structures
+from firecode.thermochemistry import ase_vib
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import charge_to_str, loadbar, write_xyz
 
@@ -334,7 +334,8 @@ def get_free_energies(
                 ),
                 charge=charge,
                 mult=mult,
-                temp=embedder.options.T,
+                T_K=embedder.options.T,
+                C_mol_L=1.0,
                 title=f"{title}_conf{s}",
                 return_gcorr=False,
             )

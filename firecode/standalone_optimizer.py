@@ -320,7 +320,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
     """
     if optimizer.free_energy:
         print("--> Requested free energy calculation - performing vibrational analysis")
-        from firecode.ase_manipulations import ase_vib
+        from firecode.thermochemistry import ase_vib
 
     if optimizer.sp:
         print("--> Single point calculation requested (no optimization)")
@@ -431,7 +431,8 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         ase_calc=optimizer.ase_calc,
                         charge=charge,
                         mult=mult,
-                        temp=optimizer.T,
+                        T_K=optimizer.T,
+                        solvent=optimizer.solvent,
                         title=f"{name[:-4]}",
                     )
 

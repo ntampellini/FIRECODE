@@ -82,6 +82,7 @@ keywords_dict = {
     # scrambled. Default is 1. Syntax: `NEWBONDS=1`
     "NOOPT": 1,  # Skip the optimization steps, directly writing structures to file.
     "ONLYREFINED": 1,  # Discard structures that do not successfully refine bonding distances.
+    "P": 1,  # Pressure, in atmospheres.
     "PKA": 1,  # Set reference pKa for a specific compound
     "PROCS": 1,  # Set the number of parallel cores to be used by ORCA
     "REFINE": 1,  # Same as calling refine> on a single file
@@ -177,7 +178,8 @@ class Options:
     scramble_check: bool = False
     charge: int = 0
     mult: int = 1
-    T: float = 298.15
+    T: float = 298.15  # in K
+    P: float = 1.0  # in atm
     ff_opt: bool = FF_OPT_BOOL
     ff_calc: str | None = FF_CALC
 
@@ -566,6 +568,11 @@ class OptionSetter:
         kw = self.keywords_simple[self.keywords.index("T_C")]
         options.T = float(kw.split("=")[1]) + 273.15
         self.embedder.log(f"--> Set temperature to {options.T:.2f} K ({options.T - 273.15:.2f} °C)")
+
+    def p(self, options: Options, *args: Any) -> None:
+        kw = self.keywords_simple[self.keywords.index("P")]
+        options.P = float(kw.split("=")[1])
+        self.embedder.log(f"--> Set pressure to {options.P:.1f} atm")
 
     def set_options(self) -> None:
         for kw in self.sorted_keywords():

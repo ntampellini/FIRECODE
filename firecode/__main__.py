@@ -29,7 +29,6 @@ install(show_locals=True)
 
 
 def main() -> None:
-
     # Redirect stdout and stderr to handle encoding errors
     sys.stdout = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
