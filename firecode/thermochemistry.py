@@ -441,7 +441,8 @@ def ase_vib(
 
         f.write("\n--> What follows mocks an ORCA output for scraping:\n\n")
         f.write(f"Number of atoms ... {len(atoms)}\n")
-        f.write(f"Temperature ...: {T_K:.2f} K ({T_K - 273.15:.2f} °C)\n\n")
+        f.write(f"Total Charge ... ... {charge}\n\n")
+        f.write(f"Temperature ...: {T_K:.2f} K ({T_K - 273.15:.2f} °C)\n")
 
         f.write("VIBRATIONAL FREQUENCIES\n")
         f.write("-------------------------------------\n")
@@ -450,10 +451,16 @@ def ase_vib(
 
         f.write(f"\nFINAL SINGLE POINT ENERGY {EE:.8f} Eh\n")
         f.write(f"FINAL GIBBS FREE ENERGY {G:.8f} Eh\n")
-        f.write(f"G-E(el) ... {Gcorr:.8f} Eh     {Gcorr * EH_TO_KCAL:.2f} kcal/mol\n")
-        f.write(f"Total enthalpy ... {H:.8f} Eh\n")
-        f.write(f"Final entropy term ... {S:.8f} Eh/K\n")
-        f.write("\n\n*** ORCA TERMINATED NORMALLY ***\n")
+        f.write(f"G-E(el) ... {Gcorr:.8f} Eh     {Gcorr * EH_TO_KCAL:.2f} kcal/mol\n\n")
+
+        kB_times_T = (KB__eV_K / EH_TO_EV) * T_K
+        f.write(f"Thermal Enthalpy correction ... {kB_times_T:.8f} Eh\n")
+        f.write(f"Total correction {H - EE - kB_times_T:.8f} Eh\n")
+        f.write(f"Total enthalpy ... {H:.8f} Eh\n\n")
+
+        f.write(f"Final entropy term ... {S:.8f} Eh/K\n\n")
+
+        f.write("*** ORCA TERMINATED NORMALLY ***\n")
 
     del vib
     if os.path.isdir("vib"):
