@@ -29,9 +29,9 @@ from prism_pruner.algebra import normalize
 from prism_pruner.graph_manipulations import graphize
 
 from firecode.optimization_methods import optimize, refine_structures
-from firecode.thermochemistry import ase_vib
+from firecode.thermochemistry import get_free_energies
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
-from firecode.utils import charge_to_str, loadbar, write_xyz
+from firecode.utils import charge_to_str, write_xyz
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder
@@ -304,47 +304,3 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
         embedder.objects[mol_index].pka_data = ("B -> BH+", e_BH - e_B)
 
         embedder.log()
-
-
-def get_free_energies(
-    embedder: Embedder,
-    atoms: Array1D_str,
-    structures: Array3D_float,
-    charge: int,
-    mult: int,
-    title: str = "temp",
-) -> Array1D_float:
-    """ """
-
-    free_energies = []
-
-    for s, structure in enumerate(structures):
-        loadbar(
-            s,
-            len(structures),
-            f"{title} Performing vibrational analysis {s + 1}/{len(structures)} ",
-        )
-
-        free_energies.append(
-            ase_vib(
-                atoms,
-                structure,
-                ase_calc=embedder.dispatcher.get_ase_calc(
-                    embedder.options.theory_level, embedder.options.solvent
-                ),
-                charge=charge,
-                mult=mult,
-                T_K=embedder.options.T,
-                C_mol_L=1.0,
-                title=f"{title}_conf{s}",
-                return_gcorr=False,
-            )
-        )
-
-    loadbar(
-        len(structures),
-        len(structures),
-        f"{title} Performing vibrational analysis {len(structures)}/{len(structures)} ",
-    )
-
-    return np.array(free_energies)

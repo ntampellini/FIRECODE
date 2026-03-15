@@ -425,7 +425,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     )
                     t_start = perf_counter()
 
-                    energy += ase_vib(
+                    freqs, gcorr = ase_vib(
                         mol.atoms,
                         coords,
                         ase_calc=optimizer.ase_calc,
@@ -436,8 +436,12 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         title=f"{name[:-4]}",
                     )
 
+                    energy += gcorr
+                    num_neg = np.count_nonzero(freqs < 0.0)
                     elapsed = perf_counter() - t_start
-                    print(f"Calculated vibrational frequencies in {time_to_string(elapsed)}\n")
+                    print(
+                        f"Calculated vibrational frequencies ({num_neg} negatives) in {time_to_string(elapsed)}\n"
+                    )
 
                 energies.append(energy)
                 names_confs.append(name[:-4] + f"_conf{c_n + 1}")

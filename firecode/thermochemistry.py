@@ -27,7 +27,7 @@ import math
 import os
 from shutil import rmtree
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 import numpy as np
 from ase import Atoms
@@ -38,7 +38,7 @@ from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import set_charge_and_mult_on_ase_atoms
 from firecode.solvents import solvent_data, solvent_synonyms
-from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float
+from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import (
     AVOGADRO_NA,
     EH_TO_EV,
@@ -53,10 +53,12 @@ from firecode.units import (
     PLANCK_h__J_s,
     theta_per_cm1_K,
 )
-from firecode.utils import HiddenPrints
+from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
+
+    from firecode.embedder import Embedder
 
 # Frequencies below this are considered belonging to proper
 # transition states and excluded from thermochemical analysis,
@@ -364,8 +366,8 @@ def ase_vib(
     title: str = "temp",
     return_gcorr: bool = True,
     write_log: bool = True,
-) -> float:
-    """returns: G(corr) or Free energy, in kcal/mol."""
+) -> tuple[Array1D_float, float]:
+    """returns: tuple of Array of frequencies and either G(corr) or Free energy, in kcal/mol."""
     ase_atoms = Atoms(atoms, positions=coords)
     ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge=charge, mult=mult)
 
@@ -439,7 +441,7 @@ def ase_vib(
         H = thermo_dict["H_total_Eh"]
         S = (H - G) / T_K  # Eh/K
 
-        f.write("\n--> What follows mocks an ORCA output for scraping:\n\n")
+        f.write("\n--> What follows mocks an ORCA output:\n\n")
         f.write(f"Number of atoms ... {len(atoms)}\n")
         f.write(f"Total Charge ... ... {charge}\n\n")
         f.write(f"Temperature ...: {T_K:.2f} K ({T_K - 273.15:.2f} °C)\n")
@@ -470,8 +472,8 @@ def ase_vib(
         os.remove(f"vib_{title}.out")
 
     if return_gcorr:
-        return cast("float", Gcorr * EH_TO_KCAL)
-    return cast("float", G * EH_TO_KCAL)
+        return freqs, cast("float", Gcorr * EH_TO_KCAL)
+    return freqs, cast("float", G * EH_TO_KCAL)
 
 
 def cleanup_freqs(
@@ -540,3 +542,66 @@ def cleanup_freqs(
         freqs *= scaling_factor
 
     return freqs
+
+
+def get_free_energies(
+    embedder: Embedder,
+    atoms: Array1D_str,
+    structures: Array3D_float,
+    charge: int,
+    mult: int,
+    title: str = "temp",
+    logfunction: Callable[[str], None] | None = None,
+) -> Array1D_float:
+    """Run vibrational analysis on a set of structures."""
+    free_energies = []
+
+    with NewFolderContext(f"{title}_thermo", delete_after=False):
+        for s, structure in enumerate(structures):
+            loadbar(
+                s,
+                len(structures),
+                f"{title} Performing vibrational analysis {s + 1}/{len(structures)} ",
+            )
+
+            t_start = perf_counter()
+
+            freqs, free_energy = ase_vib(
+                atoms,
+                structure,
+                ase_calc=embedder.dispatcher.get_ase_calc(
+                    embedder.options.theory_level, embedder.options.solvent
+                ),
+                charge=charge,
+                mult=mult,
+                T_K=embedder.options.T,
+                C_mol_L=embedder.options.C,
+                title=f"{title}_conf{s}",
+                return_gcorr=False,
+            )
+
+            free_energies.append(free_energy)
+
+            if logfunction is not None:
+                elapsed = perf_counter() - t_start
+                match num_neg := np.count_nonzero(freqs < 0.0):
+                    case 0:
+                        exit_str = "GS"
+                    case 1:
+                        exit_str = "TS"
+                    case _:
+                        exit_str = "??"
+
+                logfunction(
+                    f"    - {title} - {exit_str} ({num_neg} negative freqs. - {time_to_string(elapsed)})"
+                )
+
+        loadbar(
+            len(structures),
+            len(structures),
+            f"{title} Performing vibrational analysis {len(structures)}/{len(structures)} ",
+        )
+
+        clean_directory(to_remove=("gfnff_topo",))
+
+    return np.array(free_energies)

@@ -72,6 +72,7 @@ def run_firecode_input(name: str) -> None:
                 "_scan_max.xyz",
                 "_scan.xyz",
                 "_opt",
+                "_thermo",
                 "CREST",
                 "NEB",
                 "FSM",

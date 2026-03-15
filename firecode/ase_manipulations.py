@@ -586,7 +586,8 @@ def ase_neb(
                 opt.run(fmax=0.05, steps=200 + opt.nsteps)
 
             energies = [image.get_total_energy() * EV_TO_KCAL for image in images]  # type: ignore[no-untyped-call]
-            print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
+            if verbose_print:
+                print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
             ase_dump(f"{title}_MEP_temp_pre_CI.xyz", atoms, neb.images, energies)
 
             if climbing_image:

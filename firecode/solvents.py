@@ -22,34 +22,10 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from firecode.units import AVOGADRO_NA, A3_TO_mL
 
-to_xtb_solvents = {
-    "acetone": "acetone",
-    "mecn": "acetonitrile",
-    "aniline": "aniline",
-    "benzaldehyde": "benzaldehyde",
-    "benzene": "benzene",
-    "ch2cl2": "ch2cl2",
-    "chcl3": "chcl3",
-    "cs2": "cs2",
-    "dioxane": "dioxane",
-    "dmf": "dmf",
-    "dmso": "dmso",
-    "et2o": "ether",
-    "ethylacetate": "ethylacetate",
-    "furane": "furane",
-    "hexadecane": "hexadecane",
-    "hexane": "hexane",
-    "methanol": "methanol",
-    "meno2": "nitromethane",
-    "octanol": "octanol",
-    "octanolwet": "octanolwet",
-    "phenol": "phenol",
-    "toluene": "toluene",
-    "thf": "thf",
-    "h2o": "water",
-}
-
-# convention: from long to short, from unusual to short
+# from any solvent name to the standard FIRECODE name.
+# Convention: short over long (methanol->meoh)
+# but common over short (phme->toluene)
+# No spaces in solvent name!
 solvent_synonyms = {
     "ch3cooh": "acoh",
     "aceticacid": "acoh",
@@ -72,6 +48,37 @@ solvent_synonyms = {
     "dimethylether": "me2o",
     "triethylamine": "et3n",
     "nitromethane": "meno2",
+    "dimethylacetamide": "dmac",
+}
+
+# Convert from standard to XTB names.
+# do not remove dummy (s : s) entries,
+# as keys are used for checking purposes
+to_xtb_solvents = {
+    "acetone": "acetone",
+    "mecn": "acetonitrile",
+    "aniline": "aniline",
+    "benzaldehyde": "benzaldehyde",
+    "benzene": "benzene",
+    "ch2cl2": "ch2cl2",
+    "chcl3": "chcl3",
+    "cs2": "cs2",
+    "dioxane": "dioxane",
+    "dmf": "dmf",
+    "dmso": "dmso",
+    "et2o": "ether",
+    "etoac": "ethylacetate",
+    "furane": "furane",
+    "hexadecane": "hexadecane",
+    "hexane": "hexane",
+    "meoh": "methanol",
+    "meno2": "nitromethane",
+    "octanol": "octanol",
+    "octanolwet": "octanolwet",
+    "phenol": "phenol",
+    "toluene": "toluene",
+    "thf": "thf",
+    "h2o": "water",
 }
 
 # name: {molarity (M), molecular_volume(Å^3)}
@@ -186,6 +193,11 @@ solvent_data = {
         "MW": 84.93,
         "density": 1.33,
         "epsilon": 8.93,
+    },
+    "dmac": {
+        "MW": 87.122,
+        "density": 0.937,
+        "epsilon": 37.78,
     },
 }
 
