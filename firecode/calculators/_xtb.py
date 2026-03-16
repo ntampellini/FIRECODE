@@ -30,6 +30,7 @@ import numpy as np
 from prism_pruner.algebra import normalize
 
 from firecode.graph_manipulations import get_sum_graph
+from firecode.solvents import to_xtb_solvents
 from firecode.typing_ import Array1D_str, Array2D_float, Array3D_float
 from firecode.units import EH_TO_KCAL
 from firecode.utils import NewFolderContext, clean_directory, read_xyz, write_xyz
@@ -255,11 +256,11 @@ def xtb_opt(
             flags += f" -P {procs}"
 
         if solvent is not None:
-            if solvent == "methanol":
+            if solvent == "meoh":
                 flags += " --gbsa methanol"
 
             else:
-                flags += f" --alpb {solvent}"
+                flags += f" --alpb {to_xtb_solvents.get(solvent, solvent)}"
 
         elif method.upper() in ("GFN-FF", "GFNFF"):
             flags += " --alpb ch2cl2"
@@ -301,20 +302,18 @@ def xtb_opt(
                 energy = energy_grepper(f"{title}.out", "TOTAL ENERGY", 3)
                 # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out", trajname, outname))
 
-            for filename in (
-                "gfnff_topo",
-                "charges",
-                "wbo",
-                "xtbrestart",
-                "xtbtopo.mol",
-                ".xtboptok",
-                "gfnff_adjacency",
-                "gfnff_charges",
-            ):
-                try:
-                    os.remove(filename)
-                except FileNotFoundError:
-                    pass
+            clean_directory(
+                to_remove=(
+                    "gfnff_topo",
+                    "charges",
+                    "wbo",
+                    "xtbrestart",
+                    "xtbtopo.mol",
+                    ".xtboptok",
+                    "gfnff_adjacency",
+                    "gfnff_charges",
+                ),
+            )
 
             return coords, energy, True
 
@@ -452,7 +451,7 @@ def xtb_get_free_energy(
                 flags += " --gbsa methanol"
 
             else:
-                flags += f" --alpb {solvent}"
+                flags += f" --alpb {to_xtb_solvents.get(solvent, solvent)}"
 
         try:
             with open("temp_hess.log", "w") as outfile:
@@ -477,26 +476,23 @@ def xtb_get_free_energy(
             os.system(f"cat {outfile}")
             raise e
 
-        clean_directory()
-        for filename in (
-            "gfnff_topo",
-            "charges",
-            "wbo",
-            "xtbrestart",
-            "xtbtopo.mol",
-            ".xtboptok",
-            "hessian",
-            "g98.out",
-            "vibspectrum",
-            "wbo",
-            "xtbhess.xyz",
-            "charges",
-            "temp_hess.log",
-        ):
-            try:
-                os.remove(filename)
-            except FileNotFoundError:
-                pass
+        clean_directory(
+            to_remove=(
+                "gfnff_topo",
+                "charges",
+                "wbo",
+                "xtbrestart",
+                "xtbtopo.mol",
+                ".xtboptok",
+                "hessian",
+                "g98.out",
+                "vibspectrum",
+                "wbo",
+                "xtbhess.xyz",
+                "charges",
+                "temp_hess.log",
+            ),
+        )
 
         return result
 
@@ -682,7 +678,7 @@ def crest_mtd_search(
                 flags += " --gbsa methanol"
 
             else:
-                flags += f" --alpb {solvent}"
+                flags += f" --alpb {to_xtb_solvents.get(solvent, solvent)}"
 
         if kcal is None:
             kcal = 10
@@ -706,20 +702,18 @@ def crest_mtd_search(
 
         # clean_directory((f'{title}.inp', f'{title}.xyz', f"{title}.out"))
 
-        for filename in (
-            "gfnff_topo",
-            "charges",
-            "wbo",
-            "xtbrestart",
-            "xtbtopo.mol",
-            ".xtboptok",
-            "gfnff_adjacency",
-            "gfnff_charges",
-        ):
-            try:
-                os.remove(filename)
-            except FileNotFoundError:
-                pass
+        clean_directory(
+            to_remove=(
+                "gfnff_topo",
+                "charges",
+                "wbo",
+                "xtbrestart",
+                "xtbtopo.mol",
+                ".xtboptok",
+                "gfnff_adjacency",
+                "gfnff_charges",
+            ),
+        )
 
         return new_coords
 
@@ -753,9 +747,9 @@ def xtb_gsolv(
             flags += f" --chrg {charge}"
 
         if mult != 1:
-            flags += f" --uhf {int(int(mult) - 1)}"
+            flags += f" --uhf {int(mult - 1)}"
 
-        flags += f" --{model} {solvent}"
+        flags += f" --{model} {to_xtb_solvents.get(solvent, solvent)}"
 
         try:
             with open(f"{title}.out", "w") as f:
@@ -775,19 +769,17 @@ def xtb_gsolv(
             gsolv = energy_grepper(f"{title}.out", "-> Gsolv", 3)
             clean_directory((f"{title}.inp", f"{title}.xyz", f"{title}.out", outname))
 
-        for filename in (
-            "gfnff_topo",
-            "charges",
-            "wbo",
-            "xtbrestart",
-            "xtbtopo.mol",
-            ".xtboptok",
-            "gfnff_adjacency",
-            "gfnff_charges",
-        ):
-            try:
-                os.remove(filename)
-            except FileNotFoundError:
-                pass
+        clean_directory(
+            to_remove=(
+                "gfnff_topo",
+                "charges",
+                "wbo",
+                "xtbrestart",
+                "xtbtopo.mol",
+                ".xtboptok",
+                "gfnff_adjacency",
+                "gfnff_charges",
+            )
+        )
 
         return gsolv

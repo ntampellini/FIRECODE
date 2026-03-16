@@ -20,112 +20,198 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
-import sys
+from firecode.units import AVOGADRO_NA, A3_TO_mL
 
-xtb_solvents = [
-    "acetone",
-    "acetonitrile",
-    "aniline",
-    "benzaldehyde",
-    "benzene",
-    "ch2cl2",
-    "chcl3",
-    "cs2",
-    "dioxane",
-    "dmf",
-    "dmso",
-    "ether",
-    "ethylacetate",
-    "furane",
-    "hexadecane",
-    "hexane",
-    "methanol",
-    "nitromethane",
-    "octanol",
-    "octanolwet",
-    "phenol",
-    "toluene",
-    "thf",
-    "water",
-    "none",  # This is required for the ASE get_calc function
-]
-
-xtb_solvents = xtb_solvents + ["" for _ in range(3 - len(xtb_solvents) % 3)]
-gap = 18
-xtb_supported = "".join(
-    [
-        (
-            f"{xtb_solvents[i]}{' ' * (gap - len(xtb_solvents[i]))}"
-            f"{xtb_solvents[i + 1]}{' ' * (gap - len(xtb_solvents[i + 1]))}"
-            f"{xtb_solvents[i + 2]}\n"
-        )
-        for i, _ in enumerate(xtb_solvents)
-        if i % 3 == 0
-    ]
-)
-
-epsilon_dict = {
-    "aceticacid": 6.15,
-    "acetone": 20.7,
-    "acetonitrile": 37.5,
-    "aniline": 7.06,
-    "benzaldehyde": 17.9,
-    "benzene": 2.28,
-    "chloroform": 4.8,
-    "cs2": 2.63,
-    "ch2cl2": 8.93,
-    "dioxane": 2.25,
-    "dmf": 36.71,
-    "dmso": 46.68,
-    "et2o": 4.27,
-    "dimethylether": 6.18,
-    "ethanol": 24.3,
-    "methanol": 32.63,
-    "ethylacetate": 6.02,
-    "furan": 2.94,
-    "hexadecane": 2.05,
-    "octanol": 10.30,
-    "phenol": 12.4,
-    "toluene": 2.38,
-    "thf": 7.58,
-    "water": 80.1,
-}
-
+# from any solvent name to the standard FIRECODE name.
+# Convention: short over long (methanol->meoh)
+# but common over short (phme->toluene)
+# No spaces in solvent name!
 solvent_synonyms = {
-    "ch3cooh": "aceticacid",
-    "ch3cn": "acetonitrile",
-    "chcl3": "chloroform",
+    "ch3cooh": "acoh",
+    "aceticacid": "acoh",
+    "ch3cn": "mecn",
+    "acetonitrile": "mecn",
+    "chloroform": "chcl3",
     "dcm": "ch2cl2",
     "dichloromethane": "ch2cl2",
     "carbondisuphide": "cs2",
     "carbondisulfide": "cs2",
     "diethylether": "et2o",
-    "etoh": "ethanol",
-    "ch3oh": "methanol",
-    "meoh": "methanol",
-    "h2o": "water",
+    "ethanol": "etoh",
+    "ch3oh": "meoh",
+    "methanol": "meoh",
+    "water": "h2o",
+    "ethylacetate": "etoac",
+    "phme": "toluene",
+    "phh": "benzene",
+    "dimethylformamide": "dmf",
+    "dimethylether": "me2o",
+    "triethylamine": "et3n",
+    "nitromethane": "meno2",
+    "dimethylacetamide": "dmac",
+}
+
+# Convert from standard to XTB names.
+# do not remove dummy (s : s) entries,
+# as keys are used for checking purposes
+to_xtb_solvents = {
+    "acetone": "acetone",
+    "mecn": "acetonitrile",
+    "aniline": "aniline",
+    "benzaldehyde": "benzaldehyde",
+    "benzene": "benzene",
+    "ch2cl2": "ch2cl2",
+    "chcl3": "chcl3",
+    "cs2": "cs2",
+    "dioxane": "dioxane",
+    "dmf": "dmf",
+    "dmso": "dmso",
+    "et2o": "ether",
     "etoac": "ethylacetate",
+    "furane": "furane",
+    "hexadecane": "hexadecane",
+    "hexane": "hexane",
+    "meoh": "methanol",
+    "meno2": "nitromethane",
+    "octanol": "octanol",
+    "octanolwet": "octanolwet",
+    "phenol": "phenol",
+    "toluene": "toluene",
+    "thf": "thf",
+    "h2o": "water",
 }
 
-new_theory_level = {
-    "ORCA": lambda theory_level, solvent: f"! CPCM\n%cpcm\nepsilon {epsilon_dict[solvent]}\nend",
-    # 'XTB':lambda theory_level, _: '',
+# name: {molarity (M), molecular_volume(Å^3)}
+# see https://organicchemistrydata.org/solvents/
+solvent_data = {
+    "none": {
+        "MW": 0.0,  # g/mol
+        "density": 0.0,  # g/mL
+        "molarity": 1.0,  # mol/L
+        "molecular_volume": 1.0,  # Å^3
+    },
+    "h2o": {
+        "molarity": 55.6,
+        "molecular_volume": 27.944,
+        "epsilon": 80.1,
+    },
+    "toluene": {
+        "molarity": 9.4,
+        "molecular_volume": 149.070,
+        "epsilon": 2.38,
+    },
+    "dmf": {
+        "molarity": 12.9,
+        "molecular_volume": 77.442,
+        "epsilon": 36.71,
+    },
+    "acoh": {
+        "molarity": 17.4,
+        "molecular_volume": 86.10,
+        "epsilon": 6.15,
+    },
+    "chcl3": {
+        "molarity": 12.5,
+        "molecular_volume": 97.0,
+        "epsilon": 4.8,
+    },
+    "acetone": {
+        "MW": 58.08,
+        "density": 0.7845,
+        "epsilon": 20.7,
+    },
+    "mecn": {
+        "MW": 41.052,
+        "density": 0.7857,
+        "epsilon": 37.5,
+    },
+    "benzene": {
+        "MW": 78.11,
+        "density": 0.8765,
+        "epsilon": 2.28,
+    },
+    "cs2": {
+        "MW": 76.13,
+        "density": 1.266,
+        "epsilon": 2.63,
+    },
+    "dioxane": {
+        "MW": 88.11,
+        "density": 1.033,
+        "epsilon": 2.25,
+    },
+    "dmso": {
+        "MW": 78.13,
+        "density": 1.092,
+        "epsilon": 46.68,
+    },
+    "et2o": {
+        "MW": 74.12,
+        "density": 0.713,
+        "epsilon": 4.27,
+    },
+    "me2o": {
+        "MW": 46.07,
+        "density": 0.735,
+        "epsilon": 6.18,
+    },
+    "etoh": {
+        "MW": 46.07,
+        "density": 0.789,
+        "epsilon": 24.3,
+    },
+    "meoh": {
+        "MW": 32.04,
+        "density": 0.791,
+        "epsilon": 32.63,
+    },
+    "etoac": {
+        "MW": 88.11,
+        "density": 0.895,
+        "epsilon": 6.02,
+    },
+    "thf": {
+        "MW": 72.106,
+        "density": 0.8833,
+        "epsilon": 7.58,
+    },
+    "mtbe": {
+        "MW": 88.15,
+        "density": 0.741,
+    },
+    "phcf3": {
+        "MW": 146.11,
+        "density": 1.19,
+        "epsilon": 9.18,
+    },
+    "et3n": {
+        "MW": 101.19,
+        "density": 0.7255,
+        "epsilon": 2.4,
+    },
+    "ch2cl2": {
+        "MW": 84.93,
+        "density": 1.33,
+        "epsilon": 8.93,
+    },
+    "dmac": {
+        "MW": 87.122,
+        "density": 0.937,
+        "epsilon": 37.78,
+    },
 }
 
+# estimate molarity or molecular_volume from
+# MW and density if we are missing expt. data
+for data_dict in solvent_data.values():
+    if data_dict.get("molarity") is None:
+        data_dict["molarity"] = 1000 / (data_dict["density"] * data_dict["MW"])
 
-def get_solvent_line(solvent: str, calculator: str, theory_level: str) -> str:
-    """Get the solvent line for a specific external calculator."""
-    if solvent is None:
-        return ""
+    if data_dict.get("molecular_volume") is None:
+        data_dict["molecular_volume"] = (
+            data_dict["MW"] / data_dict["density"] / AVOGADRO_NA / A3_TO_mL
+        )
 
-    if solvent in solvent_synonyms:
-        solvent = solvent_synonyms[solvent]
-
-    if solvent not in epsilon_dict:
-        print(f"Solvent '{solvent}' not recognized. Implemented solvents are:")
-        for s in epsilon_dict:
-            print("    " + s)
-        print("Please note that not all solvents will work with all calculators.")
-        sys.exit(1)
-
-    return new_theory_level[calculator](theory_level, solvent)
+epsilon_dict = {
+    solvent: data["epsilon"] for solvent, data in solvent_data.items() if "epsilon" in data
+}

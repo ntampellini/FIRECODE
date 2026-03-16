@@ -759,12 +759,13 @@ class NewFolderContext:
 
         os.chdir(self.new_folder_name)
 
-    def __exit__(self, *args: object) -> None:
+    def __exit__(self, exc_type: type, exc_val: Exception, exc_tb: object) -> None:
         # get out of working folder
         os.chdir(os.path.dirname(os.getcwd()))
 
-        # and eventually delete it
-        if self.delete_after:
+        # only delete if instructed to
+        # and no unhandled exception occurred
+        if self.delete_after and exc_type is None:
             shutil.rmtree(self.new_folder_name)
 
 

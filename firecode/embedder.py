@@ -200,6 +200,20 @@ class Embedder:
         string += "\n"
         self.logfile.write(string)
 
+    def log_warnings(self) -> None:
+        """Logs the non-fatal errors (warnings) at the end of a run."""
+        if self.warnings:
+            self.log()
+            self.log("{:*^76}".format("  W  A  R  N  I  N  G  S  "))
+            self.log("{:*^76}".format(" your run generated these non-fatal warnings "))
+            self.log()
+
+            for warning in self.warnings:
+                self.log(auto_newline(warning, max_line_len=65))
+                self.log()
+
+            self.log("*" * 76)
+
     def debuglog(self, string: str = "") -> None:
         if self.options.debug and self.debug_logfile is not None:
             string += "\n"
@@ -240,7 +254,7 @@ class Embedder:
      .▒░░░░░░░░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ░▒░░░ ░░░░▒ *  ▒
 .      ▒░░░▒░╔═════════════════════════════════════════════╗░░░ ░░░ ░░░░▒
          ▒░ ░║                                             ║░▒░░ ░░░░░▒
- +▒    ▒░░░░░║        nicolo.tampellini@yale.edu           ║░░░░░░░░▒    ▒
+ +▒    ▒░░░░░║               ntamp @ mit.edu               ║░░░░░░░░▒    ▒
         ▒░░░░║                                             ║░░ ░░░▒
  ..  ▒  ▒░▒░░║    Version        🔥{0:^24}║░▒░░░ ░░░▒    *      .
    .  ▒ ░░░░░║    User           🔥{1:^24}║░░░░░░░░▒  +
@@ -736,7 +750,7 @@ class Embedder:
                     self.internal_angle_dih_constraints.append(emb_constr)
 
     def get_str_all_constraints(self, filename: str | None = None) -> str:
-        """Return a string detailing all constraints associated with a molecule."""
+        """Return a string detailing all constraints associated with a molecule, or all."""
         s = ""
 
         if filename is None:
@@ -1663,11 +1677,22 @@ class Embedder:
         relative energies of the first 10 structures, if possible.
 
         """
+        # rename the final ensemble to clearly
+        # indicate successful execution
+        if hasattr(self, "outname") and self.outname in os.listdir():
+            os.rename(self.outname, f"firecode_final_ensemble_{self.stamp}.xyz")
+
+        # log warning to end of log
+        self.log_warnings()
+
+        # remove undesired files
         clean_directory()
+
         self.log(
             f"\n--> FIRECODE normal termination: total time {time_to_string(time.perf_counter() - self.t_start_run, verbose=True)}."
         )
 
+        # write some info on the final ensemble
         if hasattr(self, "structures"):
             show = 10
             if len(self.structures) > 0 and hasattr(self, "energies"):
@@ -1943,6 +1968,20 @@ class RunEmbedding(Embedder):
 
         self.zero_candidates_check()
 
+    def get_num_active_constraints(self, only_fixed_constraints: bool = True) -> int:
+        """Get the number of active constraints."""
+        constr_str = self.get_str_all_constraints()
+        if constr_str == "":
+            n_constr = 0
+        else:
+            n_constr = len(constr_str[1:-1].split())
+            if only_fixed_constraints:
+                n_constr -= len(
+                    [letter for letter in self.pairings_table.keys() if letter.islower()]
+                )
+
+        return n_constr
+
     def force_field_refining(
         self,
         conv_thr: str = "tight",
@@ -2140,13 +2179,11 @@ class RunEmbedding(Embedder):
 
         ################################################# PRUNING: ENERGY
 
-        _, sequence = zip(
-            *sorted(zip(self.energies, range(len(self.energies))), key=lambda x: x[0])
-        )
-        self.energies = self.scramble(self.energies, sequence)
-        self.structures = self.scramble(self.structures, sequence)
-        self.constrained_indices = self.scramble(self.constrained_indices, sequence)
-        # sorting structures based on energy
+        # sort structures based on energy
+        sorted_indices = np.argsort(self.energies)
+        self.energies = self.energies[sorted_indices]
+        self.structures = self.structures[sorted_indices]
+        self.constrained_indices = self.constrained_indices[sorted_indices]
 
         if self.options.debug:
             self.dump_status(
@@ -2242,16 +2279,7 @@ class RunEmbedding(Embedder):
             "TBLITE": int(self.avail_cpus // 4),
         }[self.options.calculator]
 
-        # get number of constraints for this run
-        constr_str = self.get_str_all_constraints()
-        if constr_str == "":
-            n_constr = 0
-        else:
-            n_constr = len(constr_str[1:-1].split())
-            if only_fixed_constraints:
-                n_constr -= len(
-                    [letter for letter in self.pairings_table.keys() if letter.islower()]
-                )
+        n_constr = self.get_num_active_constraints(only_fixed_constraints=only_fixed_constraints)
 
         self.log(
             f"--> {task} ({self.options.theory_level}{f'/{self.options.solvent}' if self.options.solvent is not None else ''}"
@@ -2432,13 +2460,11 @@ class RunEmbedding(Embedder):
 
         ################################################# PRUNING: ENERGY
 
-        _, sequence = zip(
-            *sorted(zip(self.energies, range(len(self.energies))), key=lambda x: x[0])
-        )
-        self.energies = self.scramble(self.energies, sequence)
-        self.structures = self.scramble(self.structures, sequence)
-        self.constrained_indices = self.scramble(self.constrained_indices, sequence)
-        # sorting structures based on energy
+        # sort structures based on energy
+        sorted_indices = np.argsort(self.energies)
+        self.energies = self.energies[sorted_indices]
+        self.structures = self.structures[sorted_indices]
+        self.constrained_indices = self.constrained_indices[sorted_indices]
 
         if self.options.debug:
             self.dump_status(
@@ -2512,16 +2538,7 @@ class RunEmbedding(Embedder):
         else:
             solvent_line = "vacuum"
 
-        # get number of constraints for this run
-        constr_str = self.get_str_all_constraints()
-        if constr_str == "":
-            n_constr = 0
-        else:
-            n_constr = len(constr_str[1:-1].split())
-            if only_fixed_constraints:
-                n_constr -= len(
-                    [letter for letter in self.pairings_table.keys() if letter.islower()]
-                )
+        n_constr = self.get_num_active_constraints(only_fixed_constraints=only_fixed_constraints)
 
         self.log(
             f"--> {task} ({self.options.theory_level}/{solvent_line}) level via {self.options.calculator}, single thread - [{n_constr} constraints]"
@@ -2688,13 +2705,11 @@ class RunEmbedding(Embedder):
 
         ################################################# PRUNING: ENERGY
 
-        _, sequence = zip(
-            *sorted(zip(self.energies, range(len(self.energies))), key=lambda x: x[0])
-        )
-        self.energies = self.scramble(self.energies, sequence)
-        self.structures = self.scramble(self.structures, sequence)
-        self.constrained_indices = self.scramble(self.constrained_indices, sequence)
-        # sorting structures based on energy
+        # sort structures based on energy
+        sorted_indices = np.argsort(self.energies)
+        self.energies = self.energies[sorted_indices]
+        self.structures = self.structures[sorted_indices]
+        self.constrained_indices = self.constrained_indices[sorted_indices]
 
         if self.options.debug:
             self.dump_status(
@@ -2745,6 +2760,54 @@ class RunEmbedding(Embedder):
         # do not retain energies for the next optimization step if optimization was not tight
         if not only_fixed_constraints:
             self.energies.fill(0)
+
+    def vibrational_analysis(self) -> None:
+        """Perform a vibrational analysis of each one of the Embedder structures."""
+        from firecode.thermochemistry import get_free_energies
+
+        self.log(
+            f"\n--> Frequency calc. / Thermochemical analysis ({self.options.theory_level}"
+            f"{f'/{self.options.solvent}' if self.options.solvent is not None else ''}"
+            f" level with {self.options.calculator} via ASE"
+        )
+
+        if self.get_num_active_constraints(only_fixed_constraints=True) != 0:
+            self.warn(
+                "--> WARNING! Vibrational analysis is being performed with one or more "
+                "fixed constraints! The thermochemical data should be interpreted carefully!"
+            )
+
+        title = self.objects[0].rootname if len(self.objects) == 1 else "structures"
+
+        self.energies = get_free_energies(
+            embedder=self,
+            atoms=self.atoms,
+            structures=self.structures,
+            charge=self.options.charge,
+            mult=self.options.mult,
+            title=title,
+            logfunction=self.log,
+        )
+
+        # sort structures based on energy
+        sorted_indices = np.argsort(self.energies)
+        self.energies = self.energies[sorted_indices]
+        self.structures = self.structures[sorted_indices]
+        self.constrained_indices = self.constrained_indices[sorted_indices]
+
+        self.outname = f"firecode_vib_ensemble_{self.stamp}.xyz"
+        with open(self.outname, "w") as f:
+            for i, (structure, energy) in enumerate(
+                zip(align_structures(self.structures), self.rel_energies())
+            ):
+                write_xyz(
+                    self.atoms,
+                    structure,
+                    f,
+                    title=f"Structure {i + 1} - Rel. G. = {round(energy, 3)} kcal/mol ({self.options.theory_level})",
+                )
+
+        self.log(f"--> Wrote {len(self.structures)} optimized structures to {self.outname}")
 
     def write_mol_info(self) -> None:
         """Writes information about the firecode molecules read from the input file."""
@@ -2910,20 +2973,6 @@ class RunEmbedding(Embedder):
 
             self.log(f"    - {line}")
 
-    def log_warnings(self) -> None:
-        """Logs the non-fatal errors (warnings) at the end of a run."""
-        if self.warnings:
-            self.log()
-            self.log("{:*^76}".format("  W  A  R  N  I  N  G  S  "))
-            self.log("{:*^76}".format(" your run generated these non-fatal warnings "))
-            self.log()
-
-            for warning in self.warnings:
-                self.log(auto_newline(warning, max_line_len=65))
-                self.log()
-
-            self.log("*" * 76)
-
     def run(self) -> None:
         """Run the firecode program."""
         self.write_mol_info()
@@ -2949,46 +2998,57 @@ class RunEmbedding(Embedder):
             self.log("\n--> Dry run requested: exiting.")
             self.normal_termination()
 
-        try:  # except KeyboardInterrupt
-            try:  # except ZeroCandidatesError()
+        try:
+            try:
+                # if this is an embed run, generate candidates
                 self.generate_candidates()
 
                 if self.options.bypass:
                     self.write_structures("unoptimized", energies=False)
                     self.normal_termination()
 
+                # remove structures with excessively close contacts
                 self.compenetration_refining()
+
+                # remove similar structures
                 self.similarity_refining(
                     rmsd=True if self.embed == "refine" else False, verbose=True
                 )
 
+                # perform geometry optimizations
                 if self.options.optimization:
+                    # perform initial ff optimization
                     if self.options.ff_opt:
-                        # perform safe optimization only for embeds
+                        # embeds do a first pass with prevent_scrambling
                         if len(self.objects) > 1 and self.options.ff_calc == "XTB":
                             self.force_field_refining(conv_thr="loose", prevent_scrambling=True)
 
+                        # non-embeds do a first pass with looser convergence
+                        # if there are a lot of structures or if there is
+                        # some temporary (non-fixed) constraint
                         elif len(self.structures) > 500 or self.temporary_constraints_present():
                             self.force_field_refining(conv_thr="loose")
 
                         self.force_field_refining(conv_thr="tight")
 
+                    # If we just optimized at a (FF) level and the final
+                    # optimization level is the same, avoid repeating it
                     if not (
                         self.options.ff_opt and self.options.theory_level == self.options.ff_level
                     ):
-                        # If we just optimized at a (FF) level and the final
-                        # optimization level is the same, avoid repeating it
-
+                        # do a first pass with looser convergence
+                        # if there are a lot of structures or if there is
+                        # some temporary (non-fixed) constraint
+                        # (both fixed constraints and interactions enforced)
                         if len(self.structures) > 500 or self.temporary_constraints_present():
                             self.optimization_refining(conv_thr="loose")
-                            # final partial optimization (with both fixed constraints and interactions enforced)
 
+                        # final uncompromised optimization (only fixed constraints)
                         self.optimization_refining(conv_thr="tight", only_fixed_constraints=True)
-                        # final uncompromised optimization (with only fixed constraints active)
 
                 else:
+                    # writing an output for "refine" runs with NOOPT
                     self.write_structures("unoptimized", energies=False)
-                    # accounting for output in "refine" runs with NOOPT
 
             except ZeroCandidatesError:
                 t_end_run = time.perf_counter()
@@ -3009,12 +3069,14 @@ class RunEmbedding(Embedder):
                 clean_directory()
                 sys.exit(0)
 
-            ##################### POST FIRECODE - NEB
+            ##################### POST-REFINEMENT
 
-            self.log_warnings()
+            if self.options.freq:
+                self.vibrational_analysis()
+
+            ##################### END
+
             self.normal_termination()
-
-            ################################################ END
 
         except KeyboardInterrupt:
             print("\n\nKeyboardInterrupt requested by user. Quitting.")

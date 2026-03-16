@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 https://github.com/ntampellini/firecode
 
-Nicolo' Tampellini - nicolo.tampellini@yale.edu
+Nicolo' Tampellini - ntamp@mit.edu
 
 """
 
@@ -29,7 +29,6 @@ install(show_locals=True)
 
 
 def main() -> None:
-
     # Redirect stdout and stderr to handle encoding errors
     sys.stdout = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 

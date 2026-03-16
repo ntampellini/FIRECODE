@@ -26,7 +26,6 @@ import os
 import time
 from dataclasses import dataclass
 from functools import wraps
-from shutil import rmtree
 from subprocess import getoutput
 from typing import TYPE_CHECKING, Any, Callable, Iterable, ParamSpec, Sequence, TypeVar, cast
 
@@ -37,8 +36,6 @@ from ase.calculators.calculator import CalculationFailed, PropertyNotImplemented
 from ase.constraints import FixInternals
 from ase.mep import DyNEB
 from ase.optimize import FIRE, LBFGS
-from ase.thermochemistry import IdealGasThermo
-from ase.vibrations import Vibrations
 from prism_pruner.algebra import dihedral, normalize
 from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
@@ -48,13 +45,12 @@ from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
-from firecode.units import EH_TO_EV, EH_TO_KCAL, EV_TO_KCAL
+from firecode.units import EV_TO_KCAL
 from firecode.utils import (
     HiddenPrints,
     NewFolderContext,
     cartesian_product,
     read_xyz,
-    suppress_stdout_stderr,
     write_xyz,
 )
 
@@ -590,7 +586,8 @@ def ase_neb(
                 opt.run(fmax=0.05, steps=200 + opt.nsteps)
 
             energies = [image.get_total_energy() * EV_TO_KCAL for image in images]  # type: ignore[no-untyped-call]
-            print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
+            if verbose_print:
+                print(f"--> Updated temporary MEP at {title}_MEP_temp_pre_CI.xyz")
             ase_dump(f"{title}_MEP_temp_pre_CI.xyz", atoms, neb.images, energies)
 
             if climbing_image:
@@ -867,7 +864,6 @@ def ase_popt(
         ase_calc = Opt_func_dispatcher(calculator).get_ase_calc(method, solvent)
 
     ase_atoms.calc = ase_calc
-    ase_calc.verbosity = 0  # type: ignore[union-attr]
 
     ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
     maxiter = maxiter or 750
@@ -929,7 +925,7 @@ def ase_popt(
     with NewFolderContext(title, delete_after=(not debug)):
         t_start_opt = time.perf_counter()
 
-        with suppress_stdout_stderr():
+        with HiddenPrints():
             with LBFGS(ase_atoms, maxstep=0.2, trajectory=traj) as opt:
                 opt.run(fmax=fmax, steps=maxiter)
                 iterations = opt.nsteps
@@ -1032,91 +1028,6 @@ def is_linear(atoms: Atoms, tol: float = 1e-3) -> bool:
 
     # linear if smallest two singular values are ~0
     return cast("bool", s[1] < tol)
-
-
-def ase_vib(
-    atoms: Array1D_str,
-    coords: Array2D_float,
-    ase_calc: ASECalculator,
-    charge: int,
-    mult: int,
-    temp: float = 298.15,
-    title: str = "temp",
-    return_gcorr: bool = True,
-    write_log: bool = True,
-) -> float:
-    """returns: G(corr) or Free energy, in kcal/mol."""
-    ase_atoms = Atoms(atoms, positions=coords)
-    ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge=charge, mult=mult)
-
-    ase_calc.verbosity = 0  # type: ignore[attr-defined]
-    ase_atoms.calc = ase_calc
-
-    vib = Vibrations(ase_atoms, delta=0.005)  # type: ignore[no-untyped-call]
-
-    with open(f"vib_{title}.out", "w", encoding="utf-8") as f:
-        with HiddenPrints():
-            f.write("--> FIRECODE ASE Frequency calculation report\n\n")
-
-            # tighten convergence
-            f.write("--> Tightening geom. opt. convergence to fmax=1E-4\n")
-            opt = LBFGS(ase_atoms, maxstep=0.01)
-            opt.run(fmax=1e-4)  # type: ignore[no-untyped-call]
-            energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-
-            # remove cache folder
-            if "vib" in os.listdir():
-                rmtree(os.path.join(os.getcwd(), "vib"))
-
-            # run vibrational analysis
-            vib.run()  # type: ignore[no-untyped-call]
-
-            # get energies (frequencies) and print summary
-            vib_energies = vib.get_energies()  # type: ignore[no-untyped-call]
-            vib.summary(log=f)  # type: ignore[no-untyped-call]
-
-            if len(atoms) == 1:
-                geometry = "monatomic"
-            elif is_linear(ase_atoms):
-                geometry = "linear"
-            else:
-                geometry = "nonlinear"
-
-            # compute thermo
-            thermo = IdealGasThermo(  # type: ignore[no-untyped-call]
-                vib_energies=vib_energies,
-                potentialenergy=energy,
-                atoms=ase_atoms,
-                spin=(mult - 1) / 2,
-                geometry=geometry,
-                symmetrynumber=1,
-                ignore_imag_modes=True,
-            )
-
-            EE = energy / EH_TO_EV  # was eV, now Eh
-            G = thermo.get_gibbs_energy(temperature=temp, pressure=101325.0) / EH_TO_EV  # type: ignore[no-untyped-call]
-            H = thermo.get_enthalpy(temperature=temp) / EH_TO_EV  # type: ignore[no-untyped-call]
-            S = thermo.get_entropy(temperature=temp, pressure=101325.0) / EH_TO_EV  # type: ignore[no-untyped-call]
-            gcorr = G - EE
-
-            f.write("\n--> What follows mocks an ORCA output for scraping purposes:\n\n")
-            f.write(f"T: {temp:.2f} K ({temp - 273.15:.2f} °C)\n")
-            f.write(f"FINAL SINGLE POINT ENERGY {EE:.8f} Eh\n")
-            f.write(f"FINAL GIBBS FREE ENERGY {G:.8f} Eh\n")
-            f.write(f"G-E(el) ... {gcorr:.8f} Eh     {gcorr * EH_TO_KCAL:.2f} kcal/mol\n")
-            f.write(f"Total enthalpy ... {H:.8f} Eh\n")
-            f.write(f"Final entropy term ... {S:.8f} Eh/K\n")
-
-    del vib
-    if os.path.isdir("vib"):
-        rmtree("vib")
-
-    if not write_log:
-        os.remove(f"vib_{title}.out")
-
-    if return_gcorr:
-        return cast("float", gcorr * EH_TO_KCAL)
-    return cast("float", G * EH_TO_KCAL)
 
 
 def fsm_operator(embedder: Embedder, optimize_endpoints: bool = True) -> str:

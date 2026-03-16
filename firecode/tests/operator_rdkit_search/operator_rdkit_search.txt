@@ -1,2 +1,2 @@
-calc=xtb level=gfn-ff ffopt=off
+calc=xtb level=gfn-ff ffopt=off freq
 refine> rdkit_search> opt> butane.xyz

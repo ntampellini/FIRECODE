@@ -1,12 +1,13 @@
 """Tests for FIRECODE."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from firecode.embedder import Embedder
 from firecode.optimization_methods import Opt_func_dispatcher
-from firecode.utils import FolderContext, HiddenPrints, clean_directory, read_xyz
+from firecode.utils import FolderContext, HiddenPrints, NewFolderContext, clean_directory, read_xyz
 
 HERE = Path(__file__).resolve().parent
 
@@ -64,13 +65,14 @@ def run_firecode_input(name: str) -> None:
 
         clean_directory(
             to_remove_startswith=["firecode"],
-            to_remove_endswith=[".log", ".out", ".svg"],
+            to_remove_endswith=[".log", ".out", ".svg", ".json"],
             to_remove_contains=[
                 "clockwise",
                 "_confs",
                 "_scan_max.xyz",
                 "_scan.xyz",
                 "_opt",
+                "_thermo",
                 "CREST",
                 "NEB",
                 "FSM",
@@ -160,3 +162,51 @@ def test_operator_fsm() -> None:
 def test_operator_pka() -> None:
     """Tests the pka operator."""
     run_firecode_input("operator_pka")
+
+
+@pytest.mark.codecov
+def test_solvent_names() -> None:
+    """Tests the solvent names."""
+    from firecode.solvents import epsilon_dict, solvent_data, solvent_synonyms, to_xtb_solvents
+
+    for solvent in solvent_synonyms:
+        if solvent in solvent_data:
+            corrected = solvent_synonyms[solvent]
+            raise KeyError(f'"{solvent}" in solvent_data should be named "{corrected}"')
+
+    err = []
+    for translated_solvent in solvent_synonyms.values():
+        if translated_solvent not in to_xtb_solvents:
+            if translated_solvent not in epsilon_dict:
+                err.append(
+                    f'Solvent "{translated_solvent}" has no epsilon value defined in solvent_data: '
+                    "it should then be a key in to_xtb_solvents."
+                )
+
+    if err:
+        raise Exception("\n".join(err))
+
+
+@pytest.mark.codecov
+def test_vib_analysis() -> None:
+    """Tests the ase_vib function."""
+    from firecode.thermochemistry import ase_vib
+
+    mol = read_xyz(str(HERE / "C2H4.xyz"))
+    solvent = "toluene"
+    ase_calc = Opt_func_dispatcher("XTB").get_ase_calc("GFN-FF", solvent)
+    with NewFolderContext(str(HERE / "temp_C2H4_vib")):
+        _ = ase_vib(
+            atoms=mol.atoms,
+            coords=mol.coords[0],
+            ase_calc=ase_calc,
+            charge=0,
+            mult=1,
+            solvent=solvent,
+        )
+
+        with open(str(HERE / "temp_C2H4_vib/temp_thermo.json"), "rb") as f:
+            thermo_dict = json.loads(f.read())
+
+        assert all([f >= 0 for f in thermo_dict["freqs_cm1"]])
+        assert len(thermo_dict["freqs_cm1"]) == len(mol.atoms) * 3

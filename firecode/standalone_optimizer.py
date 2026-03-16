@@ -320,7 +320,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
     """
     if optimizer.free_energy:
         print("--> Requested free energy calculation - performing vibrational analysis")
-        from firecode.ase_manipulations import ase_vib
+        from firecode.thermochemistry import ase_vib
 
     if optimizer.sp:
         print("--> Single point calculation requested (no optimization)")
@@ -425,18 +425,24 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     )
                     t_start = perf_counter()
 
-                    energy += ase_vib(
+                    freqs, gcorr = ase_vib(
                         mol.atoms,
                         coords,
                         ase_calc=optimizer.ase_calc,
                         charge=charge,
                         mult=mult,
-                        temp=optimizer.T,
+                        T_K=optimizer.T,
+                        solvent=optimizer.solvent,
+                        C_mol_L=1.0,
                         title=f"{name[:-4]}",
                     )
 
+                    energy += gcorr
+                    num_neg = np.count_nonzero(freqs < 0.0)
                     elapsed = perf_counter() - t_start
-                    print(f"Calculated vibrational frequencies in {time_to_string(elapsed)}\n")
+                    print(
+                        f"Calculated vibrational frequencies ({num_neg} negatives) in {time_to_string(elapsed)}\n"
+                    )
 
                 energies.append(energy)
                 names_confs.append(name[:-4] + f"_conf{c_n + 1}")
