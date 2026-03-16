@@ -126,7 +126,8 @@ def rrho_thermo(
     atoms: Atoms,
     freqs_cm1: Array1D_float,
     T_K: float = 298.15,
-    P_atm: float = 1.0,
+    P_atm: float | None = 1.0,
+    conc_mol_L: float | None = None,
     symmetry_number: int = 1,
     E_el_Eh: float = 0.0,
     mult: int = 1,
@@ -134,7 +135,6 @@ def rrho_thermo(
     cutoff_cm1: Optional[float] = None,
     qrrho_ref_cm1: float = 100.0,
     qrrho_alpha: float = 4.0,
-    conc_mol_L: float | None = None,
     solv: Optional[str] = None,
 ) -> dict[str, Any]:
     # Remove 3/5/6 zero modes
@@ -199,12 +199,15 @@ def rrho_thermo(
     #                 with free-space from Shakhnovich–Whitesides.
     lambda_factor = ((2.0 * math.pi * mass_kg * KB__J_K * T_K) ** 1.5) / (PLANCK_h__J_s**3)
 
+    # if user provided a concentration,
+    # reference state is a solution
     if conc_mol_L is not None:
         free_mL_per_L = _free_space_mL_per_L(solv)
         # free-space fraction in a liter:
         free_frac = max(free_mL_per_L / 1000.0, 1e-9)  # avoid zero
         number_density = conc_mol_L * 1000.0 * AVOGADRO_NA / free_frac  # 1/m^3
     else:
+        P_atm = P_atm or 1.0
         P_Pa = P_atm * 101325.0
         number_density = P_Pa / (KB__J_K * T_K)
 
@@ -360,14 +363,17 @@ def ase_vib(
     charge: int,
     mult: int,
     T_K: float = 298.15,
-    P_atm: float = 1.0,
+    P_atm: float | None = 1.0,
     C_mol_L: float | None = None,
     solvent: str | None = None,
     title: str = "temp",
     return_gcorr: bool = True,
     write_log: bool = True,
 ) -> tuple[Array1D_float, float]:
-    """returns: tuple of Array of frequencies and either G(corr) or Free energy, in kcal/mol."""
+    """returns: tuple of Array of frequencies and either G(corr) or Free energy, in kcal/mol.
+
+    If pressure is provided, a gas reference state will be used.
+    """
     ase_atoms = Atoms(atoms, positions=coords)
     ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge=charge, mult=mult)
 
@@ -375,7 +381,7 @@ def ase_vib(
 
     vib = Vibrations(ase_atoms, delta=0.005)  # type: ignore[no-untyped-call]
 
-    with open(f"vib_{title}.out", "w", encoding="utf-8") as f:
+    with open(f"{title}.out", "w", encoding="utf-8") as f:
         f.write("--> FIRECODE ASE Frequency calculation report\n")
         f.write(f"charge={charge}, mult={mult}, C={C_mol_L} mol/L, P={P_atm} atm\n")
         f.write(
@@ -469,7 +475,7 @@ def ase_vib(
         rmtree("vib")
 
     if not write_log:
-        os.remove(f"vib_{title}.out")
+        os.remove(f"{title}.out")
 
     if return_gcorr:
         return freqs, cast("float", Gcorr * EH_TO_KCAL)
@@ -593,7 +599,7 @@ def get_free_energies(
                         exit_str = "??"
 
                 logfunction(
-                    f"    - {title} - {exit_str} ({num_neg} negative freqs. - {time_to_string(elapsed)})"
+                    f"    - {title} conf. {s:>4d} - {exit_str} ({num_neg} negative freqs. - {time_to_string(elapsed)})"
                 )
 
         loadbar(

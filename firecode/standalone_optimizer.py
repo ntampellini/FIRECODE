@@ -433,6 +433,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         mult=mult,
                         T_K=optimizer.T,
                         solvent=optimizer.solvent,
+                        C_mol_L=1.0,
                         title=f"{name[:-4]}",
                     )
 

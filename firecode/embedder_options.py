@@ -183,7 +183,7 @@ class Options:
     charge: int = 0
     mult: int = 1
     T: float = 298.15  # in K
-    P: float = 1.0  # in atm
+    P: float | None = None  # in atm
     C: float = 1.0  # in mol/L
     ff_opt: bool = FF_OPT_BOOL
     ff_calc: str | None = FF_CALC
@@ -577,17 +577,23 @@ class OptionSetter:
     def p(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("P")]
         options.P = float(kw.split("=")[1])
-        self.embedder.log(f"--> Set pressure to {options.P:.1f} atm")
+        self.embedder.log(
+            f"--> Set pressure to {options.P:.1f} atm and global reference state to gas."
+        )
 
     def c(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("C")]
         options.C = float(kw.split("=")[1])
-        self.embedder.log(f"--> Set concentration to {options.C:.1f} mol/L")
+        self.embedder.log(
+            f"--> Set concentration to {options.C:.1f} mol/L and global reference state to solution."
+        )
 
     def conc(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("CONC")]
         options.C = float(kw.split("=")[1])
-        self.embedder.log(f"--> Set concentration to {options.C:.1f} mol/L")
+        self.embedder.log(
+            f"--> Set concentration to {options.C:.1f} mol/L and global reference state to solution."
+        )
 
     def freq(self, options: Options, *args: Any) -> None:
         options.freq = True

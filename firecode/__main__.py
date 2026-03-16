@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 https://github.com/ntampellini/firecode
 
-Nicolo' Tampellini - nicolo.tampellini@yale.edu
+Nicolo' Tampellini - ntamp@mit.edu
 
 """
 
