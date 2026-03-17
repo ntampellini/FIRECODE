@@ -383,10 +383,16 @@ def ase_vib(
 
     with open(f"{title}.out", "w", encoding="utf-8") as f:
         f.write("--> FIRECODE ASE Frequency calculation report\n")
-        f.write(f"charge={charge}, mult={mult}, C={C_mol_L} mol/L, P={P_atm} atm\n")
+        f.write(
+            f"charge={charge}, mult={mult}, C={C_mol_L} mol/L, P={P_atm} atm T={T_K:.2f} K ({T_K - 273.15:.2f} °C)\n"
+        )
         f.write(
             f"Concentration {'not ' if C_mol_L is None else ''}provided: reference "
-            f"state used is {'gas ' if C_mol_L is None else 'solution'} phase.\n\n"
+            f"state used is {'gas ' if C_mol_L is None else 'solution'} phase.\n"
+        )
+
+        f.write(
+            f"Solvent is {solvent} - accessible Shakhnovich & Whitesides space is {_free_space_mL_per_L(solvent):.2f} mL/L\n\n"
         )
 
         # tighten convergence

@@ -23,8 +23,10 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from __future__ import annotations
 
 import os as op_sys
+import sys
 from copy import deepcopy
 from dataclasses import dataclass
+from io import TextIOWrapper
 from time import perf_counter
 from typing import TYPE_CHECKING, Iterable, Sequence, cast
 
@@ -60,7 +62,8 @@ class OptimizerOptions:
     solvent: str | None
     filenames: Sequence[str]
 
-    T: float = 298.15
+    T_K: float = 298.15
+    C_mol_L: float = 0.1
     auto_charge_and_mult: bool = True
     constraint_file: str | None = None
     sp: bool = False
@@ -173,6 +176,15 @@ def main(filenames: Sequence[str]) -> None:
     args: iterable of strings of structure filenames.
 
     """
+    # Redirect stdout and stderr to handle encoding errors
+    sys.stdout = TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
+    )
+
+    sys.stderr = TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
+    )
+
     optimizer = inquire_optimizer_options(filenames)
     standalone_optimize(optimizer)
 
@@ -205,7 +217,7 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
     solvent = inquirer.fuzzy(  # type: ignore[attr-defined]
         message="Which solvent would you like to use?",
         choices=solvents,
-        default="toluene",
+        default="ch2cl2",
         validate=lambda x: (x in solvents) or x is None,
         filter=lambda solvent: solvent_synonyms.get(solvent, solvent),
     ).execute()
@@ -254,15 +266,27 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
         temp_C = inquirer.number(  # type: ignore[attr-defined]
             message="Specify temperature for free energy calculation (°C):",
             default=25,
-            validate=lambda x: float(x) + 273.15 > 0,
+            float_allowed=True,
+            min_allowed=-273.15,
             filter=float,
         ).execute()
+
+        conc = inquirer.number(  # type: ignore[attr-defined]
+            message="Specify concentration for free energy calculation (mol/L):",
+            default=0.1,
+            float_allowed=True,
+            min_allowed=0.0,
+            filter=float,
+        ).execute()
+
     else:
         temp_C = 25
+        conc = 0.1
 
     optimizer = OptimizerOptions(
         filenames=filenames,
-        T=temp_C + 273.15,
+        T_K=temp_C + 273.15,
+        C_mol_L=conc,
         calc=calc,
         method=method,
         solvent=solvent,
@@ -396,6 +420,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     traj=name[:-4] + "_traj",
                     logfunction=print,
                     maxiter=1 if optimizer.sp else 750,
+                    conv_thr="vtight" if optimizer.free_energy else "tight",
                     solvent=optimizer.solvent,
                     # title='OPT_temp',
                     # debug=True,
@@ -431,9 +456,9 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         ase_calc=optimizer.ase_calc,
                         charge=charge,
                         mult=mult,
-                        T_K=optimizer.T,
+                        T_K=optimizer.T_K,
                         solvent=optimizer.solvent,
-                        C_mol_L=1.0,
+                        C_mol_L=optimizer.C_mol_L,
                         title=f"{name[:-4]}",
                     )
 

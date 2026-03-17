@@ -40,19 +40,14 @@ from prism_pruner.algebra import dihedral, normalize
 from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, get_double_bonds_indices, time_to_string
+from sella import Sella
 
 from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EV_TO_KCAL
-from firecode.utils import (
-    HiddenPrints,
-    NewFolderContext,
-    cartesian_product,
-    read_xyz,
-    write_xyz,
-)
+from firecode.utils import HiddenPrints, NewFolderContext, cartesian_product, read_xyz, write_xyz
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
@@ -842,6 +837,8 @@ def ase_popt(
     maxiter: int | None = None,
     conv_thr: str = "tight",
     assert_convergence: bool = False,
+    optimizer: str = "LBFGS",
+    order: int = 0,
     traj: str | None = None,
     logfunction: Callable[[str], None] | None = None,
     title: str = "temp",
@@ -917,18 +914,53 @@ def ase_popt(
     ase_atoms.set_constraint(constraints)  # type: ignore[no-untyped-call]
 
     fmax = {
-        "tight": 0.05,
         "loose": 0.1,
+        "tight": 0.05,
+        "vtight": 0.01,
     }[conv_thr]
+
+    optimizer_dict = {
+        "LBFGS": LBFGS,
+        "FIRE": FIRE,
+        "SELLA": Sella,
+    }
+
+    optimizer = optimizer.upper()
+    if optimizer not in optimizer_dict:
+        raise NameError(f'Optimizer "{optimizer}" is unknown. {list(optimizer_dict.keys())}')
+
+    ase_optimizer = optimizer_dict[optimizer]
+
+    extra_args: dict[str, Any] = dict()
+    if optimizer == "SELLA":
+        extra_args["order"] = order
+    else:
+        extra_args["maxstep"] = 0.2
 
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
         t_start_opt = time.perf_counter()
+        iterations: int = 0
 
         with HiddenPrints():
-            with LBFGS(ase_atoms, maxstep=0.2, trajectory=traj) as opt:
-                opt.run(fmax=fmax, steps=maxiter)
-                iterations = opt.nsteps
+            # Step 1: larger maxstep, looser convergence
+            step1_args = extra_args.copy()
+            if "maxstep" in step1_args:
+                step1_args["maxstep"] = 0.2
+
+            with ase_optimizer(ase_atoms, **step1_args, trajectory=traj) as opt:
+                opt.run(fmax=0.1, steps=maxiter)
+                iterations += opt.nsteps
+
+            # Step 2: Refinement with smaller maxstep
+            if "tight" in conv_thr:
+                step2_args = extra_args.copy()
+                if "maxstep" in step2_args:
+                    step2_args["maxstep"] = 0.05
+
+                with ase_optimizer(ase_atoms, **step2_args, trajectory=traj) as opt:
+                    opt.run(fmax=fmax, steps=maxiter)
+                    iterations += opt.nsteps
 
         new_structure = ase_atoms.get_positions()  # type: ignore[no-untyped-call]
 

@@ -30,9 +30,13 @@ install(show_locals=True)
 
 def main() -> None:
     # Redirect stdout and stderr to handle encoding errors
-    sys.stdout = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stdout = TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
+    )
 
-    sys.stderr = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
+    )
 
     usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
     🔥 python -m firecode -cl "refine> crest_search> mol.xyz"
