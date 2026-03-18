@@ -867,7 +867,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     from firecode.ase_manipulations import ase_saddle
     from firecode.thermochemistry import get_free_energies
 
-    embedder.log("--> Saddle operator: performing saddle optimizations via Sella")
+    embedder.log("\n--> Saddle operator: performing saddle optimizations via Sella")
 
     # The distance_scan> operator returns all
     # structures of the scan, but we want to

@@ -46,7 +46,7 @@ from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
-from firecode.units import EH_TO_KCAL, EV_TO_KCAL
+from firecode.units import EV_TO_KCAL
 from firecode.utils import (
     HiddenPrints,
     NewFolderContext,
@@ -973,7 +973,8 @@ def ase_popt(
             if traj is not None:
                 getoutput(f"ase convert {traj} {traj}.xyz")
                 energies = cast("list[float]", read_xyz_energies(f"{traj}.xyz", verbose=False))
-                energies_kcal = np.array(energies) * EH_TO_KCAL
+                # since it came from ase convert the UOM is not Eh but eV
+                energies_kcal = np.array(energies) * EV_TO_KCAL
 
                 plt.figure()
                 plt.plot(

@@ -164,6 +164,13 @@ def test_operator_pka() -> None:
     run_firecode_input("operator_pka")
 
 
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_saddle() -> None:
+    """Tests the saddle operator."""
+    run_firecode_input("operator_saddle")
+
+
 @pytest.mark.codecov
 def test_solvent_names() -> None:
     """Tests the solvent names."""

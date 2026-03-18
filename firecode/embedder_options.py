@@ -184,7 +184,7 @@ class Options:
     mult: int = 1
     T: float = 298.15  # in K
     P: float | None = None  # in atm
-    C: float = 1.0  # in mol/L
+    C: float = 0.1  # in mol/L
     ff_opt: bool = FF_OPT_BOOL
     ff_calc: str | None = FF_CALC
 

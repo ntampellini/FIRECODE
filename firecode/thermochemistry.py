@@ -26,6 +26,7 @@ import json
 import math
 import os
 from shutil import rmtree
+from subprocess import getoutput
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
@@ -411,22 +412,25 @@ def ase_vib(
         energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
 
         # remove cache folder
-        if "vib" in os.listdir():
-            rmtree(os.path.join(os.getcwd(), "vib"))
+        rmtree(os.path.join(os.getcwd(), "vib"), ignore_errors=True)
 
         # run vibrational analysis
         t_start = perf_counter()
-        vib.run()  # type: ignore[no-untyped-call]
+        with HiddenPrints():
+            vib.run()  # type: ignore[no-untyped-call]
         f.write(
             f"Vibrational frequencies calculated in {time_to_string(perf_counter() - t_start)}\n\n"
         )
 
-        # get energies (frequencies) and print summary
+        write_neg_modes_to_file(vib, title=title)
+
+        # get energies (frequencies)
         freqs_complex = vib.get_energies() * EV_TO_WAVENUMS  # type: ignore[no-untyped-call]
 
         # clamp small negatives and sort freqs
         freqs = cleanup_freqs(ase_atoms, freqs_complex)
 
+        # Print pretty table with freqs
         table = PrettyTable()
         table.field_names = ["Mode", "Freq. (cm^-1)"]
         for i, freq in enumerate(freqs):
@@ -558,6 +562,23 @@ def cleanup_freqs(
         freqs *= scaling_factor
 
     return freqs
+
+
+def write_neg_modes_to_file(vib: Vibrations, title: str = "temp") -> None:
+    """Write negative modes animations to file."""
+    # get energies (frequencies)
+    freqs_complex = vib.get_energies() * EV_TO_WAVENUMS  # type: ignore[no-untyped-call]
+
+    for i, f in enumerate(freqs_complex):
+        if abs(f.imag) > abs(_TS_THR_CM_1):
+            # write mode with imaginary freq
+            vib.write_mode(n=i, kT=0.02, nimages=30)  # type: ignore[no-untyped-call]
+
+            # convert ase format to .xyz
+            getoutput(f"ase convert {vib.name}.{i}.traj {title}_mode_{i + 1:0>3d}.xyz")
+
+            # remove ase file
+            os.remove(f"{vib.name}.{i}.traj")
 
 
 def get_free_energies(
