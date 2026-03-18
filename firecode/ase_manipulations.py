@@ -46,8 +46,15 @@ from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
 from firecode.settings import DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
-from firecode.units import EV_TO_KCAL
-from firecode.utils import HiddenPrints, NewFolderContext, cartesian_product, read_xyz, write_xyz
+from firecode.units import EH_TO_KCAL, EV_TO_KCAL
+from firecode.utils import (
+    HiddenPrints,
+    NewFolderContext,
+    cartesian_product,
+    read_xyz,
+    read_xyz_energies,
+    write_xyz,
+)
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
@@ -962,6 +969,27 @@ def ase_popt(
                     opt.run(fmax=fmax, steps=maxiter)
                     iterations += opt.nsteps
 
+        if debug:
+            if traj is not None:
+                getoutput(f"ase convert {traj} {traj}.xyz")
+                energies = cast("list[float]", read_xyz_energies(f"{traj}.xyz", verbose=False))
+                energies_kcal = np.array(energies) * EH_TO_KCAL
+
+                plt.figure()
+                plt.plot(
+                    range(1, len(energies) + 1),
+                    np.array(energies_kcal) - min(energies_kcal),
+                    color="tab:blue",
+                    label="Energy (kcal/mol)",
+                    linewidth=3,
+                )
+
+                plt.legend()
+                plt.title(title)
+                plt.xlabel("Iteration #")
+                plt.ylabel("Rel. E. (kcal/mol)")
+                plt.savefig(f"{title.replace(' ', '_')}_opt.svg")
+
         new_structure = ase_atoms.get_positions()  # type: ignore[no-untyped-call]
 
         if assert_convergence:
@@ -976,9 +1004,6 @@ def ase_popt(
             )
 
         energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
-
-        if traj is not None:
-            getoutput(f"ase convert {traj} {traj}.xyz")
 
         if solvent is not None and add_alpb_solvation:
             gsolv = xtb_gsolv(
@@ -996,16 +1021,18 @@ def ase_popt(
     return new_structure, energy, success
 
 
-def _wrap_with_alpb(fn: Callable[P, R]) -> Callable[P, R]:
+def _wrap_with_kwargs(fn: Callable[P, R], fixed_kwargs: dict[str, Any]) -> Callable[P, R]:
     @wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        kwargs["add_alpb_solvation"] = True
+        for key, value in fixed_kwargs.items():
+            kwargs[key] = value
         return fn(*args, **kwargs)
 
     return wrapper
 
 
-ase_popt_with_alpb = _wrap_with_alpb(ase_popt)
+ase_popt_with_alpb = _wrap_with_kwargs(ase_popt, fixed_kwargs={"add_alpb_solvation": True})
+ase_saddle = _wrap_with_kwargs(ase_popt, fixed_kwargs={"optimizer": "SELLA", "order": 1})
 
 
 def ase_dump(

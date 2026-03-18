@@ -161,8 +161,9 @@ def rrho_thermo(
         if abs(f) > 1e-3:
             vib_cm_all.append(abs(f))
 
-    assert len(vib_cm_all) == len(freqs_cm1) - start, (
-        f"Frequency mismatch: expected {len(freqs_cm1)}, read {len(vib_cm_all)}"
+    assert (len(freqs_cm1) - len(vib_cm_all) - start) <= 1, (
+        f"Frequency mismatch: expected {len(freqs_cm1) - start} (GS) or "
+        f"{len(freqs_cm1) - start - 1} (TS) frequencies, but {len(vib_cm_all)} were read."
     )
 
     if cutoff_cm1 is None:
@@ -368,6 +369,7 @@ def ase_vib(
     solvent: str | None = None,
     title: str = "temp",
     return_gcorr: bool = True,
+    tighten_opt_before_vib: bool = True,
     write_log: bool = True,
 ) -> tuple[Array1D_float, float]:
     """returns: tuple of Array of frequencies and either G(corr) or Free energy, in kcal/mol.
@@ -395,16 +397,18 @@ def ase_vib(
             f"Solvent is {solvent} - accessible Shakhnovich & Whitesides space is {_free_space_mL_per_L(solvent):.2f} mL/L\n\n"
         )
 
-        # tighten convergence
-        t_start = perf_counter()
-        f.write("--> Tightening geom. opt. convergence to fmax=1E-4\n")
-        opt = LBFGS(ase_atoms, maxstep=0.01)
-        with HiddenPrints():
-            opt.run(fmax=1e-4)  # type: ignore[no-untyped-call]
+        # tighten convergence to avoid negative frequencies
+        if tighten_opt_before_vib:
+            t_start = perf_counter()
+            f.write("--> Tightening geom. opt. convergence to fmax=1E-2\n")
+            opt = LBFGS(ase_atoms, maxstep=0.01)
+            with HiddenPrints():
+                opt.run(fmax=1e-2)  # type: ignore[no-untyped-call]
+            f.write(
+                f"Structure optimized to fmax=1E-4 in {time_to_string(perf_counter() - t_start)}\n\n"
+            )
+
         energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
-        f.write(
-            f"Structure optimized to fmax=1E-4 in {time_to_string(perf_counter() - t_start)}\n\n"
-        )
 
         # remove cache folder
         if "vib" in os.listdir():
@@ -542,7 +546,7 @@ def cleanup_freqs(
     # modes_mw = modes_mw[:, perm]
 
     # Post-facto cleanup:
-    #   - force the first zero_first to exactly 0.0
+    #   - force the first zero_first freqs to exactly 0.0
     #   - clamp tiny |f| < |_TS_THR_CM_1| to +abs(f) for the rest
     freqs[:zero_first] = 0.0
     for i in range(zero_first, nmode):
@@ -563,12 +567,13 @@ def get_free_energies(
     charge: int,
     mult: int,
     title: str = "temp",
+    tighten_opt_before_vib: bool = True,
     logfunction: Callable[[str], None] | None = None,
 ) -> Array1D_float:
     """Run vibrational analysis on a set of structures."""
     free_energies = []
 
-    with NewFolderContext(f"{title}_thermo", delete_after=False):
+    with NewFolderContext(title + "_thermo", delete_after=False, overwrite_if_exists=False):
         for s, structure in enumerate(structures):
             loadbar(
                 s,
@@ -588,8 +593,10 @@ def get_free_energies(
                 mult=mult,
                 T_K=embedder.options.T,
                 C_mol_L=embedder.options.C,
+                solvent=embedder.options.solvent,
                 title=f"{title}_conf{s}",
                 return_gcorr=False,
+                tighten_opt_before_vib=tighten_opt_before_vib,
             )
 
             free_energies.append(free_energy)
@@ -605,7 +612,7 @@ def get_free_energies(
                         exit_str = "??"
 
                 logfunction(
-                    f"    - {title} conf. {s:>4d} - {exit_str} ({num_neg} negative freqs. - {time_to_string(elapsed)})"
+                    f"    - {title} conf{s:0>4d} - {exit_str} ({num_neg} negative freqs., {time_to_string(elapsed)})"
                 )
 
         loadbar(

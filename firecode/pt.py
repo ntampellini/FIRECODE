@@ -34,7 +34,7 @@ class PeriodicTable:
     def mass(self, symbol: str | str_) -> float:
         return MASSES_TABLE[symbol]  # type: ignore[no-any-return]
 
-    def number(self, symbol: str | str_) -> float:
+    def number(self, symbol: str | str_) -> int:
         return INDEX_TABLE[symbol]  # type: ignore[no-any-return]
 
 

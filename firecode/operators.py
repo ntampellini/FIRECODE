@@ -26,7 +26,7 @@ from __future__ import annotations
 import time
 from shutil import which
 from subprocess import CalledProcessError
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,7 +43,14 @@ from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
 from firecode.typing_ import Array2D_float, Array3D_float, MaybeNone
-from firecode.utils import get_scan_peak_index, molecule_check, read_xyz, write_xyz
+from firecode.units import EH_TO_KCAL
+from firecode.utils import (
+    get_scan_peak_index,
+    molecule_check,
+    read_xyz,
+    read_xyz_energies,
+    write_xyz,
+)
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder
@@ -87,8 +94,7 @@ def operate(input_string: str, embedder: Embedder) -> str:
         outname = scan_operator(filename, embedder)
 
     elif "neb>" in input_string:
-        neb_operator(filename, embedder)
-        embedder.normal_termination()
+        outname = neb_operator(filename, embedder)
 
     elif "fsm>" in input_string:
         outname = fsm_operator(embedder)
@@ -101,6 +107,9 @@ def operate(input_string: str, embedder: Embedder) -> str:
     elif "pka>" in input_string:
         pka_routine(filename, embedder)
         outname = filename
+
+    elif any(string in input_string for string in ("saddle>", "ts>")):
+        outname = saddle_operator(filename, embedder)
 
     else:
         op = input_string.split(">", maxsplit=1)[0]
@@ -816,7 +825,7 @@ def distance_scan(embedder: Embedder) -> str:
     ### Start structure writing
 
     # print all scan structures
-    with open(f"{mol.filename[:-4]}_scan.xyz", "w") as f:
+    with open(f"{mol.rootname}_scan.xyz", "w") as f:
         for i, (s, d, e) in enumerate(zip(structures, dists, energies)):
             write_xyz(
                 mol.atoms,
@@ -827,7 +836,7 @@ def distance_scan(embedder: Embedder) -> str:
             )
 
     # print the maximum on another file for convienience
-    with open(f"{mol.filename[:-4]}_scan_max.xyz", "w") as f:
+    with open(f"{mol.rootname}_scan_max.xyz", "w") as f:
         s = structures[id_max]
         d = dists[id_max]
         write_xyz(
@@ -839,14 +848,113 @@ def distance_scan(embedder: Embedder) -> str:
         )
 
     embedder.log(
-        f"\n--> Written {len(structures)} structures to {mol.filename[:-4]}_scan.xyz ({time_to_string(time.perf_counter() - t_start)})"
+        f"\n--> Written {len(structures)} structures to {mol.rootname}_scan.xyz ({time_to_string(time.perf_counter() - t_start)})"
     )
-    embedder.log(f"\n--> Written energy maximum to {mol.filename[:-4]}_scan_max.xyz\n")
+    embedder.log(f"\n--> Written energy maximum to {mol.rootname}_scan_max.xyz\n")
 
     # Log data to the embedder class
     mol.scan_data = (dists, energies)
 
-    return f"{mol.filename[:-4]}_scan.xyz"
+    return f"{mol.rootname}_scan.xyz"
+
+
+def saddle_operator(filename: str, embedder: Embedder) -> str:
+    """Run a saddle optimization on the input structure(s).
+
+    If more than one are provided, either process all or
+    work on the one with highest energy (i.e. coming from a NEB).
+    """
+    from firecode.ase_manipulations import ase_saddle
+    from firecode.thermochemistry import get_free_energies
+
+    embedder.log("--> Saddle operator: performing saddle optimizations via Sella")
+
+    # The distance_scan> operator returns all
+    # structures of the scan, but we want to
+    # perform a saddle optimization only on
+    # the highest energy one
+    pick_highest_energy_structure = False
+    for i, hypmol in enumerate(embedder.objects):
+        if hypmol.filename == filename:
+            ops = embedder.options.operators_dict[i]
+
+            if len(ops) > 1:
+                previous_op = ops[ops.index("saddle") - 1]
+                if previous_op == "scan":
+                    pick_highest_energy_structure = True
+
+            break
+
+    mol = read_xyz(filename)
+
+    if pick_highest_energy_structure:
+        energies = cast("list[float]", read_xyz_energies(filename))
+        highest_energy_index = energies.index(max(energies))
+        mol.coords = mol.coords[[highest_energy_index]]
+        embedder.log(
+            f"--> Saddle operator: picked highest energy structure from {filename} (structure {highest_energy_index + 1}/{len(energies)})"
+        )
+
+    opt_coords_list: list[Array2D_float] = []
+
+    for c, coords in enumerate(mol.coords):
+        title = f"{hypmol.rootname}_conf{c}_saddle"
+
+        # will work in new folders and
+        # not delete them since debug=True
+        opt_coords, _, success = ase_saddle(
+            atoms=mol.atoms,
+            coords=coords,
+            ase_calc=embedder.dispatcher.ase_calc,
+            charge=hypmol.charge,
+            mult=hypmol.mult,
+            calculator=embedder.options.calculator,
+            method=embedder.options.theory_level,
+            add_alpb_solvation=embedder.options.calculator in ("UMA", "AIMNET2"),
+            solvent=embedder.options.solvent,
+            conv_thr="vtight",
+            assert_convergence=True,
+            traj=title + "_traj",
+            logfunction=embedder.log,
+            title=title,
+            debug=True,
+        )
+
+        if success:
+            opt_coords_list.append(opt_coords)
+
+    opt_coords_array = np.array(opt_coords_list)
+
+    free_energies = get_free_energies(
+        embedder=embedder,
+        atoms=mol.atoms,
+        structures=opt_coords_array,
+        charge=hypmol.charge,
+        mult=hypmol.mult,
+        title=f"{hypmol.rootname}_conf{c}",
+        tighten_opt_before_vib=False,
+        logfunction=embedder.log,
+    )
+
+    # sorting structures based on energy
+    sorted_indices = np.argsort(free_energies)
+    free_energies = free_energies[sorted_indices]
+    opt_coords_array = opt_coords_array[sorted_indices]
+
+    outname = f"{hypmol.rootname}_saddles.xyz"
+
+    with open(outname, "w") as f:
+        for i, (coords, free_energy) in enumerate(
+            zip(align_structures(opt_coords_array), free_energies)
+        ):
+            write_xyz(
+                mol.atoms,
+                coords,
+                f,
+                title=f"Saddle-optimized conf. {i} - G = {free_energy / EH_TO_KCAL:.8f} Eh - Rel. G. = {free_energy - free_energies[0]:.2f} kcal/mol",
+            )
+
+    return outname
 
 
 def crest_is_installed() -> bool:

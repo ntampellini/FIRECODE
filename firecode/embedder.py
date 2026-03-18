@@ -1126,6 +1126,17 @@ class Embedder:
             _s = self.candidates or "Many"
             self.log(f"--> Setup performed correctly. {_s} candidates will be generated.\n")
 
+    def embed_requested(self) -> bool:
+        """Return wether the current setup specifies an embed."""
+        return self.embed in (
+            "string",
+            "chelotropic",
+            "cyclical",
+            "monomolecular",
+            "trimolecular",
+            "multiembed",
+        )
+
     def _get_number_of_candidates(self) -> int:
         """Get the number of structures that will be generated in the run."""
         _l = len(self.objects)
@@ -2774,7 +2785,7 @@ class RunEmbedding(Embedder):
         if self.get_num_active_constraints(only_fixed_constraints=True) != 0:
             self.warn(
                 "--> WARNING! Vibrational analysis is being performed with one or more "
-                "fixed constraints! The thermochemical data should be interpreted carefully!"
+                "active fixed constraints! The thermochemical data should be interpreted carefully!"
             )
 
         title = self.objects[0].rootname if len(self.objects) == 1 else "structures"
@@ -2851,6 +2862,9 @@ class RunEmbedding(Embedder):
 
     def write_constr_options(self) -> None:
         """Writes information about the firecode parameters used in the calculation, if applicable to the run."""
+        if not (self.embed_requested() or self.embed == "refine"):
+            return
+
         if not self.pairings_table:
             if all([len(mol.reactive_indices) == 2 for mol in self.objects]):
                 self.log("--> No atom pairings imposed. Computing all possible dispositions.\n")
@@ -2865,10 +2879,21 @@ class RunEmbedding(Embedder):
                 internal = any(
                     isinstance(d.get(letter), tuple) for d in self.pairings_dict.values()
                 )
-                kind += " (Internal)" if internal else ""
-                dist = cast(
-                    "float", self.get_pairing_dist_from_letter(letter, allow_none_return=False)
-                )
+
+                if internal:
+                    kind += " (Internal)"
+
+                    for mol_index, mol in enumerate(self.objects):
+                        if letter in self.pairings_dict[mol_index]:
+                            i1, i2 = self.pairings_dict[mol_index][letter]  # type: ignore[misc]
+                            break
+
+                    dist = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
+
+                else:
+                    dist = cast(
+                        "float", self.get_pairing_dist_from_letter(letter, allow_none_return=False)
+                    )
 
                 if self.options.shrink and not internal:
                     dist *= self.options.shrink_multiplier

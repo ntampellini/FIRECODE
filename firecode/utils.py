@@ -207,7 +207,7 @@ def read_xyz(filename: str) -> ConformerEnsemble:
 
 
 def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]:
-    """Read energies from a .xyz file. Returns None or an array of floats (in Hartrees)."""
+    """Read energies from a .xyz file. Returns None or a list of floats (in Hartrees)."""
     energies = None
 
     # get lines right after the number of atom, which should contain the energy
@@ -746,16 +746,22 @@ class NewFolderContext:
 
     """
 
-    def __init__(self, new_folder_name: str, delete_after: bool = True) -> None:
+    def __init__(
+        self, new_folder_name: str, delete_after: bool = True, overwrite_if_exists: bool = True
+    ) -> None:
+
         self.new_folder_name = os.path.join(os.getcwd(), new_folder_name)
         self.delete_after = delete_after
+        self.overwrite_if_exists = overwrite_if_exists
 
     def __enter__(self) -> None:
-        # create working folder and cd into it
-        shutil.rmtree(self.new_folder_name, ignore_errors=True)
+        if self.overwrite_if_exists:
+            shutil.rmtree(self.new_folder_name, ignore_errors=True)
 
-        new_dir = Path(self.new_folder_name)
-        new_dir.mkdir()
+        if not os.path.isdir(self.new_folder_name):
+            # create working folder and cd into it
+            new_dir = Path(self.new_folder_name)
+            new_dir.mkdir()
 
         os.chdir(self.new_folder_name)
 
