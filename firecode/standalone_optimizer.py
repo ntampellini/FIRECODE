@@ -486,7 +486,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         with open(outname, write_type) as f:
                             write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
                         print(
-                            f"{'Appended' if write_type == 'a' else 'Wrote'} optimized structure at {outname} - {time_to_string(elapsed)}\n"
+                            f"{'Appended' if write_type == 'a' else 'Wrote'} saddle structure at {outname} - {time_to_string(elapsed)}\n"
                         )
 
                 if optimizer.free_energy or optimizer.saddle:

@@ -772,7 +772,7 @@ class NewFolderContext:
         # only delete if instructed to
         # and no unhandled exception occurred
         if self.delete_after and exc_type is None:
-            shutil.rmtree(self.new_folder_name)
+            shutil.rmtree(self.new_folder_name, ignore_errors=True)
 
 
 class FolderContext:

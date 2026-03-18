@@ -406,7 +406,7 @@ def ase_vib(
             with HiddenPrints():
                 opt.run(fmax=1e-2)  # type: ignore[no-untyped-call]
             f.write(
-                f"Structure optimized to fmax=1E-4 in {time_to_string(perf_counter() - t_start)}\n\n"
+                f"Structure optimized to fmax=1E-2 in {time_to_string(perf_counter() - t_start)}\n\n"
             )
 
         energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
