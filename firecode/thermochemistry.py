@@ -38,6 +38,7 @@ from prettytable import PrettyTable
 from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import set_charge_and_mult_on_ase_atoms
+from firecode.calculators._xtb import xtb_gsolv
 from firecode.solvents import solvent_data, solvent_synonyms
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import (
@@ -368,6 +369,7 @@ def ase_vib(
     P_atm: float | None = 1.0,
     C_mol_L: float | None = None,
     solvent: str | None = None,
+    add_alpb_solvation: bool = False,
     title: str = "temp",
     return_gcorr: bool = True,
     tighten_opt_before_vib: bool = True,
@@ -410,6 +412,20 @@ def ase_vib(
             )
 
         energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+
+        # add alpb if appropriate
+        if solvent is not None and add_alpb_solvation:
+            gsolv = xtb_gsolv(
+                atoms,
+                coords,
+                model="alpb",
+                charge=charge,
+                mult=mult,
+                solvent=solvent,
+                title=title,
+                assert_convergence=True,
+            )
+            energy += gsolv
 
         # remove cache folder
         rmtree(os.path.join(os.getcwd(), "vib"), ignore_errors=True)
@@ -615,6 +631,7 @@ def get_free_energies(
                 T_K=embedder.options.T,
                 C_mol_L=embedder.options.C,
                 solvent=embedder.options.solvent,
+                add_alpb_solvation=embedder.options.calculator in ("AIMNET2", "UMA"),
                 title=f"{title}_conf{s}",
                 return_gcorr=False,
                 tighten_opt_before_vib=tighten_opt_before_vib,

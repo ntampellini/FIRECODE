@@ -509,6 +509,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         mult=mult,
                         T_K=optimizer.T_K,
                         solvent=optimizer.solvent,
+                        add_alpb_solvation=optimizer.calc in ("AIMNET2", "UMA"),
                         C_mol_L=optimizer.C_mol_L,
                         title=f"{name[:-4]}",
                         tighten_opt_before_vib=(not optimizer.saddle),
