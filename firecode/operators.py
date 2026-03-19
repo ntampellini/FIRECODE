@@ -220,8 +220,6 @@ def opt_operator(
             f"    {n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}"
         )
 
-    t_start = time.perf_counter()
-
     conformers, energies = refine_structures(
         mol.atoms,
         mol.coords,
@@ -237,29 +235,12 @@ def opt_operator(
         constrained_dihedrals_indices=list(constrained_dihedrals_indices),
         constrained_dihedrals_values=constrained_dihedrals_values,
         loadstring="Optimizing conformer",
-        logfunction=lambda s: embedder.log(s, p=False),
+        logfunction=embedder.log,
         debug=embedder.options.debug,
         dispatcher=embedder.dispatcher,
     )
 
-    # sorting structures based on energy
-    sorted_indices = np.argsort(energies)
-    energies = energies[sorted_indices]
-    conformers = conformers[sorted_indices]
-
-    # getting the structures to reject (Rel Energy > 20 kcal/mol)
     rel_energies = energies - np.min(energies)
-    mask = rel_energies < 20
-
-    if logfunction is not None:
-        s = "s" if len(conformers) > 1 else ""
-        s = f"Completed optimization on {len(conformers)} conformer{s}. ({time_to_string(time.perf_counter() - t_start)}, ~{time_to_string((time.perf_counter() - t_start) / len(conformers))} per structure).\n"
-
-        if max(rel_energies) > 20:
-            s += f"Discarded {len(conformers) - np.count_nonzero(mask)}/{len(conformers)} unstable conformers (Rel. E. > 20 kcal/mol)\n"
-
-    conformers, energies, rel_energies = conformers[mask], energies[mask], rel_energies[mask]
-    # applying the mask that rejects high energy confs
 
     optname = filename[:-4] + "_opt.xyz"
     with open(optname, "w") as f:
@@ -272,7 +253,6 @@ def opt_operator(
             )
 
     if logfunction is not None:
-        logfunction(s + "\n")
         logfunction(f"Wrote {len(conformers)} optimized structures to {optname}\n")
 
     return optname
@@ -867,7 +847,9 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     from firecode.ase_manipulations import ase_saddle
     from firecode.thermochemistry import get_free_energies
 
-    embedder.log("\n--> Saddle operator: performing saddle optimizations via Sella")
+    embedder.log(
+        "\n--> Saddle operator: performing saddle optimizations via Sella (ignoring all constraints)"
+    )
 
     # The distance_scan> operator returns all
     # structures of the scan, but we want to

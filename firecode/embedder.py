@@ -1553,9 +1553,20 @@ class Embedder:
         atoms, accessed via the associated constraint letter.
         The distance returned is the final one (not affected by SHRINK)
         """
+        # Option 1: DIST keyword specification
         if hasattr(self, "pairing_dists") and self.pairing_dists.get(letter) is not None:
             return self.pairing_dists[letter]
 
+        # Option 2: read imposed distance from hypmol.constraints
+        for mol_id, hypmol in enumerate(self.objects):
+            if letter in self.pairings_dict[mol_id]:
+                indices = self.pairings_dict[mol_id][letter]
+
+                for constraint in hypmol.constraints:
+                    if indices == tuple(constraint.indices):
+                        return constraint.value
+
+        # Option 3: calculate on-the-fly with orbital dimensions
         d: float = 0.0
         try:
             for mol_index, mol_pairing_dict in self.pairings_dict.items():

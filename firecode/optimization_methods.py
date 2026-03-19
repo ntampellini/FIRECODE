@@ -22,8 +22,8 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
-import time
 from copy import deepcopy
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
@@ -265,7 +265,7 @@ def optimize(
         )
 
     opt_func = dispatcher.opt_func
-    t_start = time.perf_counter()
+    t_start = perf_counter()
 
     constrained_indices = constrained_indices or []
     procs = procs or 1
@@ -294,7 +294,7 @@ def optimize(
         # **kwargs,
     )
 
-    elapsed = time.perf_counter() - t_start
+    elapsed = perf_counter() - t_start
 
     if success:
         if check:
@@ -365,8 +365,9 @@ def refine_structures(
     debug: bool = False,
 ) -> tuple[Array3D_float, Array1D_float]:
     """Refine a set of structures - optimize them and remove similar
-    ones and high energy ones (>20 kcal/mol above lowest)
+    ones and high energy ones (>10 kcal/mol above lowest)
     """
+    t_start = perf_counter()
     energies = np.empty(len(structures), dtype=float)
     for i, conformer in enumerate(deepcopy(structures)):
         loadbar(i, len(structures), f"{loadstring} {i + 1}/{len(structures)} ")
@@ -401,12 +402,27 @@ def refine_structures(
 
     loadbar(len(structures), len(structures), f"{loadstring} {len(structures)}/{len(structures)} ")
 
+    if logfunction is not None:
+        s = "s" if len(structures) > 1 else ""
+        elapsed = perf_counter() - t_start
+        s = (
+            f"Completed optimization on {len(structures)} conformer{s}. "
+            f"({time_to_string(elapsed)}, "
+            f"~{time_to_string((elapsed) / len(structures))} per structure).\n"
+        )
+        logfunction(s)
+
     # remove high energy ones
-    mask = (energies - np.min(energies)) < 20
+    mask = (energies - np.min(energies)) < 10
     structures, energies = structures[mask], energies[mask]
 
     # remove similar ones
     structures, mask = prune(structures, atoms, energies=energies, max_dE=2.0)
     energies = energies[mask]
+
+    # sort structures based on energy
+    sorted_indices = np.argsort(energies)
+    energies = energies[sorted_indices]
+    structures = structures[sorted_indices]
 
     return structures, energies
