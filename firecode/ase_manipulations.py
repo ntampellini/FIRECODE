@@ -971,9 +971,14 @@ def ase_popt(
 
         if debug:
             if traj is not None:
+                # convert ASE trajectory and remove the original
                 getoutput(f"ase convert {traj} {traj}.xyz")
+                os.remove(traj)
+
+                # read energies from the .xyz file
                 energies = cast("list[float]", read_xyz_energies(f"{traj}.xyz", verbose=False))
-                # since it came from ase convert the UOM is not Eh but eV
+
+                # since it came from "ase convert" the UOM is not Eh but eV
                 energies_kcal = np.array(energies) * EV_TO_KCAL
 
                 plt.figure()

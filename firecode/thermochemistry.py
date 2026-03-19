@@ -55,7 +55,7 @@ from firecode.units import (
     PLANCK_h__J_s,
     theta_per_cm1_K,
 )
-from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar
+from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar, write_xyz
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
@@ -411,19 +411,26 @@ def ase_vib(
                 f"Structure optimized to fmax=1E-2 in {time_to_string(perf_counter() - t_start)}\n\n"
             )
 
+        # save structure in thermo folder
+        with open(f"{title}.xyz", "w") as ff:
+            write_xyz(atoms, ase_atoms.get_positions(), ff)  # type: ignore[no-untyped-call]
+
         energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
 
         # add alpb if appropriate
         if solvent is not None and add_alpb_solvation:
-            gsolv = xtb_gsolv(
-                atoms,
-                coords,
-                model="alpb",
-                charge=charge,
-                mult=mult,
-                solvent=solvent,
-                title=title,
-                assert_convergence=True,
+            gsolv = (
+                xtb_gsolv(
+                    atoms,
+                    coords,
+                    model="alpb",
+                    charge=charge,
+                    mult=mult,
+                    solvent=solvent,
+                    title=title,
+                    assert_convergence=True,
+                )
+                / EH_TO_KCAL
             )
             energy += gsolv
 
@@ -632,7 +639,7 @@ def get_free_energies(
                 C_mol_L=embedder.options.C,
                 solvent=embedder.options.solvent,
                 add_alpb_solvation=embedder.options.calculator in ("AIMNET2", "UMA"),
-                title=f"{title}_conf{s}",
+                title=f"{title}_conf{s + 1}",
                 return_gcorr=False,
                 tighten_opt_before_vib=tighten_opt_before_vib,
             )
