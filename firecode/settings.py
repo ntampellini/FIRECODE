@@ -69,3 +69,10 @@ PROCS = 4
 
 MEM_GB = 4
 # Memory allocated for each job (ORCA)
+
+JAX_PLATFORM = "cpu"
+# "cpu" or "cuda"
+
+SELLA_NUM_THREADS = 0
+# number of threads to run sella on. Zero defaults
+# to SLURM_CPUS_PER_TASK or os.cpu_count()

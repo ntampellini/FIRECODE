@@ -162,6 +162,8 @@ module = [
     "rdkit.Chem.*",
     "rdkit.Chem.AllChem",
     "scipy.*",
+    "sella.*",
+    "sella.internals",
     "xtb.*",
 ]
 ignore_missing_imports = true

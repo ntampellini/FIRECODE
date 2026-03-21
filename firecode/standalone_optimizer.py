@@ -39,7 +39,7 @@ from prism_pruner.algebra import dihedral
 from prism_pruner.utils import time_to_string
 
 from firecode.algebra import point_angle
-from firecode.ase_manipulations import Constraint, ase_popt, ase_saddle
+from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.pt import pt
 from firecode.rdkit_tools import convert_constraint_with_smarts
@@ -264,7 +264,7 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
     else:
         constraint_file = None
 
-    if "free_energy" in options_to_set:
+    if "free_energy" in options_to_set or "saddle" in options_to_set:
         temp_C = inquirer.number(  # type: ignore[attr-defined]
             message="Specify temperature for free energy calculation (°C):",
             default=25,
@@ -459,25 +459,38 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     )
                     t_start = perf_counter()
 
-                    coords, energy, _ = ase_saddle(
+                    constrained_indices_saddle = [
+                        (c.i1, c.i2) for c in active_ase_constraints if type(c) == Spring
+                    ]
+
+                    if constrained_indices_saddle:
+                        s = "s" if len(constrained_indices_saddle) > 1 else ""
+                        i_str = ""
+                        for i1, i2 in constrained_indices_saddle:
+                            i_str += f"B({i1}-{i2}) "
+
+                        print(f" Biasing v0 with bond vibration{s} [{i_str[:-1]}]")
+
+                    coords, energy, success = ase_saddle(
                         mol.atoms,
                         coords,
                         method=optimizer.method,
                         ase_calc=optimizer.ase_calc,
+                        constrained_indices=constrained_indices_saddle,
                         charge=charge,
                         mult=mult,
                         traj=name[:-4] + "_traj",
-                        title=f"{name[:-4]}",
+                        title=f"{name[:-4]}_saddle",
                         logfunction=print,
                         maxiter=750,
                         conv_thr="vtight",
                         solvent=optimizer.solvent,
-                        # debug=True,
+                        debug=True,
                     )
 
                     elapsed = perf_counter() - t_start
 
-                    if energy is None:
+                    if not success:
                         print(
                             f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
                         )

@@ -62,10 +62,11 @@ if TYPE_CHECKING:
 
     from firecode.embedder import Embedder
 
+
 # Frequencies below this are considered belonging to proper
 # transition states and excluded from thermochemical analysis,
 # while the (_TS_THR_CM_1 < v < 0) range will be treated as positive.
-_TS_THR_CM_1: float = -50
+_TS_THR_CM_1: float = -25
 
 
 def _free_space_mL_per_L(solvent: str | None = None) -> float:

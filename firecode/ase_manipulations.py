@@ -36,6 +36,7 @@ from ase.calculators.calculator import CalculationFailed, PropertyNotImplemented
 from ase.constraints import FixInternals
 from ase.mep import DyNEB
 from ase.optimize import FIRE, LBFGS
+from numpy.linalg import LinAlgError
 from prism_pruner.algebra import dihedral, normalize
 from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
@@ -938,36 +939,115 @@ def ase_popt(
 
     ase_optimizer = optimizer_dict[optimizer]
 
-    extra_args: dict[str, Any] = dict()
-    if optimizer == "SELLA":
-        extra_args["order"] = order
-    else:
-        extra_args["maxstep"] = 0.2
-
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
         t_start_opt = time.perf_counter()
         iterations: int = 0
 
         with HiddenPrints():
-            # Step 1: larger maxstep, looser convergence
-            step1_args = extra_args.copy()
-            if "maxstep" in step1_args:
-                step1_args["maxstep"] = 0.2
+            try:
+                if optimizer == "SELLA":
+                    from networkx import connected_components
+                    from prism_pruner.graph_manipulations import graphize
 
-            with ase_optimizer(ase_atoms, **step1_args, trajectory=traj) as opt:
-                opt.run(fmax=0.1, steps=maxiter)
-                iterations += opt.nsteps
+                    # if we have a multimolecular graph,
+                    # use TRIC (translational and rotation
+                    # internal coordinates) in Sella.
+                    # See:
+                    # Sella 2022 paper: https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395
+                    # Wang and Song 2016 (TRIC): https://doi.org/10.1063/1.4952956
+                    graph = graphize(atoms, coords)
+                    multimolecular = len(list(connected_components(graph))) > 1
 
-            # Step 2: Refinement with smaller maxstep
-            if "tight" in conv_thr:
-                step2_args = extra_args.copy()
-                if "maxstep" in step2_args:
-                    step2_args["maxstep"] = 0.05
+                    if multimolecular:
+                        from sella.internal import Internals
 
-                with ase_optimizer(ase_atoms, **step2_args, trajectory=traj) as opt:
-                    opt.run(fmax=fmax, steps=maxiter)
+                        internals: Internals | bool
+
+                        # remove constraints from ase atoms
+                        ase_atoms.set_constraint([])  # type: ignore[no-untyped-call]
+
+                        # Use TRICs
+                        internals = Internals(ase_atoms, allow_fragments=True)
+                        internals.find_all_bonds()
+                        internals.find_all_angles()
+                        internals.find_all_dihedrals()
+
+                    else:
+                        internals = True
+
+                    # See if we were passed constrained indices
+                    # to provide a better guess for v0
+                    if constrained_indices:
+                        v0 = np.zeros(3 * len(atoms))
+
+                        for i1, i2 in constrained_indices:
+                            diff = coords[i2] - coords[i1]
+                            diff /= np.linalg.norm(diff)
+                            v0[3 * i1 : 3 * i1 + 3] = -diff
+                            v0[3 * i2 : 3 * i2 + 3] = diff
+
+                        v0 /= np.linalg.norm(v0)
+
+                    else:
+                        v0 = None
+
+                    opt = Sella(
+                        ase_atoms,
+                        # Internal coordinates require many less
+                        # gradient evaluations to reach convergence
+                        # compared to cartesian coordinates.
+                        # The "tric" mode is useful in reducing
+                        # the number of internal coordinates for large
+                        # systems of multiple molecules
+                        internal=internals,
+                        # eta: finite difference step for Hessian-vector
+                        # products: default value of 1e-4 could be
+                        # dominated by noise for MLIPs, so increasing
+                        # it a little bit for robustness
+                        eta=0.005,
+                        # gamma: tighter diagonalizations
+                        # compared to the default 0.1 value
+                        # optimized for expensive QM, since
+                        # we are not using slow methods here
+                        gamma=0.05,
+                        # delta0: akin to stepsize - more conservative
+                        # than the default 0.1, should lead to
+                        # a more robust implementation. Again,
+                        # number of gradient calls is less important
+                        delta0=0.05,
+                        # sigma_inc: recover the trust radius a bit more aggressively
+                        # once a good step lands (default 1.15)
+                        sigma_inc=1.25,
+                        # If we were given any distance constraint,
+                        # provide an initial guess for the leftmost eigenvector
+                        v0=v0,  # type: ignore[arg-type]
+                        # trajectory: save trajectory to traj
+                        trajectory=traj,
+                    )
+
+                    opt.run(fmax=0.01, steps=maxiter)  # type: ignore[no-untyped-call]
                     iterations += opt.nsteps
+
+                else:
+                    # Step 1: larger maxstep, looser convergence
+                    with ase_optimizer(ase_atoms, maxstep=0.2, trajectory=traj) as opt:
+                        opt.run(fmax=0.1, steps=maxiter)
+                        iterations += opt.nsteps
+
+                    # Step 2: Refinement with smaller maxstep
+                    if "tight" in conv_thr:
+                        with ase_optimizer(ase_atoms, maxstep=0.05, trajectory=traj) as opt:
+                            opt.run(fmax=fmax, steps=maxiter)
+                            iterations += opt.nsteps
+
+            except LinAlgError:
+                if logfunction is not None:
+                    iterations += opt.nsteps
+                    logfunction(
+                        f"    - {title} CRASHED ({iterations} iterations, {time_to_string(time.perf_counter() - t_start_opt)})"
+                    )
+                return coords, np.inf, False
 
         if debug:
             if traj is not None:

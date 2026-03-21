@@ -133,6 +133,7 @@ class Embedder:
         self.logfile = open(log_filename, "a", buffering=1, encoding="utf-8")
         self.debug_logfile: TextIOWrapper | None = None
         logging.basicConfig(filename=log_filename, filemode="a", encoding="utf-8")
+        self.threads = os.environ.get("OMP_NUM_THREADS", os.cpu_count())
 
         try:
             self.write_banner_and_info()
@@ -259,9 +260,9 @@ class Embedder:
  ..  ▒  ▒░▒░░║    Version        🔥{0:^24}║░▒░░░ ░░░▒    *      .
    .  ▒ ░░░░░║    User           🔥{1:^24}║░░░░░░░░▒  +
        ▒░░ ▒░║    Current Time   🔥{2:^24}║░░ ░░▒    ▒    +    ..
- .. ▒ * ▒░ ░░║    Avail CPUs     🔥{3:^24}║░░░░░░░▒           *
-    .   ▒░ ░░║    Avail GPUs     🔥{4:^24}║ ░░░░▒    .     ..
-      .▒░▒▒░░║    Avail Memory   🔥{5:^24}║░░▒
+ .. ▒ * ▒░ ░░║    CPUs / GPUs    🔥{3:^24}║░░░░░░░▒           *
+    .   ▒░ ░░║    Threads        🔥{4:^24}║ ░░░░▒    .     ..
+      .▒░▒▒░░║    Memory         🔥{5:^24}║░░▒
   +  .. ▒░░ ░║                                             ║░▒  .. .
     .    ▒ ░░╚═════════════════════════════════════════════╝░▒     +
  .     *  ▒░░░░░░  ░░▒░░░░░▒▒░░░▒▒ ░░░░░░░▒░░ ░░░▒░░▒░░░░░▒░░░░▒      .
@@ -273,8 +274,8 @@ class Embedder:
             version("firecode"),
             getuser(),
             time.ctime()[0:-8],
-            self.avail_cpus,
-            self.avail_gpus,
+            str(self.avail_cpus) + " / " + str(self.avail_gpus),
+            self.threads,
             str(round(self.avail_mem_gb, 1)) + " GB",
         )
         # 🔥⏣█▓▒░ banner art adapted from https://fsymbols.com/generators/tarty/

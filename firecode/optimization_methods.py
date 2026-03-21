@@ -22,7 +22,6 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
-from copy import deepcopy
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
@@ -368,8 +367,10 @@ def refine_structures(
     ones and high energy ones (>10 kcal/mol above lowest)
     """
     t_start = perf_counter()
-    energies = np.empty(len(structures), dtype=float)
-    for i, conformer in enumerate(deepcopy(structures)):
+    energies_list = []
+    opt_structures_list = []
+
+    for i, conformer in enumerate(structures):
         loadbar(i, len(structures), f"{loadstring} {i + 1}/{len(structures)} ")
 
         opt_coords, energy, success = optimize(
@@ -395,10 +396,8 @@ def refine_structures(
         )
 
         if success:
-            structures[i] = opt_coords
-            np.append(energies, energy)
-        else:
-            np.append(energies, 1e10)
+            opt_structures_list.append(opt_coords)
+            energies_list.append(energy)
 
     loadbar(len(structures), len(structures), f"{loadstring} {len(structures)}/{len(structures)} ")
 
@@ -412,17 +411,20 @@ def refine_structures(
         )
         logfunction(s)
 
-    # remove high energy ones
+    opt_structures = np.array(opt_structures_list)
+    energies = np.array(energies_list)
+
+    # remove high energy ones (>10 kcal/mol)
     mask = (energies - np.min(energies)) < 10
-    structures, energies = structures[mask], energies[mask]
+    opt_structures, energies = opt_structures[mask], energies[mask]
 
     # remove similar ones
-    structures, mask = prune(structures, atoms, energies=energies, max_dE=2.0)
+    opt_structures, mask = prune(opt_structures, atoms, energies=energies, max_dE=2.0)
     energies = energies[mask]
 
     # sort structures based on energy
     sorted_indices = np.argsort(energies)
     energies = energies[sorted_indices]
-    structures = structures[sorted_indices]
+    opt_structures = opt_structures[sorted_indices]
 
-    return structures, energies
+    return opt_structures, energies

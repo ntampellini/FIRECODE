@@ -847,9 +847,17 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     from firecode.ase_manipulations import ase_saddle
     from firecode.thermochemistry import get_free_energies
 
-    embedder.log(
-        "\n--> Saddle operator: performing saddle optimizations via Sella (ignoring all constraints)"
-    )
+    constrained_indices = _get_internal_constraints(filename, embedder)
+
+    if constrained_indices:
+        s = "s" if len(constrained_indices) > 1 else ""
+        i_str = ""
+        for i1, i2 in constrained_indices:
+            i_str += f"B({i1}-{i2}) "
+
+        constr_str = f"- biasing v0 with bond vibration{s} [{i_str[:-1]}]"
+    else:
+        constr_str = "(ignoring all constraints)"
 
     # The distance_scan> operator returns all
     # structures of the scan, but we want to
@@ -877,6 +885,11 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
             f"--> Saddle operator: picked highest energy structure from {filename} (structure {highest_energy_index + 1}/{len(energies)})"
         )
 
+    s = "s" if len(mol.coords) > 1 else ""
+    embedder.log(
+        f"\n--> Saddle operator: performing {len(mol.coords)} saddle optimization{s} via Sella {constr_str}"
+    )
+
     opt_coords_list: list[Array2D_float] = []
 
     for c, coords in enumerate(mol.coords):
@@ -894,6 +907,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
             method=embedder.options.theory_level,
             add_alpb_solvation=embedder.options.calculator in ("UMA", "AIMNET2"),
             solvent=embedder.options.solvent,
+            constrained_indices=constrained_indices,
             conv_thr="vtight",
             assert_convergence=True,
             traj=title + "_traj",
@@ -913,7 +927,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
         structures=opt_coords_array,
         charge=hypmol.charge,
         mult=hypmol.mult,
-        title=f"{hypmol.rootname}_conf{c}",
+        title=f"{hypmol.rootname}",
         tighten_opt_before_vib=False,
         logfunction=embedder.log,
     )
