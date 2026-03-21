@@ -652,13 +652,16 @@ def get_free_energies(
                 match num_neg := np.count_nonzero(freqs < 0.0):
                     case 0:
                         exit_str = "GS"
+                        ss = "s., "
                     case 1:
                         exit_str = "TS"
+                        ss = ".,  "
                     case _:
+                        ss = "s., "
                         exit_str = "??"
 
                 logfunction(
-                    f"    - {title} conf{s:0>4d} - {exit_str} ({num_neg} negative freqs., {time_to_string(elapsed)})"
+                    f"    - {title} conf{s:0>4d} - {exit_str} ({num_neg} negative freq{ss}, {time_to_string(elapsed)})"
                 )
 
         loadbar(

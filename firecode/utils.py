@@ -41,12 +41,13 @@ from typing import (
     Self,
     Sequence,
     TypeVar,
+    cast,
 )
 
 import numpy as np
 from numpy.typing import NDArray
 from prism_pruner.algebra import rot_mat_from_pointer
-from prism_pruner.graph_manipulations import graphize
+from prism_pruner.graph_manipulations import d_min_bond, graphize
 from prism_pruner.rmsd import rmsd_and_max
 from scipy.spatial.distance import cdist
 
@@ -737,6 +738,19 @@ def compenetration_check(
         return False
 
     return True
+
+
+def get_ts_d_estimate(
+    e1: str,
+    e2: str,
+    factor: float = 1.35,
+) -> float:
+    """Returns an estimate for the distance between two
+    specific elements in a transition state, by multipling
+    the sum of covalent radii for a constant.
+
+    """
+    return cast("float", d_min_bond(e1, e2, factor=factor))
 
 
 class NewFolderContext:

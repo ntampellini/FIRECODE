@@ -69,6 +69,7 @@ from firecode.utils import (
     cartesian_product,
     clean_directory,
     compenetration_check,
+    get_ts_d_estimate,
     loadbar,
     saturation_check,
     scramble_check,
@@ -510,15 +511,14 @@ class Embedder:
                 match letter:
                     case "D":
                         if len(parts) == 5:
-                            auto_target = True
                             indices = [int(i) for i in parts[1:5]]
+                            target = dihedral(mol.coords[0][np.array(indices)])
 
                         elif len(parts) == 6:
                             indices = [int(i) for i in parts[1:5]]
                             if parts[5] == "auto":
-                                auto_target = True
+                                target = dihedral(mol.coords[0][np.array(indices)])
                             else:
-                                auto_target = False
                                 target = float(parts[5])
 
                         else:
@@ -528,15 +528,14 @@ class Embedder:
 
                     case "A":
                         if len(parts) == 4:
-                            auto_target = True
                             indices = [int(i) for i in parts[1:4]]
+                            target = point_angle(*mol.coords[0][np.array(indices)])
 
                         elif len(parts) == 5:
                             indices = [int(i) for i in parts[1:4]]
                             if parts[4] == "auto":
-                                auto_target = True
+                                target = point_angle(*mol.coords[0][np.array(indices)])
                             else:
-                                auto_target = False
                                 target = float(parts[4])
 
                         else:
@@ -546,16 +545,26 @@ class Embedder:
 
                     case "B":
                         if len(parts) == 3:
-                            auto_target = True
+                            i1, i2 = indices
+                            target = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
                             indices = [int(i) for i in parts[1:3]]
 
                         elif len(parts) == 4:
                             indices = [int(i) for i in parts[1:3]]
-                            if parts[3] == "auto":
-                                auto_target = True
-                            else:
-                                auto_target = False
-                                target = float(parts[3])
+                            match parts[3]:
+                                case "auto":
+                                    i1, i2 = indices
+                                    target = float(
+                                        np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2])
+                                    )
+
+                                case "ts":
+                                    i1, i2 = indices
+                                    e1, e2 = mol.atoms[i1], mol.atoms[i2]
+                                    target = get_ts_d_estimate(e1, e2)
+
+                                case _:
+                                    target = float(parts[3])
 
                         else:
                             raise SyntaxError(
@@ -567,23 +576,21 @@ class Embedder:
                             f'Error while parsing line "{line}". Constraint type "{letter}" not understood (B: bond, A: angle, D: dihedral)'
                         )
 
-                # if value is auto, take current value
-                if auto_target:
-                    match letter:
-                        case "D":
-                            target = dihedral(mol.coords[0][np.array(indices)])
-                        case "A":
-                            target = point_angle(*mol.coords[0][np.array(indices)])
-                        case "B":
-                            i1, i2 = indices
-                            target = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
-
                 c = Constraint(indices, target)
 
                 # set constraint attributes
-                for key, value in constr_props.items():
-                    setattr(c, key, str_to_var(value))
-                    self.log(f"--> Set property of Constraint[{' '.join(parts)}]: {key}={value}")
+                for attr_name, attr_value in constr_props.items():
+                    match attr_name:
+                        case "charge":
+                            enforced_type: Any = int
+                        case _:
+                            enforced_type = None
+
+                    casted_value = str_to_var(attr_value, enforced_type=enforced_type)
+                    setattr(c, attr_name, casted_value)
+                    self.log(
+                        f"--> Set property of Constraint[{' '.join(parts)}]: {attr_name}={type(casted_value)}('{attr_value}')."
+                    )
 
                 mol.constraints.append(c)
 
@@ -618,7 +625,14 @@ class Embedder:
                         )
 
                     attr_name, attr_value = parts
-                    casted_value = str_to_var(attr_value)
+
+                    match attr_name:
+                        case "charge":
+                            enforced_type: Any = int
+                        case _:
+                            enforced_type = None
+
+                    casted_value = str_to_var(attr_value, enforced_type=enforced_type)
                     setattr(self.objects[i], attr_name, casted_value)
 
                     fragments.remove(fragment)
@@ -2791,7 +2805,7 @@ class RunEmbedding(Embedder):
         self.log(
             f"\n--> Frequency calc. / Thermochemical analysis ({self.options.theory_level}"
             f"{f'/{self.options.solvent}' if self.options.solvent is not None else ''}"
-            f" level with {self.options.calculator} via ASE"
+            f" level with {self.options.calculator} via ASE)"
         )
 
         if self.get_num_active_constraints(only_fixed_constraints=True) != 0:

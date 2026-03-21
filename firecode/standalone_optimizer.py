@@ -28,7 +28,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from io import TextIOWrapper
 from time import perf_counter
-from typing import TYPE_CHECKING, Iterable, Sequence, cast
+from typing import TYPE_CHECKING, Sequence, cast
 
 import numpy as np
 from ase.calculators.calculator import Calculator as ASECalculator
@@ -41,13 +41,12 @@ from prism_pruner.utils import time_to_string
 from firecode.algebra import point_angle
 from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
 from firecode.optimization_methods import Opt_func_dispatcher
-from firecode.pt import pt
 from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.settings import CALCULATOR
 from firecode.solvents import epsilon_dict, solvent_synonyms
 from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
-from firecode.utils import ConformerEnsemble, read_xyz, write_xyz
+from firecode.utils import ConformerEnsemble, get_ts_d_estimate, read_xyz, write_xyz
 
 if TYPE_CHECKING:
     from firecode.ase_manipulations import ASEConstraint
@@ -310,7 +309,11 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
                 break
 
             elif data[-1] == "ts":
-                data[-1] = str(get_ts_d_estimate(filenames[0], (int(i) for i in data[0:2])))
+                mol = read_xyz(filenames[0])
+                i1, i2 = (int(i) for i in data[0:2])
+                e1, e2 = mol.atoms[i1], mol.atoms[i2]
+                data[-1] = str(get_ts_d_estimate(e1, e2))
+                print(f"--> Estimated TS d({i1}-{i2}) = {data[-1]} Å")
 
             assert len(data) in (2, 3, 4, 5), (
                 "Only 2-4 indices as ints + optional target as a float"
@@ -603,25 +606,3 @@ def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1)
     electrons = sum(atomnos) - charge
 
     return (multiplicity % 2) != (electrons % 2)
-
-
-def get_ts_d_estimate(
-    filename: str, indices: Iterable[int], factor: float = 1.35, verbose: bool = True
-) -> float:
-    """Returns an estimate for the distance between two
-    specific atoms in a transition state, by multipling
-    the sum of covalent radii for a constant.
-
-    """
-    mol = read_xyz(filename)
-    i1, i2 = indices
-    a1, a2 = mol.atoms[i1], mol.atoms[i2]
-    cr1 = pt.covalent_radius(a1)
-    cr2 = pt.covalent_radius(a2)
-
-    est_d = round(factor * (cr1 + cr2), 2)
-
-    if verbose:
-        print(f"--> Estimated TS d({a1}-{a2}) = {est_d} Å")
-
-    return est_d
