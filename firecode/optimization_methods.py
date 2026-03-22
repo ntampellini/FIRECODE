@@ -27,11 +27,11 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
 from ase.calculators.calculator import Calculator as ASECalculator
-from prism_pruner.pruner import prune
 from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._xtb import xtb_opt
+from firecode.ensemble import Ensemble
 from firecode.settings import DEFAULT_LEVELS
 from firecode.solvents import epsilon_dict, to_xtb_solvents
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
@@ -364,14 +364,25 @@ def refine_structures(
     debug: bool = False,
 ) -> tuple[Array3D_float, Array1D_float]:
     """Refine a set of structures - optimize them and remove similar
-    ones and high energy ones (>10 kcal/mol above lowest)
+    and high energy ones (>10 kcal/mol above lowest)
     """
+    # make ensemble
+    ens = Ensemble(
+        atoms,
+        structures,
+        logfunction=logfunction,
+    )
+
+    # remove similar structures
+    ens.similarity_pruning()
+
+    # start optimizing
     t_start = perf_counter()
     energies_list = []
     opt_structures_list = []
 
-    for i, conformer in enumerate(structures):
-        loadbar(i, len(structures), f"{loadstring} {i + 1}/{len(structures)} ")
+    for i, conformer in enumerate(ens.coords):
+        loadbar(i, len(ens.coords), f"{loadstring} {i + 1}/{len(ens.coords)} ")
 
         opt_coords, energy, success = optimize(
             atoms,
@@ -399,32 +410,35 @@ def refine_structures(
             opt_structures_list.append(opt_coords)
             energies_list.append(energy)
 
-    loadbar(len(structures), len(structures), f"{loadstring} {len(structures)}/{len(structures)} ")
+    loadbar(
+        len(ens.coords),
+        len(ens.coords),
+        f"{loadstring} {len(ens.coords)}/{len(ens.coords)} ",
+    )
 
     if logfunction is not None:
-        s = "s" if len(structures) > 1 else ""
+        s = "s" if len(ens.coords) > 1 else ""
         elapsed = perf_counter() - t_start
         s = (
-            f"Completed optimization on {len(structures)} conformer{s}. "
+            f"Completed optimization on {len(ens.coords)} conformer{s}. "
             f"({time_to_string(elapsed)}, "
-            f"~{time_to_string((elapsed) / len(structures))} per structure).\n"
+            f"~{time_to_string((elapsed) / len(ens.coords))} per structure).\n"
         )
         logfunction(s)
 
-    opt_structures = np.array(opt_structures_list)
-    energies = np.array(energies_list)
+    # make new ensemble with optimized structures
+    ens = Ensemble(
+        atoms,
+        np.array(opt_structures_list),
+        energies=np.array(energies_list),
+        logfunction=logfunction,
+    )
+    ens.sort_by_energy()
 
-    # remove high energy ones (>10 kcal/mol)
-    mask = (energies - np.min(energies)) < 10
-    opt_structures, energies = opt_structures[mask], energies[mask]
+    # remove high energy structures (>10 kcal/mol)
+    ens.energy_pruning()
 
-    # remove similar ones
-    opt_structures, mask = prune(opt_structures, atoms, energies=energies, max_dE=2.0)
-    energies = energies[mask]
+    # remove similar structures
+    ens.similarity_pruning()
 
-    # sort structures based on energy
-    sorted_indices = np.argsort(energies)
-    energies = energies[sorted_indices]
-    opt_structures = opt_structures[sorted_indices]
-
-    return opt_structures, energies
+    return ens.coords, ens.energies

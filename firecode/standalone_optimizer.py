@@ -40,13 +40,14 @@ from prism_pruner.utils import time_to_string
 
 from firecode.algebra import point_angle
 from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
+from firecode.ensemble import Ensemble
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.settings import CALCULATOR
 from firecode.solvents import epsilon_dict, solvent_synonyms
 from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
-from firecode.utils import ConformerEnsemble, get_ts_d_estimate, read_xyz, write_xyz
+from firecode.utils import get_ts_d_estimate, read_xyz, write_xyz
 
 if TYPE_CHECKING:
     from firecode.ase_manipulations import ASEConstraint
@@ -75,7 +76,7 @@ class OptimizerOptions:
         """Post-initialization processing."""
         self.dispatcher = Opt_func_dispatcher(self.calc)
         self.constraints: dict[str, list[Constraint]] = {f: [] for f in self.filenames}
-        self.mols: dict[str, ConformerEnsemble] = {f: read_xyz(f) for f in self.filenames}
+        self.mols: dict[str, Ensemble] = {f: read_xyz(f) for f in self.filenames}
         self.charge_and_mult_dict = {f: self._get_charge_mult_for_file(f) for f in self.filenames}
         self._set_constraints_from_file()
 

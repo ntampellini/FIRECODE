@@ -217,7 +217,7 @@ def opt_operator(
     )
     if logfunction is not None:
         logfunction(
-            f"    {n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}"
+            f"    [{n_constraints} constraints applied{': ' + str(constr_str).replace('\n', ' ') if constr_str != '' else ''}]"
         )
 
     conformers, energies = refine_structures(
