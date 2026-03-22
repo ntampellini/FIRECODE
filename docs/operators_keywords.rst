@@ -43,6 +43,18 @@ Here is a list of the currently available operators:
    in place of (or to aid) interpolation to reach the desired number of images
    (set with the ``IMAGES=n`` or NEB(IMAGES=n) keywords). Default is 7.
 
+- ``saddle>`` - Runs a saddle point optimization on each conformer provided. If chained after a linear ``scan>``,
+  acts on the highest energy structure of the linear scan. All constraints provided are ignored,
+  but if distance constraints are present, uses those bond vibrations biases to the saddle point optimizer eigenvector
+  calculation, speeding up the convergence to the desired saddle point. Can be conveniently chained to
+  ``scan>`` (linear scan only), ``opt>`` and ``neb>``. Will automatically perform a vibrational analysis
+  on each structure that is successfully optimized.
+
+  ::
+
+       saddle> opt> mol.xyz
+         B 12 25 1.62 # bond constraint: enforced in "opt>", eigenvector guess for "saddle>"
+
 -  ``scan>`` - Runs a scan of the desired distance or dihedral angle, based on the number of indices provided.
    For distance scans, the atomic indices will be approached if they are not bound, and separated if they are.
    This could be chained with, for example, a NEB calculation, where the scan trajectory will be used as a starting
