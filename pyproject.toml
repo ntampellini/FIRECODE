@@ -36,6 +36,7 @@ dependencies = [
     "inquirerpy",
     "prism_pruner",
     "mlfsm",
+    "Sella==2.3.5",
 ]
 
 [tool.pixi.workspace]
@@ -50,7 +51,6 @@ tblite = ">=0.3.0"
 tblite-python = "*"
 crest = "2.12.*"
 psutil = ">=7.2.2,<8"
-
 
 [tool.pixi.pypi-dependencies]
 firecode = { path = ".", editable = true }
@@ -162,6 +162,8 @@ module = [
     "rdkit.Chem.*",
     "rdkit.Chem.AllChem",
     "scipy.*",
+    "sella.*",
+    "sella.internals",
     "xtb.*",
 ]
 ignore_missing_imports = true

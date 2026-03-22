@@ -1,0 +1,2 @@
+calc=tblite solvent=ch2cl2
+saddle> propane_ts.xyz

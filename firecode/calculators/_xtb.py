@@ -191,7 +191,7 @@ def xtb_opt(
             constrained_distances = constrained_distances or [None for _ in constrained_indices]
 
             for (a, b), dist in zip(constrained_indices, constrained_distances):
-                dist_ = str(d) if d is not None else "auto"
+                dist_ = str(dist) if dist is not None else "auto"
                 s += f"   distance: {a + 1}, {b + 1}, {dist_}\n"
 
         if constrained_angles_indices is not None:

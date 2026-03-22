@@ -12,6 +12,26 @@ from firecode.utils import FolderContext, HiddenPrints, NewFolderContext, clean_
 HERE = Path(__file__).resolve().parent
 
 
+def cleanup() -> None:
+    """Clean the current test directory."""
+    clean_directory(
+        to_remove_startswith=["firecode"],
+        to_remove_endswith=[".log", ".out", ".svg", ".json", "_traj.xyz", "_saddles.xyz"],
+        to_remove_contains=[
+            "clockwise",
+            "_confs",
+            "_scan_max.xyz",
+            "_scan.xyz",
+            "_opt",
+            "_thermo",
+            "_ts_conf",
+            "CREST",
+            "NEB",
+            "FSM",
+        ],
+    )
+
+
 def run_calculator_test(calculator: str) -> None:
     """Tests a generic calculator."""
     mol = read_xyz(str(HERE / "C2H4.xyz"))
@@ -63,21 +83,7 @@ def run_firecode_input(name: str) -> None:
         assert result.type == SystemExit
         assert result.value.code == 0
 
-        clean_directory(
-            to_remove_startswith=["firecode"],
-            to_remove_endswith=[".log", ".out", ".svg", ".json"],
-            to_remove_contains=[
-                "clockwise",
-                "_confs",
-                "_scan_max.xyz",
-                "_scan.xyz",
-                "_opt",
-                "_thermo",
-                "CREST",
-                "NEB",
-                "FSM",
-            ],
-        )
+        cleanup()
 
 
 @pytest.mark.embed
@@ -162,6 +168,13 @@ def test_operator_fsm() -> None:
 def test_operator_pka() -> None:
     """Tests the pka operator."""
     run_firecode_input("operator_pka")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_saddle() -> None:
+    """Tests the saddle operator."""
+    run_firecode_input("operator_saddle")
 
 
 @pytest.mark.codecov

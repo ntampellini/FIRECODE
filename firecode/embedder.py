@@ -69,6 +69,7 @@ from firecode.utils import (
     cartesian_product,
     clean_directory,
     compenetration_check,
+    get_ts_d_estimate,
     loadbar,
     saturation_check,
     scramble_check,
@@ -133,6 +134,7 @@ class Embedder:
         self.logfile = open(log_filename, "a", buffering=1, encoding="utf-8")
         self.debug_logfile: TextIOWrapper | None = None
         logging.basicConfig(filename=log_filename, filemode="a", encoding="utf-8")
+        self.threads = os.environ.get("OMP_NUM_THREADS", os.cpu_count())
 
         try:
             self.write_banner_and_info()
@@ -259,9 +261,9 @@ class Embedder:
  ..  ▒  ▒░▒░░║    Version        🔥{0:^24}║░▒░░░ ░░░▒    *      .
    .  ▒ ░░░░░║    User           🔥{1:^24}║░░░░░░░░▒  +
        ▒░░ ▒░║    Current Time   🔥{2:^24}║░░ ░░▒    ▒    +    ..
- .. ▒ * ▒░ ░░║    Avail CPUs     🔥{3:^24}║░░░░░░░▒           *
-    .   ▒░ ░░║    Avail GPUs     🔥{4:^24}║ ░░░░▒    .     ..
-      .▒░▒▒░░║    Avail Memory   🔥{5:^24}║░░▒
+ .. ▒ * ▒░ ░░║    CPUs / GPUs    🔥{3:^24}║░░░░░░░▒           *
+    .   ▒░ ░░║    Threads        🔥{4:^24}║ ░░░░▒    .     ..
+      .▒░▒▒░░║    Memory         🔥{5:^24}║░░▒
   +  .. ▒░░ ░║                                             ║░▒  .. .
     .    ▒ ░░╚═════════════════════════════════════════════╝░▒     +
  .     *  ▒░░░░░░  ░░▒░░░░░▒▒░░░▒▒ ░░░░░░░▒░░ ░░░▒░░▒░░░░░▒░░░░▒      .
@@ -273,8 +275,8 @@ class Embedder:
             version("firecode"),
             getuser(),
             time.ctime()[0:-8],
-            self.avail_cpus,
-            self.avail_gpus,
+            str(self.avail_cpus) + " / " + str(self.avail_gpus),
+            self.threads,
             str(round(self.avail_mem_gb, 1)) + " GB",
         )
         # 🔥⏣█▓▒░ banner art adapted from https://fsymbols.com/generators/tarty/
@@ -509,15 +511,14 @@ class Embedder:
                 match letter:
                     case "D":
                         if len(parts) == 5:
-                            auto_target = True
                             indices = [int(i) for i in parts[1:5]]
+                            target = dihedral(mol.coords[0][np.array(indices)])
 
                         elif len(parts) == 6:
                             indices = [int(i) for i in parts[1:5]]
                             if parts[5] == "auto":
-                                auto_target = True
+                                target = dihedral(mol.coords[0][np.array(indices)])
                             else:
-                                auto_target = False
                                 target = float(parts[5])
 
                         else:
@@ -527,15 +528,14 @@ class Embedder:
 
                     case "A":
                         if len(parts) == 4:
-                            auto_target = True
                             indices = [int(i) for i in parts[1:4]]
+                            target = point_angle(*mol.coords[0][np.array(indices)])
 
                         elif len(parts) == 5:
                             indices = [int(i) for i in parts[1:4]]
                             if parts[4] == "auto":
-                                auto_target = True
+                                target = point_angle(*mol.coords[0][np.array(indices)])
                             else:
-                                auto_target = False
                                 target = float(parts[4])
 
                         else:
@@ -545,16 +545,26 @@ class Embedder:
 
                     case "B":
                         if len(parts) == 3:
-                            auto_target = True
+                            i1, i2 = indices
+                            target = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
                             indices = [int(i) for i in parts[1:3]]
 
                         elif len(parts) == 4:
                             indices = [int(i) for i in parts[1:3]]
-                            if parts[3] == "auto":
-                                auto_target = True
-                            else:
-                                auto_target = False
-                                target = float(parts[3])
+                            match parts[3]:
+                                case "auto":
+                                    i1, i2 = indices
+                                    target = float(
+                                        np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2])
+                                    )
+
+                                case "ts":
+                                    i1, i2 = indices
+                                    e1, e2 = mol.atoms[i1], mol.atoms[i2]
+                                    target = get_ts_d_estimate(e1, e2)
+
+                                case _:
+                                    target = float(parts[3])
 
                         else:
                             raise SyntaxError(
@@ -566,23 +576,21 @@ class Embedder:
                             f'Error while parsing line "{line}". Constraint type "{letter}" not understood (B: bond, A: angle, D: dihedral)'
                         )
 
-                # if value is auto, take current value
-                if auto_target:
-                    match letter:
-                        case "D":
-                            target = dihedral(mol.coords[0][np.array(indices)])
-                        case "A":
-                            target = point_angle(*mol.coords[0][np.array(indices)])
-                        case "B":
-                            i1, i2 = indices
-                            target = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
-
                 c = Constraint(indices, target)
 
                 # set constraint attributes
-                for key, value in constr_props.items():
-                    setattr(c, key, str_to_var(value))
-                    self.log(f"--> Set property of Constraint[{' '.join(parts)}]: {key}={value}")
+                for attr_name, attr_value in constr_props.items():
+                    match attr_name:
+                        case "charge":
+                            enforced_type: Any = int
+                        case _:
+                            enforced_type = None
+
+                    casted_value = str_to_var(attr_value, enforced_type=enforced_type)
+                    setattr(c, attr_name, casted_value)
+                    self.log(
+                        f"--> Set property of Constraint[{' '.join(parts)}]: {attr_name}={type(casted_value)}('{attr_value}')."
+                    )
 
                 mol.constraints.append(c)
 
@@ -617,7 +625,14 @@ class Embedder:
                         )
 
                     attr_name, attr_value = parts
-                    casted_value = str_to_var(attr_value)
+
+                    match attr_name:
+                        case "charge":
+                            enforced_type: Any = int
+                        case _:
+                            enforced_type = None
+
+                    casted_value = str_to_var(attr_value, enforced_type=enforced_type)
                     setattr(self.objects[i], attr_name, casted_value)
 
                     fragments.remove(fragment)
@@ -1126,6 +1141,17 @@ class Embedder:
             _s = self.candidates or "Many"
             self.log(f"--> Setup performed correctly. {_s} candidates will be generated.\n")
 
+    def embed_requested(self) -> bool:
+        """Return wether the current setup specifies an embed."""
+        return self.embed in (
+            "string",
+            "chelotropic",
+            "cyclical",
+            "monomolecular",
+            "trimolecular",
+            "multiembed",
+        )
+
     def _get_number_of_candidates(self) -> int:
         """Get the number of structures that will be generated in the run."""
         _l = len(self.objects)
@@ -1542,9 +1568,20 @@ class Embedder:
         atoms, accessed via the associated constraint letter.
         The distance returned is the final one (not affected by SHRINK)
         """
+        # Option 1: DIST keyword specification
         if hasattr(self, "pairing_dists") and self.pairing_dists.get(letter) is not None:
             return self.pairing_dists[letter]
 
+        # Option 2: read imposed distance from hypmol.constraints
+        for mol_id, hypmol in enumerate(self.objects):
+            if letter in self.pairings_dict[mol_id]:
+                indices = self.pairings_dict[mol_id][letter]
+
+                for constraint in hypmol.constraints:
+                    if indices == tuple(constraint.indices):
+                        return constraint.value
+
+        # Option 3: calculate on-the-fly with orbital dimensions
         d: float = 0.0
         try:
             for mol_index, mol_pairing_dict in self.pairings_dict.items():
@@ -2768,13 +2805,13 @@ class RunEmbedding(Embedder):
         self.log(
             f"\n--> Frequency calc. / Thermochemical analysis ({self.options.theory_level}"
             f"{f'/{self.options.solvent}' if self.options.solvent is not None else ''}"
-            f" level with {self.options.calculator} via ASE"
+            f" level with {self.options.calculator} via ASE)"
         )
 
         if self.get_num_active_constraints(only_fixed_constraints=True) != 0:
             self.warn(
                 "--> WARNING! Vibrational analysis is being performed with one or more "
-                "fixed constraints! The thermochemical data should be interpreted carefully!"
+                "active fixed constraints! The thermochemical data should be interpreted carefully!"
             )
 
         title = self.objects[0].rootname if len(self.objects) == 1 else "structures"
@@ -2851,6 +2888,9 @@ class RunEmbedding(Embedder):
 
     def write_constr_options(self) -> None:
         """Writes information about the firecode parameters used in the calculation, if applicable to the run."""
+        if not (self.embed_requested() or self.embed == "refine"):
+            return
+
         if not self.pairings_table:
             if all([len(mol.reactive_indices) == 2 for mol in self.objects]):
                 self.log("--> No atom pairings imposed. Computing all possible dispositions.\n")
@@ -2865,10 +2905,21 @@ class RunEmbedding(Embedder):
                 internal = any(
                     isinstance(d.get(letter), tuple) for d in self.pairings_dict.values()
                 )
-                kind += " (Internal)" if internal else ""
-                dist = cast(
-                    "float", self.get_pairing_dist_from_letter(letter, allow_none_return=False)
-                )
+
+                if internal:
+                    kind += " (Internal)"
+
+                    for mol_index, mol in enumerate(self.objects):
+                        if letter in self.pairings_dict[mol_index]:
+                            i1, i2 = self.pairings_dict[mol_index][letter]  # type: ignore[misc]
+                            break
+
+                    dist = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
+
+                else:
+                    dist = cast(
+                        "float", self.get_pairing_dist_from_letter(letter, allow_none_return=False)
+                    )
 
                 if self.options.shrink and not internal:
                     dist *= self.options.shrink_multiplier

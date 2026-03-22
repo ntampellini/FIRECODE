@@ -36,10 +36,12 @@ from ase.calculators.calculator import CalculationFailed, PropertyNotImplemented
 from ase.constraints import FixInternals
 from ase.mep import DyNEB
 from ase.optimize import FIRE, LBFGS
+from numpy.linalg import LinAlgError
 from prism_pruner.algebra import dihedral, normalize
 from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, get_double_bonds_indices, time_to_string
+from sella import Sella
 
 from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
@@ -51,6 +53,7 @@ from firecode.utils import (
     NewFolderContext,
     cartesian_product,
     read_xyz,
+    read_xyz_energies,
     write_xyz,
 )
 
@@ -842,6 +845,8 @@ def ase_popt(
     maxiter: int | None = None,
     conv_thr: str = "tight",
     assert_convergence: bool = False,
+    optimizer: str = "LBFGS",
+    order: int = 0,
     traj: str | None = None,
     logfunction: Callable[[str], None] | None = None,
     title: str = "temp",
@@ -917,18 +922,159 @@ def ase_popt(
     ase_atoms.set_constraint(constraints)  # type: ignore[no-untyped-call]
 
     fmax = {
-        "tight": 0.05,
         "loose": 0.1,
+        "tight": 0.05,
+        "vtight": 0.01,
     }[conv_thr]
+
+    optimizer_dict = {
+        "LBFGS": LBFGS,
+        "FIRE": FIRE,
+        "SELLA": Sella,
+    }
+
+    optimizer = optimizer.upper()
+    if optimizer not in optimizer_dict:
+        raise NameError(f'Optimizer "{optimizer}" is unknown. {list(optimizer_dict.keys())}')
+
+    ase_optimizer = optimizer_dict[optimizer]
 
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
         t_start_opt = time.perf_counter()
+        iterations: int = 0
 
         with HiddenPrints():
-            with LBFGS(ase_atoms, maxstep=0.2, trajectory=traj) as opt:
-                opt.run(fmax=fmax, steps=maxiter)
-                iterations = opt.nsteps
+            try:
+                if optimizer == "SELLA":
+                    from networkx import connected_components
+                    from prism_pruner.graph_manipulations import graphize
+
+                    # if we have a multimolecular graph,
+                    # use TRIC (translational and rotation
+                    # internal coordinates) in Sella.
+                    # See:
+                    # Sella 2022 paper: https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395
+                    # Wang and Song 2016 (TRIC): https://doi.org/10.1063/1.4952956
+                    graph = graphize(atoms, coords)
+                    multimolecular = len(list(connected_components(graph))) > 1
+
+                    if multimolecular:
+                        from sella.internal import Internals
+
+                        internals: Internals | bool
+
+                        # remove constraints from ase atoms
+                        ase_atoms.set_constraint([])  # type: ignore[no-untyped-call]
+
+                        # Use TRICs
+                        internals = Internals(ase_atoms, allow_fragments=True)
+                        internals.find_all_bonds()
+                        internals.find_all_angles()
+                        internals.find_all_dihedrals()
+
+                    else:
+                        internals = True
+
+                    # See if we were passed constrained indices
+                    # to provide a better guess for v0
+                    if constrained_indices:
+                        v0 = np.zeros(3 * len(atoms))
+
+                        for i1, i2 in constrained_indices:
+                            diff = coords[i2] - coords[i1]
+                            diff /= np.linalg.norm(diff)
+                            v0[3 * i1 : 3 * i1 + 3] = -diff
+                            v0[3 * i2 : 3 * i2 + 3] = diff
+
+                        v0 /= np.linalg.norm(v0)
+
+                    else:
+                        v0 = None
+
+                    opt = Sella(
+                        ase_atoms,
+                        # Internal coordinates require many less
+                        # gradient evaluations to reach convergence
+                        # compared to cartesian coordinates.
+                        # The "tric" mode is useful in reducing
+                        # the number of internal coordinates for large
+                        # systems of multiple molecules
+                        internal=internals,
+                        # eta: finite difference step for Hessian-vector
+                        # products: default value of 1e-4 could be
+                        # dominated by noise for MLIPs, so increasing
+                        # it a little bit for robustness
+                        eta=0.005,
+                        # gamma: tighter diagonalizations
+                        # compared to the default 0.1 value
+                        # optimized for expensive QM, since
+                        # we are not using slow methods here
+                        gamma=0.05,
+                        # delta0: akin to stepsize - more conservative
+                        # than the default 0.1, should lead to
+                        # a more robust implementation. Again,
+                        # number of gradient calls is less important
+                        delta0=0.05,
+                        # sigma_inc: recover the trust radius a bit more aggressively
+                        # once a good step lands (default 1.15)
+                        sigma_inc=1.25,
+                        # If we were given any distance constraint,
+                        # provide an initial guess for the leftmost eigenvector
+                        v0=v0,  # type: ignore[arg-type]
+                        # trajectory: save trajectory to traj
+                        trajectory=traj,
+                    )
+
+                    opt.run(fmax=0.01, steps=maxiter)  # type: ignore[no-untyped-call]
+                    iterations += opt.nsteps
+
+                else:
+                    # Step 1: larger maxstep, looser convergence
+                    with ase_optimizer(ase_atoms, maxstep=0.2, trajectory=traj) as opt:
+                        opt.run(fmax=0.1, steps=maxiter)
+                        iterations += opt.nsteps
+
+                    # Step 2: Refinement with smaller maxstep
+                    if "tight" in conv_thr:
+                        with ase_optimizer(ase_atoms, maxstep=0.05, trajectory=traj) as opt:
+                            opt.run(fmax=fmax, steps=maxiter)
+                            iterations += opt.nsteps
+
+            except LinAlgError:
+                if logfunction is not None:
+                    iterations += opt.nsteps
+                    logfunction(
+                        f"    - {title} CRASHED ({iterations} iterations, {time_to_string(time.perf_counter() - t_start_opt)})"
+                    )
+                return coords, np.inf, False
+
+        if debug:
+            if traj is not None:
+                # convert ASE trajectory and remove the original
+                getoutput(f"ase convert {traj} {traj}.xyz")
+                os.remove(traj)
+
+                # read energies from the .xyz file
+                energies = cast("list[float]", read_xyz_energies(f"{traj}.xyz", verbose=False))
+
+                # since it came from "ase convert" the UOM is not Eh but eV
+                energies_kcal = np.array(energies) * EV_TO_KCAL
+
+                plt.figure()
+                plt.plot(
+                    range(1, len(energies) + 1),
+                    np.array(energies_kcal) - min(energies_kcal),
+                    color="tab:blue",
+                    label="Energy (kcal/mol)",
+                    linewidth=3,
+                )
+
+                plt.legend()
+                plt.title(title)
+                plt.xlabel("Iteration #")
+                plt.ylabel("Rel. E. (kcal/mol)")
+                plt.savefig(f"{title.replace(' ', '_')}_opt.svg")
 
         new_structure = ase_atoms.get_positions()  # type: ignore[no-untyped-call]
 
@@ -944,9 +1090,6 @@ def ase_popt(
             )
 
         energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
-
-        if traj is not None:
-            getoutput(f"ase convert {traj} {traj}.xyz")
 
         if solvent is not None and add_alpb_solvation:
             gsolv = xtb_gsolv(
@@ -964,16 +1107,18 @@ def ase_popt(
     return new_structure, energy, success
 
 
-def _wrap_with_alpb(fn: Callable[P, R]) -> Callable[P, R]:
+def _wrap_with_kwargs(fn: Callable[P, R], fixed_kwargs: dict[str, Any]) -> Callable[P, R]:
     @wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        kwargs["add_alpb_solvation"] = True
+        for key, value in fixed_kwargs.items():
+            kwargs[key] = value
         return fn(*args, **kwargs)
 
     return wrapper
 
 
-ase_popt_with_alpb = _wrap_with_alpb(ase_popt)
+ase_popt_with_alpb = _wrap_with_kwargs(ase_popt, fixed_kwargs={"add_alpb_solvation": True})
+ase_saddle = _wrap_with_kwargs(ase_popt, fixed_kwargs={"optimizer": "SELLA", "order": 1})
 
 
 def ase_dump(

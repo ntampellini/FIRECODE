@@ -1,4 +1,4 @@
-calc=tblite solvent=acetonitrile pka(Me2NH2+.xyz)=19.03 T_C=21
+calc=tblite solvent=acetonitrile pka(Me2NH2+.xyz)=19.03 T_C=-10
 pka> Me2NH2+.xyz 10
 pka> Me3N.xyz 1
 pka> HCOOH.xyz 4

@@ -26,6 +26,7 @@ import json
 import math
 import os
 from shutil import rmtree
+from subprocess import getoutput
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
@@ -37,6 +38,7 @@ from prettytable import PrettyTable
 from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import set_charge_and_mult_on_ase_atoms
+from firecode.calculators._xtb import xtb_gsolv
 from firecode.solvents import solvent_data, solvent_synonyms
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import (
@@ -53,17 +55,18 @@ from firecode.units import (
     PLANCK_h__J_s,
     theta_per_cm1_K,
 )
-from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar
+from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar, write_xyz
 
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
 
     from firecode.embedder import Embedder
 
+
 # Frequencies below this are considered belonging to proper
 # transition states and excluded from thermochemical analysis,
 # while the (_TS_THR_CM_1 < v < 0) range will be treated as positive.
-_TS_THR_CM_1: float = -50
+_TS_THR_CM_1: float = -25
 
 
 def _free_space_mL_per_L(solvent: str | None = None) -> float:
@@ -161,8 +164,9 @@ def rrho_thermo(
         if abs(f) > 1e-3:
             vib_cm_all.append(abs(f))
 
-    assert len(vib_cm_all) == len(freqs_cm1) - start, (
-        f"Frequency mismatch: expected {len(freqs_cm1)}, read {len(vib_cm_all)}"
+    assert (len(freqs_cm1) - len(vib_cm_all) - start) <= 1, (
+        f"Frequency mismatch: expected {len(freqs_cm1) - start} (GS) or "
+        f"{len(freqs_cm1) - start - 1} (TS) frequencies, but {len(vib_cm_all)} were read."
     )
 
     if cutoff_cm1 is None:
@@ -366,8 +370,10 @@ def ase_vib(
     P_atm: float | None = 1.0,
     C_mol_L: float | None = None,
     solvent: str | None = None,
+    add_alpb_solvation: bool = False,
     title: str = "temp",
     return_gcorr: bool = True,
+    tighten_opt_before_vib: bool = True,
     write_log: bool = True,
 ) -> tuple[Array1D_float, float]:
     """returns: tuple of Array of frequencies and either G(corr) or Free energy, in kcal/mol.
@@ -383,40 +389,72 @@ def ase_vib(
 
     with open(f"{title}.out", "w", encoding="utf-8") as f:
         f.write("--> FIRECODE ASE Frequency calculation report\n")
-        f.write(f"charge={charge}, mult={mult}, C={C_mol_L} mol/L, P={P_atm} atm\n")
+        f.write(
+            f"charge={charge}, mult={mult}, C={C_mol_L} mol/L, P={P_atm} atm T={T_K:.2f} K ({T_K - 273.15:.2f} °C)\n"
+        )
         f.write(
             f"Concentration {'not ' if C_mol_L is None else ''}provided: reference "
-            f"state used is {'gas ' if C_mol_L is None else 'solution'} phase.\n\n"
+            f"state used is {'gas ' if C_mol_L is None else 'solution'} phase.\n"
         )
 
-        # tighten convergence
-        t_start = perf_counter()
-        f.write("--> Tightening geom. opt. convergence to fmax=1E-4\n")
-        opt = LBFGS(ase_atoms, maxstep=0.01)
-        with HiddenPrints():
-            opt.run(fmax=1e-4)  # type: ignore[no-untyped-call]
-        energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
         f.write(
-            f"Structure optimized to fmax=1E-4 in {time_to_string(perf_counter() - t_start)}\n\n"
+            f"Solvent is {solvent} - accessible Shakhnovich & Whitesides space is {_free_space_mL_per_L(solvent):.2f} mL/L\n\n"
         )
+
+        # tighten convergence to avoid negative frequencies
+        if tighten_opt_before_vib:
+            t_start = perf_counter()
+            f.write("--> Tightening geom. opt. convergence to fmax=1E-2\n")
+            opt = LBFGS(ase_atoms, maxstep=0.01)
+            with HiddenPrints():
+                opt.run(fmax=1e-2)  # type: ignore[no-untyped-call]
+            f.write(
+                f"Structure optimized to fmax=1E-2 in {time_to_string(perf_counter() - t_start)}\n\n"
+            )
+
+        # save structure in thermo folder
+        with open(f"{title}.xyz", "w") as ff:
+            write_xyz(atoms, ase_atoms.get_positions(), ff)  # type: ignore[no-untyped-call]
+
+        energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+
+        # add alpb if appropriate
+        if solvent is not None and add_alpb_solvation:
+            gsolv = (
+                xtb_gsolv(
+                    atoms,
+                    coords,
+                    model="alpb",
+                    charge=charge,
+                    mult=mult,
+                    solvent=solvent,
+                    title=title,
+                    assert_convergence=True,
+                )
+                / EH_TO_KCAL
+            )
+            energy += gsolv
 
         # remove cache folder
-        if "vib" in os.listdir():
-            rmtree(os.path.join(os.getcwd(), "vib"))
+        rmtree(os.path.join(os.getcwd(), "vib"), ignore_errors=True)
 
         # run vibrational analysis
         t_start = perf_counter()
-        vib.run()  # type: ignore[no-untyped-call]
+        with HiddenPrints():
+            vib.run()  # type: ignore[no-untyped-call]
         f.write(
             f"Vibrational frequencies calculated in {time_to_string(perf_counter() - t_start)}\n\n"
         )
 
-        # get energies (frequencies) and print summary
+        write_neg_modes_to_file(vib, title=title)
+
+        # get energies (frequencies)
         freqs_complex = vib.get_energies() * EV_TO_WAVENUMS  # type: ignore[no-untyped-call]
 
         # clamp small negatives and sort freqs
         freqs = cleanup_freqs(ase_atoms, freqs_complex)
 
+        # Print pretty table with freqs
         table = PrettyTable()
         table.field_names = ["Mode", "Freq. (cm^-1)"]
         for i, freq in enumerate(freqs):
@@ -536,7 +574,7 @@ def cleanup_freqs(
     # modes_mw = modes_mw[:, perm]
 
     # Post-facto cleanup:
-    #   - force the first zero_first to exactly 0.0
+    #   - force the first zero_first freqs to exactly 0.0
     #   - clamp tiny |f| < |_TS_THR_CM_1| to +abs(f) for the rest
     freqs[:zero_first] = 0.0
     for i in range(zero_first, nmode):
@@ -550,6 +588,23 @@ def cleanup_freqs(
     return freqs
 
 
+def write_neg_modes_to_file(vib: Vibrations, title: str = "temp") -> None:
+    """Write negative modes animations to file."""
+    # get energies (frequencies)
+    freqs_complex = vib.get_energies() * EV_TO_WAVENUMS  # type: ignore[no-untyped-call]
+
+    for i, f in enumerate(freqs_complex):
+        if abs(f.imag) > abs(_TS_THR_CM_1):
+            # write mode with imaginary freq
+            vib.write_mode(n=i, kT=0.02, nimages=30)  # type: ignore[no-untyped-call]
+
+            # convert ase format to .xyz
+            getoutput(f"ase convert {vib.name}.{i}.traj {title}_mode_{i + 1:0>3d}.xyz")
+
+            # remove ase file
+            os.remove(f"{vib.name}.{i}.traj")
+
+
 def get_free_energies(
     embedder: Embedder,
     atoms: Array1D_str,
@@ -557,12 +612,13 @@ def get_free_energies(
     charge: int,
     mult: int,
     title: str = "temp",
+    tighten_opt_before_vib: bool = True,
     logfunction: Callable[[str], None] | None = None,
 ) -> Array1D_float:
     """Run vibrational analysis on a set of structures."""
     free_energies = []
 
-    with NewFolderContext(f"{title}_thermo", delete_after=False):
+    with NewFolderContext(title + "_thermo", delete_after=False, overwrite_if_exists=False):
         for s, structure in enumerate(structures):
             loadbar(
                 s,
@@ -582,8 +638,11 @@ def get_free_energies(
                 mult=mult,
                 T_K=embedder.options.T,
                 C_mol_L=embedder.options.C,
-                title=f"{title}_conf{s}",
+                solvent=embedder.options.solvent,
+                add_alpb_solvation=embedder.options.calculator in ("AIMNET2", "UMA"),
+                title=f"{title}_conf{s + 1}",
                 return_gcorr=False,
+                tighten_opt_before_vib=tighten_opt_before_vib,
             )
 
             free_energies.append(free_energy)
@@ -593,13 +652,16 @@ def get_free_energies(
                 match num_neg := np.count_nonzero(freqs < 0.0):
                     case 0:
                         exit_str = "GS"
+                        ss = "s., "
                     case 1:
                         exit_str = "TS"
+                        ss = ".,  "
                     case _:
+                        ss = "s., "
                         exit_str = "??"
 
                 logfunction(
-                    f"    - {title} conf. {s:>4d} - {exit_str} ({num_neg} negative freqs. - {time_to_string(elapsed)})"
+                    f"    - {title} conf{s:0>4d} - {exit_str} ({num_neg} negative freq{ss}, {time_to_string(elapsed)})"
                 )
 
         loadbar(

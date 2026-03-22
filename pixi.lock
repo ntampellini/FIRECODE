@@ -81,6 +81,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-2.2.6-py312h72c5963_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-h55fea9a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.1-h35e630c_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/opt_einsum-3.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pillow-12.1.1-py312h50c33e8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/psutil-7.2.2-py312h5253ce2_0.conda
@@ -116,12 +117,16 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/d2/a7/3fc9cab92d664246405bdb9bce2a984c7ebe6e9917c1b44c3a968e2bc980/geometric-1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/ce/ff/3b59672c47c6284e8005b42e84ceba13864aa0f39f067c973d1af02f5d91/InquirerPy-0.3.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/e4/88778c6a23b65224e5088e68fd0924e5bde2196a26e76edb3ea3543fed6a/jax-0.9.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/53/6b/b381bda5850f5611822d791cd25dfe36efda2688a68c4dda0f8a92c36dec/jaxlib-0.9.1-cp312-cp312-manylinux_2_27_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/3a/cb/28ce52eb94390dda42599c98ea0204d74799e4d8047a0eb559b6fd648056/ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ce/32/939f02df23a47d780571af66a54a21835cea6f2efa53182b76887192be51/mlfsm-1.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/d7/8ff98376b1acc4503253b685ea09981697385ce344d4e3935c2af49e044d/pfzy-0.3.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ee/8c/83087ebc47ab0396ce092363001fa37c17153119ee282700c0713a195853/prettytable-3.17.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/81/1b/6edbfc33b1848b807b6309f63a4df95e577794b01f4a9f75e615f9dcda3e/prism_pruner-0.0.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/be/d1/c687917cf1cdf5c5412437a5f4a91921497c2d0ffeb827b23f5489a10842/rdkit-2025.9.4-cp312-cp312-manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/ce/18/43686d2ce60997cabf6dcdd216363fcdc11c6088ecd13232f9083243c4c5/Sella-2.3.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/68/5a/199c59e0a824a3db2b89c5d2dade7ab5f9624dbf6448dc291b46d5ec94d3/wcwidth-0.6.0-py3-none-any.whl
       - pypi: ./
       osx-arm64:
@@ -185,6 +190,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/numpy-2.2.6-py312h7c1f314_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openjpeg-2.5.4-hbfb3c88_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.1-hd24854e_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/opt_einsum-3.4.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pillow-12.1.1-py312h4e908a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/psutil-7.2.2-py312hb3ab3e3_0.conda
@@ -219,12 +225,16 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/d2/a7/3fc9cab92d664246405bdb9bce2a984c7ebe6e9917c1b44c3a968e2bc980/geometric-1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/ce/ff/3b59672c47c6284e8005b42e84ceba13864aa0f39f067c973d1af02f5d91/InquirerPy-0.3.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/e4/88778c6a23b65224e5088e68fd0924e5bde2196a26e76edb3ea3543fed6a/jax-0.9.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8f/06/59b1da0a3b2450a4abbf66cbb3bbfe0b14f9723b1f8997c0178db3549e54/jaxlib-0.9.1-cp312-cp312-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/a8/b8/3c70881695e056f8a32f8b941126cf78775d9a4d7feba8abcb52cb7b04f2/ml_dtypes-0.5.4-cp312-cp312-macosx_10_13_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/ce/32/939f02df23a47d780571af66a54a21835cea6f2efa53182b76887192be51/mlfsm-1.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/d7/8ff98376b1acc4503253b685ea09981697385ce344d4e3935c2af49e044d/pfzy-0.3.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ee/8c/83087ebc47ab0396ce092363001fa37c17153119ee282700c0713a195853/prettytable-3.17.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/58/08/416d615d956505a856c6a9a1a7e8841c0096ccd739d606c909cd73d5090d/prism_pruner-0.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2b/6c/55aa888c54cf3aa8c8fb525642c51769e37fd2bcdd924cd35c3cb3678fc1/rdkit-2025.9.5-cp312-cp312-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/13/3c/12cbfbfd8e86a4e972cd621e92427f1369e1f08ea49e58f445643fb353ef/Sella-2.3.5-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/68/5a/199c59e0a824a3db2b89c5d2dade7ab5f9624dbf6448dc291b46d5ec94d3/wcwidth-0.6.0-py3-none-any.whl
       - pypi: ./
   dev:
@@ -483,6 +493,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d2/a7/3fc9cab92d664246405bdb9bce2a984c7ebe6e9917c1b44c3a968e2bc980/geometric-1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/3a/30/d1c94066343a98bb2cea40120873193a4fed68c4ad7f8935c11caf74c681/h5py-3.15.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ce/ff/3b59672c47c6284e8005b42e84ceba13864aa0f39f067c973d1af02f5d91/InquirerPy-0.3.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/e4/88778c6a23b65224e5088e68fd0924e5bde2196a26e76edb3ea3543fed6a/jax-0.9.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/53/6b/b381bda5850f5611822d791cd25dfe36efda2688a68c4dda0f8a92c36dec/jaxlib-0.9.1-cp312-cp312-manylinux_2_27_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/3a/cb/28ce52eb94390dda42599c98ea0204d74799e4d8047a0eb559b6fd648056/ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ce/32/939f02df23a47d780571af66a54a21835cea6f2efa53182b76887192be51/mlfsm-1.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/63/97/9f57af74dd92fc5c0af6f8d5a7b8459c103e318d16f3d9dbd863826fccf8/nvalchemi_toolkit_ops-0.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/d7/8ff98376b1acc4503253b685ea09981697385ce344d4e3935c2af49e044d/pfzy-0.3.4-py3-none-any.whl
@@ -490,6 +503,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/81/1b/6edbfc33b1848b807b6309f63a4df95e577794b01f4a9f75e615f9dcda3e/prism_pruner-0.0.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/be/d1/c687917cf1cdf5c5412437a5f4a91921497c2d0ffeb827b23f5489a10842/rdkit-2025.9.4-cp312-cp312-manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/ce/18/43686d2ce60997cabf6dcdd216363fcdc11c6088ecd13232f9083243c4c5/Sella-2.3.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c2/bb/21e9396a963d50171f539f4a4c9411435e7bb9c5131f4480f882d5e51dc6/warp_lang-1.11.1-py3-none-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/68/5a/199c59e0a824a3db2b89c5d2dade7ab5f9624dbf6448dc291b46d5ec94d3/wcwidth-0.6.0-py3-none-any.whl
       - pypi: ./
@@ -728,6 +742,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d2/a7/3fc9cab92d664246405bdb9bce2a984c7ebe6e9917c1b44c3a968e2bc980/geometric-1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/a4/5e/3c6f6e0430813c7aefe784d00c6711166f46225f5d229546eb53032c3707/h5py-3.15.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/ce/ff/3b59672c47c6284e8005b42e84ceba13864aa0f39f067c973d1af02f5d91/InquirerPy-0.3.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/80/e4/88778c6a23b65224e5088e68fd0924e5bde2196a26e76edb3ea3543fed6a/jax-0.9.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8f/06/59b1da0a3b2450a4abbf66cbb3bbfe0b14f9723b1f8997c0178db3549e54/jaxlib-0.9.1-cp312-cp312-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/a8/b8/3c70881695e056f8a32f8b941126cf78775d9a4d7feba8abcb52cb7b04f2/ml_dtypes-0.5.4-cp312-cp312-macosx_10_13_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/ce/32/939f02df23a47d780571af66a54a21835cea6f2efa53182b76887192be51/mlfsm-1.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/63/97/9f57af74dd92fc5c0af6f8d5a7b8459c103e318d16f3d9dbd863826fccf8/nvalchemi_toolkit_ops-0.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/d7/8ff98376b1acc4503253b685ea09981697385ce344d4e3935c2af49e044d/pfzy-0.3.4-py3-none-any.whl
@@ -735,6 +752,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/58/08/416d615d956505a856c6a9a1a7e8841c0096ccd739d606c909cd73d5090d/prism_pruner-0.0.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2b/6c/55aa888c54cf3aa8c8fb525642c51769e37fd2bcdd924cd35c3cb3678fc1/rdkit-2025.9.5-cp312-cp312-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/13/3c/12cbfbfd8e86a4e972cd621e92427f1369e1f08ea49e58f445643fb353ef/Sella-2.3.5-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/d5/86/507cb6e0534422ff8437f71d676f6366ec907031db54751ad371f07c0b7f/warp_lang-1.11.1-py3-none-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/68/5a/199c59e0a824a3db2b89c5d2dade7ab5f9624dbf6448dc291b46d5ec94d3/wcwidth-0.6.0-py3-none-any.whl
       - pypi: ./
@@ -1611,7 +1629,7 @@ packages:
 - pypi: ./
   name: firecode
   version: 1.6.0
-  sha256: 7af664ce0a4a61d894638057a9eb78d0aa3ba68ac4ba969f231ed508f94bef07
+  sha256: 37dd410edb809aace3e8ee05b20212932ba1d48c3fbf3cb7ff8ca7b2b737cfdc
   requires_dist:
   - rdkit>=2025.9.3
   - numpy
@@ -1625,6 +1643,7 @@ packages:
   - inquirerpy
   - prism-pruner
   - mlfsm
+  - sella==2.3.5
   - fairchem-core ; extra == 'uma'
   - aimnet[ase] ; extra == 'aimnet2'
   - fairchem-core ; extra == 'full'
@@ -2127,6 +2146,54 @@ packages:
   - pkg:pypi/itsdangerous?source=hash-mapping
   size: 19180
   timestamp: 1733308353037
+- pypi: https://files.pythonhosted.org/packages/80/e4/88778c6a23b65224e5088e68fd0924e5bde2196a26e76edb3ea3543fed6a/jax-0.9.1-py3-none-any.whl
+  name: jax
+  version: 0.9.1
+  sha256: d11cb53d362912253013e8c4d6926cb9f3a4b59ab5b25a7dc08123567067d088
+  requires_dist:
+  - jaxlib<=0.9.1,>=0.9.1
+  - ml-dtypes>=0.5.0
+  - numpy>=2.0
+  - opt-einsum
+  - scipy>=1.13
+  - jaxlib==0.9.1 ; extra == 'minimum-jaxlib'
+  - jaxlib==0.9.0 ; extra == 'ci'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'tpu'
+  - libtpu==0.0.35.* ; extra == 'tpu'
+  - requests ; extra == 'tpu'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'cuda'
+  - jax-cuda12-plugin[with-cuda]<=0.9.1,>=0.9.1 ; extra == 'cuda'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'cuda12'
+  - jax-cuda12-plugin[with-cuda]<=0.9.1,>=0.9.1 ; extra == 'cuda12'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'cuda13'
+  - jax-cuda13-plugin[with-cuda]<=0.9.1,>=0.9.1 ; extra == 'cuda13'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'cuda12-local'
+  - jax-cuda12-plugin<=0.9.1,>=0.9.1 ; extra == 'cuda12-local'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'cuda13-local'
+  - jax-cuda13-plugin<=0.9.1,>=0.9.1 ; extra == 'cuda13-local'
+  - jaxlib<=0.9.1,>=0.9.1 ; extra == 'rocm'
+  - jax-rocm7-plugin<=0.9.1,>=0.9.1 ; extra == 'rocm'
+  - kubernetes ; extra == 'k8s'
+  - xprof ; extra == 'xprof'
+  requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/53/6b/b381bda5850f5611822d791cd25dfe36efda2688a68c4dda0f8a92c36dec/jaxlib-0.9.1-cp312-cp312-manylinux_2_27_x86_64.whl
+  name: jaxlib
+  version: 0.9.1
+  sha256: e2ab8c97be30354a34e64d17066df0fce7d1d0f40f7a48eded19e9e837896f5d
+  requires_dist:
+  - scipy>=1.13
+  - numpy>=2.0
+  - ml-dtypes>=0.5.0
+  requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/8f/06/59b1da0a3b2450a4abbf66cbb3bbfe0b14f9723b1f8997c0178db3549e54/jaxlib-0.9.1-cp312-cp312-macosx_11_0_arm64.whl
+  name: jaxlib
+  version: 0.9.1
+  sha256: cea7f98a1a558fab5cf8f569e5567a3c288667dd223261adaeb9645c37e4ad8b
+  requires_dist:
+  - scipy>=1.13
+  - numpy>=2.0
+  - ml-dtypes>=0.5.0
+  requires_python: '>=3.11'
 - conda: https://conda.anaconda.org/conda-forge/noarch/jinja2-3.1.6-pyhcf101f3_1.conda
   sha256: fc9ca7348a4f25fed2079f2153ecdcf5f9cf2a0bc36c4172420ca09e1849df7b
   md5: 04558c96691bed63104678757beb4f8d
@@ -3513,6 +3580,38 @@ packages:
   purls: []
   size: 125728406
   timestamp: 1767634121080
+- pypi: https://files.pythonhosted.org/packages/3a/cb/28ce52eb94390dda42599c98ea0204d74799e4d8047a0eb559b6fd648056/ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+  name: ml-dtypes
+  version: 0.5.4
+  sha256: 9ad459e99793fa6e13bd5b7e6792c8f9190b4e5a1b45c63aba14a4d0a7f1d5ff
+  requires_dist:
+  - numpy>=1.21
+  - numpy>=1.21.2 ; python_full_version >= '3.10'
+  - numpy>=1.23.3 ; python_full_version >= '3.11'
+  - numpy>=1.26.0 ; python_full_version >= '3.12'
+  - numpy>=2.1.0 ; python_full_version >= '3.13'
+  - absl-py ; extra == 'dev'
+  - pytest ; extra == 'dev'
+  - pytest-xdist ; extra == 'dev'
+  - pylint>=2.6.0 ; extra == 'dev'
+  - pyink ; extra == 'dev'
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/a8/b8/3c70881695e056f8a32f8b941126cf78775d9a4d7feba8abcb52cb7b04f2/ml_dtypes-0.5.4-cp312-cp312-macosx_10_13_universal2.whl
+  name: ml-dtypes
+  version: 0.5.4
+  sha256: a174837a64f5b16cab6f368171a1a03a27936b31699d167684073ff1c4237dac
+  requires_dist:
+  - numpy>=1.21
+  - numpy>=1.21.2 ; python_full_version >= '3.10'
+  - numpy>=1.23.3 ; python_full_version >= '3.11'
+  - numpy>=1.26.0 ; python_full_version >= '3.12'
+  - numpy>=2.1.0 ; python_full_version >= '3.13'
+  - absl-py ; extra == 'dev'
+  - pytest ; extra == 'dev'
+  - pytest-xdist ; extra == 'dev'
+  - pylint>=2.6.0 ; extra == 'dev'
+  - pyink ; extra == 'dev'
+  requires_python: '>=3.9'
 - pypi: https://files.pythonhosted.org/packages/ce/32/939f02df23a47d780571af66a54a21835cea6f2efa53182b76887192be51/mlfsm-1.0.0-py3-none-any.whl
   name: mlfsm
   version: 1.0.0
@@ -5090,6 +5189,28 @@ packages:
   - pkg:pypi/scipy?source=hash-mapping
   size: 13802410
   timestamp: 1768801119235
+- pypi: https://files.pythonhosted.org/packages/13/3c/12cbfbfd8e86a4e972cd621e92427f1369e1f08ea49e58f445643fb353ef/Sella-2.3.5-cp312-cp312-macosx_11_0_arm64.whl
+  name: sella
+  version: 2.3.5
+  sha256: 7a49dc578fd1dee733d4bf5fade2ab28d8fe238b9182e82e465964edd3a55507
+  requires_dist:
+  - numpy>=1.14.0
+  - scipy>=1.1.0
+  - ase>=3.18.0
+  - jax>=0.4.20
+  - jaxlib>=0.4.20
+  requires_python: '>=3.8'
+- pypi: https://files.pythonhosted.org/packages/ce/18/43686d2ce60997cabf6dcdd216363fcdc11c6088ecd13232f9083243c4c5/Sella-2.3.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+  name: sella
+  version: 2.3.5
+  sha256: ae73450def90226be502c0fa902e368824f57bca6937189c72d34614962df5d5
+  requires_dist:
+  - numpy>=1.14.0
+  - scipy>=1.1.0
+  - ase>=3.18.0
+  - jax>=0.4.20
+  - jaxlib>=0.4.20
+  requires_python: '>=3.8'
 - conda: https://conda.anaconda.org/conda-forge/noarch/sentry-sdk-2.53.0-pyhd8ed1ab_0.conda
   sha256: 3d073811c10d7bba011bc9c8ed6535f94cfb7c6fbc05e64bf3160a85d1f7b9ec
   md5: c3f8f875a63396876bc37fccd0bcc314

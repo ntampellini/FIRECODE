@@ -30,9 +30,13 @@ install(show_locals=True)
 
 def main() -> None:
     # Redirect stdout and stderr to handle encoding errors
-    sys.stdout = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stdout = TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
+    )
 
-    sys.stderr = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
+    )
 
     usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
     🔥 python -m firecode -cl "refine> crest_search> mol.xyz"
@@ -98,6 +102,8 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    set_up_environmental_variables()
+
     if (not (args.setup or args.command_line or args.optimize)) and args.inputfile is None:
         parser.error("One of the following arguments are required: inputfile, -t, -s, -o.\n")
 
@@ -141,6 +147,33 @@ def main() -> None:
 
     embedder.run()
     # run the program
+
+
+def set_up_environmental_variables() -> None:
+    """Set up the appropriate env. vars for the run."""
+    from firecode.settings import JAX_PLATFORM, SELLA_NUM_THREADS
+
+    os.environ.setdefault("JAX_PLATFORMS", JAX_PLATFORM)
+    os.environ.setdefault("JAX_PLATFORM_NAME", JAX_PLATFORM)
+
+    n = (
+        SELLA_NUM_THREADS
+        or int(os.environ.get("SLURM_CPUS_PER_TASK", "0"))
+        or (os.cpu_count() or 1)
+    )
+
+    flags = os.environ.get("XLA_FLAGS", "")
+    add = "--xla_cpu_multi_thread_eigen=true"
+    if JAX_PLATFORM == "cpu" and add not in flags:
+        os.environ["XLA_FLAGS"] = (flags + " " + add).strip()
+
+    for var in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
+        os.environ.setdefault(var, str(n))
 
 
 if __name__ == "__main__":

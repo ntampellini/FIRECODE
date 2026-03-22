@@ -41,12 +41,13 @@ from typing import (
     Self,
     Sequence,
     TypeVar,
+    cast,
 )
 
 import numpy as np
 from numpy.typing import NDArray
 from prism_pruner.algebra import rot_mat_from_pointer
-from prism_pruner.graph_manipulations import graphize
+from prism_pruner.graph_manipulations import d_min_bond, graphize
 from prism_pruner.rmsd import rmsd_and_max
 from scipy.spatial.distance import cdist
 
@@ -207,7 +208,7 @@ def read_xyz(filename: str) -> ConformerEnsemble:
 
 
 def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]:
-    """Read energies from a .xyz file. Returns None or an array of floats (in Hartrees)."""
+    """Read energies from a .xyz file. Returns None or a list of floats (in Hartrees)."""
     energies = None
 
     # get lines right after the number of atom, which should contain the energy
@@ -739,6 +740,19 @@ def compenetration_check(
     return True
 
 
+def get_ts_d_estimate(
+    e1: str,
+    e2: str,
+    factor: float = 1.35,
+) -> float:
+    """Returns an estimate for the distance between two
+    specific elements in a transition state, by multipling
+    the sum of covalent radii for a constant.
+
+    """
+    return cast("float", d_min_bond(e1, e2, factor=factor))
+
+
 class NewFolderContext:
     """Context manager: creates a new directory and moves into it on entry.
 
@@ -746,16 +760,22 @@ class NewFolderContext:
 
     """
 
-    def __init__(self, new_folder_name: str, delete_after: bool = True) -> None:
+    def __init__(
+        self, new_folder_name: str, delete_after: bool = True, overwrite_if_exists: bool = True
+    ) -> None:
+
         self.new_folder_name = os.path.join(os.getcwd(), new_folder_name)
         self.delete_after = delete_after
+        self.overwrite_if_exists = overwrite_if_exists
 
     def __enter__(self) -> None:
-        # create working folder and cd into it
-        shutil.rmtree(self.new_folder_name, ignore_errors=True)
+        if self.overwrite_if_exists:
+            shutil.rmtree(self.new_folder_name, ignore_errors=True)
 
-        new_dir = Path(self.new_folder_name)
-        new_dir.mkdir()
+        if not os.path.isdir(self.new_folder_name):
+            # create working folder and cd into it
+            new_dir = Path(self.new_folder_name)
+            new_dir.mkdir()
 
         os.chdir(self.new_folder_name)
 
@@ -766,7 +786,7 @@ class NewFolderContext:
         # only delete if instructed to
         # and no unhandled exception occurred
         if self.delete_after and exc_type is None:
-            shutil.rmtree(self.new_folder_name)
+            shutil.rmtree(self.new_folder_name, ignore_errors=True)
 
 
 class FolderContext:

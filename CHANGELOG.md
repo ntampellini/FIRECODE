@@ -9,7 +9,8 @@
 
 ## FIRECODE 1.7.0 🔥 (WIP)
 - Restructured and expanded solvent module.
-- Implemented vibrational analysis via ASE including quasi-RRHO thermochemistry (as in GoodVibes) to get free energies.
+- Implemented vibrational analysis via ASE including quasi-RRHO thermochemistry to get free energies.
+- Added Sella dependency to perform saddle points optimization with the `saddle>` operator.
 - Added FREQ keyword, that computes free energies at the end of the geometry optimization cycles.
 - Added T (temperature, in K), T_C (temperature, in °C), P (pressure, in atm), and C (concentration, in mol/L) keywords.
 <!-- add number of active constraints printout for parallel multithread functions -->
