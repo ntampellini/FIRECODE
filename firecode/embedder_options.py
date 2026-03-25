@@ -30,7 +30,7 @@ from firecode.settings import (
     DEFAULT_FF_LEVELS,
     FF_CALC,
     FF_OPT_BOOL,
-    SINGLE_THREAD_BOOL,
+    FORCE_SINGLE_THREAD,
 )
 from firecode.typing_ import MaybeNone
 
@@ -229,7 +229,7 @@ class Options:
     operators_dict: dict[int, list[str]] = field(default_factory=dict)
     # Analogous dictionary that will contain the seuquences of operators for each molecule
 
-    single_thread: bool = SINGLE_THREAD_BOOL
+    single_thread: bool = FORCE_SINGLE_THREAD
     # enforce the use of a single thread in multimolecular optimization
 
     def __repr__(self) -> str:

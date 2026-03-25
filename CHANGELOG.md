@@ -13,6 +13,7 @@
 - Added Sella dependency to perform saddle points optimization with the `saddle>` operator.
 - Added FREQ keyword, that computes free energies at the end of the geometry optimization cycles.
 - Added T (temperature, in K), T_C (temperature, in °C), P (pressure, in atm), and C (concentration, in mol/L) keywords.
+- Updated CREST interface to version 3 of the program (see [paper](https://doi.org/10.1063/5.0197592) and [documentation](https://crest-lab.github.io/crest-docs/))
 <!-- add number of active constraints printout for parallel multithread functions -->
 
 ## FIRECODE 1.6.0 🔥 (March 11 2026)

@@ -112,7 +112,11 @@ class Embedder:
         else:
             self.stamp = stamp
 
-        self.avail_cpus = len(os.sched_getaffinity(0))
+        try:
+            self.avail_cpus = len(os.sched_getaffinity(0))
+        except AttributeError:
+            self.avail_cpus = os.cpu_count() or 1  # Fallback for Windows/macOS
+
         self.avail_mem_gb = virtual_memory().available / 1e9
 
         try:
@@ -134,7 +138,6 @@ class Embedder:
         self.logfile = open(log_filename, "a", buffering=1, encoding="utf-8")
         self.debug_logfile: TextIOWrapper | None = None
         logging.basicConfig(filename=log_filename, filemode="a", encoding="utf-8")
-        self.threads = os.environ.get("OMP_NUM_THREADS", os.cpu_count())
 
         try:
             self.write_banner_and_info()
@@ -261,8 +264,8 @@ class Embedder:
  ..  ▒  ▒░▒░░║    Version        🔥{0:^24}║░▒░░░ ░░░▒    *      .
    .  ▒ ░░░░░║    User           🔥{1:^24}║░░░░░░░░▒  +
        ▒░░ ▒░║    Current Time   🔥{2:^24}║░░ ░░▒    ▒    +    ..
- .. ▒ * ▒░ ░░║    CPUs / GPUs    🔥{3:^24}║░░░░░░░▒           *
-    .   ▒░ ░░║    Threads        🔥{4:^24}║ ░░░░▒    .     ..
+ .. ▒ * ▒░ ░░║    CPUs           🔥{3:^24}║░░░░░░░▒           *
+    .   ▒░ ░░║    GPUs           🔥{4:^24}║ ░░░░▒    .     ..
       .▒░▒▒░░║    Memory         🔥{5:^24}║░░▒
   +  .. ▒░░ ░║                                             ║░▒  .. .
     .    ▒ ░░╚═════════════════════════════════════════════╝░▒     +
@@ -275,8 +278,8 @@ class Embedder:
             version("firecode"),
             getuser(),
             time.ctime()[0:-8],
-            str(self.avail_cpus) + " / " + str(self.avail_gpus),
-            self.threads,
+            str(self.avail_cpus),
+            str(self.avail_gpus),
             str(round(self.avail_mem_gb, 1)) + " GB",
         )
         # 🔥⏣█▓▒░ banner art adapted from https://fsymbols.com/generators/tarty/
@@ -1318,10 +1321,6 @@ class Embedder:
 
     def energy_pruning(self, kcal_thr: float | None = None, verbose: bool = True) -> None:
         """Remove high energy structures above kcal_thr."""
-        if kcal_thr is None:
-            kcal_thr = self.options.kcal_thresh
-
-        # mask = self.rel_energies() < self.options.kcal_thresh
         energy_thr = self.dynamic_energy_thr()
         mask = self.rel_energies() < energy_thr
 
@@ -2295,7 +2294,7 @@ class RunEmbedding(Embedder):
         only_fixed_constraints: only uses fixed (UPPERCASE) constraints in optimization
 
         """
-        # pytorch models run on a single thread - or if desired, any calculator can
+        # pytorch models run on a single thread - and if desired, any calculator can
         if self.options.single_thread or self.options.calculator in ("AIMNET2", "UMA"):
             return self.optimization_refining_serial(
                 maxiter=maxiter, conv_thr=conv_thr, only_fixed_constraints=only_fixed_constraints
@@ -2439,7 +2438,8 @@ class RunEmbedding(Embedder):
                 else:
                     self.energies[i] = 1e10
 
-                ### Update checkpoint every (20*max_workers) optimized structures, and give an estimate of the remaining time
+                # Update checkpoint every (20*max_workers) optimized structures,
+                # and give an estimate of the remaining time
                 chk_freq = int(self.avail_cpus // 4) * self.options.checkpoint_frequency
                 if i % chk_freq == chk_freq - 1:
                     with open(self.outname, "w") as f:
@@ -2514,16 +2514,16 @@ class RunEmbedding(Embedder):
         if self.options.kcal_thresh is not None and only_fixed_constraints:
             self.energy_pruning()
 
-        ################################################# PRUNING: FITNESS (POST SEMIEMPIRICAL OPT)
+        ################################################# PRUNING: FITNESS (POST OPT)
 
         self.fitness_refining(threshold=2)
 
-        ################################################# PRUNING: SIMILARITY (POST SEMIEMPIRICAL OPT)
+        ################################################# PRUNING: SIMILARITY (POST OPT)
 
         self.zero_candidates_check()
         self.similarity_refining()
 
-        ################################################# CHECKPOINT AFTER SE OPTIMIZATION
+        ################################################# CHECKPOINT AFTER OPTIMIZATION
 
         with open(self.outname, "w") as f:
             for i, (structure, status, energy) in enumerate(
@@ -2627,6 +2627,7 @@ class RunEmbedding(Embedder):
                 solvent=self.options.solvent,
                 charge=self.options.charge,
                 mult=self.options.mult,
+                method=self.options.theory_level,
                 maxiter=maxiter,
                 conv_thr=conv_thr,
                 constrained_indices=constraints,
@@ -2686,7 +2687,8 @@ class RunEmbedding(Embedder):
             else:
                 self.energies[i] = 1e10
 
-            ### Update checkpoint every 50 optimized structures, and give an estimate of the remaining time
+            # Update checkpoint every self.options.checkpoint_frequency
+            # optimized structures, and give an estimate of the remaining time
             chk_freq = self.options.checkpoint_frequency
             if i % chk_freq == chk_freq - 1:
                 with open(self.outname, "w") as f:
@@ -2757,28 +2759,18 @@ class RunEmbedding(Embedder):
             )
 
         if self.options.kcal_thresh is not None and only_fixed_constraints:
-            # mask = self.rel_energies() < self.options.kcal_thresh
-            energy_thr = self.dynamic_energy_thr()
-            mask = np.array(self.rel_energies() < energy_thr, dtype=bool)
+            self.energy_pruning()
 
-            self.apply_mask(("structures", "constrained_indices", "energies", "exit_status"), mask)
-
-            if False in mask:
-                self.log(
-                    f"Discarded {len([b for b in mask if not b])} candidates for energy ({np.count_nonzero(mask)} left, "
-                    + f"{round(100 * np.count_nonzero(mask) / len(mask), 1)}% kept, threshold {energy_thr:.1f} kcal/mol)"
-                )
-
-        ################################################# PRUNING: FITNESS (POST SEMIEMPIRICAL OPT)
+        ################################################# PRUNING: FITNESS (POST OPT)
 
         self.fitness_refining(threshold=2)
 
-        ################################################# PRUNING: SIMILARITY (POST SEMIEMPIRICAL OPT)
+        ################################################# PRUNING: SIMILARITY (POST OPT)
 
         self.zero_candidates_check()
         self.similarity_refining()
 
-        ################################################# CHECKPOINT AFTER SE OPTIMIZATION
+        ################################################# CHECKPOINT AFTER OPTIMIZATION
 
         with open(self.outname, "w") as f:
             for i, (structure, status, energy) in enumerate(

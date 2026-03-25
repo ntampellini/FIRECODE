@@ -22,20 +22,21 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
+from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
 from ase.calculators.calculator import Calculator as ASECalculator
-from prism_pruner.utils import time_to_string
+from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
 from firecode.calculators._xtb import xtb_opt
 from firecode.ensemble import Ensemble
-from firecode.settings import DEFAULT_LEVELS
+from firecode.settings import CHECKPOINT_EVERY, DEFAULT_LEVELS
 from firecode.solvents import epsilon_dict, to_xtb_solvents
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
-from firecode.utils import loadbar, molecule_check, scramble_check
+from firecode.utils import loadbar, molecule_check, scramble_check, write_xyz
 
 if TYPE_CHECKING:
     from networkx import Graph
@@ -288,6 +289,7 @@ def optimize(
         charge=charge,
         mult=mult,
         debug=debug,
+        logfunction=logfunction,
         traj=title + ".traj",
         ase_calc=ase_calc,
         # **kwargs,
@@ -309,7 +311,7 @@ def optimize(
             else:
                 success = molecule_check(atoms, coords, opt_coords, max_newbonds=max_newbonds)
 
-        if logfunction is not None:
+        if logfunction is not None and calculator == "XTB":
             if success:
                 logfunction(f"    - {title} - REFINED {time_to_string(elapsed)}")
             else:
@@ -317,7 +319,7 @@ def optimize(
 
         return opt_coords, energy, success
 
-    if logfunction is not None:
+    if logfunction is not None and calculator == "XTB":
         logfunction(f"    - {title} - CRASHED")
 
     return coords, energy, False
@@ -366,6 +368,9 @@ def refine_structures(
     """Refine a set of structures - optimize them and remove similar
     and high energy ones (>10 kcal/mol above lowest)
     """
+    checkpoint_name = None
+    old_checkpoint_name = None
+
     # make ensemble
     ens = Ensemble(
         atoms,
@@ -376,13 +381,16 @@ def refine_structures(
     # remove similar structures
     ens.similarity_pruning()
 
+    # number of structures to be processed
+    N = len(ens.coords)
+
     # start optimizing
     t_start = perf_counter()
     energies_list = []
     opt_structures_list = []
 
     for i, conformer in enumerate(ens.coords):
-        loadbar(i, len(ens.coords), f"{loadstring} {i + 1}/{len(ens.coords)} ")
+        loadbar(i, N, f"{loadstring} {i + 1}/{N} ")
 
         opt_coords, energy, success = optimize(
             atoms,
@@ -410,19 +418,60 @@ def refine_structures(
             opt_structures_list.append(opt_coords)
             energies_list.append(energy)
 
-    loadbar(
-        len(ens.coords),
-        len(ens.coords),
-        f"{loadstring} {len(ens.coords)}/{len(ens.coords)} ",
-    )
+        # Update checkpoint every 50 optimized structures,
+        # and give an estimate of the remaining time
+        if i % CHECKPOINT_EVERY == CHECKPOINT_EVERY - 1:
+            if checkpoint_name is not None:
+                old_checkpoint_name = checkpoint_name[:]
+
+            checkpoint_name = f"firecode_checkpoint_{i + 1}_out_of_{N}.xyz"
+
+            # make new ensemble with optimized structures
+            ens = Ensemble(
+                atoms,
+                np.array(opt_structures_list),
+                energies=np.array(energies_list),
+                logfunction=logfunction,
+            )
+
+            with open(checkpoint_name, "w") as f:
+                for j, (coord, energy, rel_e) in enumerate(
+                    zip(
+                        align_structures(ens.coords),
+                        ens.energies,
+                        ens.rel_energies,
+                    )
+                ):
+                    write_xyz(
+                        atoms,
+                        coord,
+                        f,
+                        title=f"Structure {j + 1} - E = {energy:.2f} kcal/mol, Rel. E. = {rel_e:.2f} kcal/mol ({method} via {calculator})",
+                    )
+
+            elapsed = perf_counter() - t_start
+            average = (elapsed) / (i + 1)
+            time_left = time_to_string((average) * (N - i - 1))
+
+            if logfunction is not None:
+                logfunction(
+                    f"    - Optimized {i + 1:>4}/{N:>4} structures - saved temporary checkpoint file at {checkpoint_name} (avg. {time_to_string(average)}/struc, est. {time_left} left)",
+                )
+
+            # now remove old checkpoint after writing the new one
+            if old_checkpoint_name is not None:
+                Path(old_checkpoint_name).unlink(missing_ok=True)
+
+    # end of optimization: proces the ensemble and return
+    loadbar(N, N, f"{loadstring} {N}/{N} ")
 
     if logfunction is not None:
-        s = "s" if len(ens.coords) > 1 else ""
+        s = "s" if N > 1 else ""
         elapsed = perf_counter() - t_start
         s = (
-            f"Completed optimization on {len(ens.coords)} conformer{s}. "
+            f"Completed optimization on {N} conformer{s}. "
             f"({time_to_string(elapsed)}, "
-            f"~{time_to_string((elapsed) / len(ens.coords))} per structure).\n"
+            f"~{time_to_string((elapsed) / N)} per structure).\n"
         )
         logfunction(s)
 
@@ -440,5 +489,9 @@ def refine_structures(
 
     # remove similar structures
     ens.similarity_pruning()
+
+    # remove last checkpoint before returning
+    if checkpoint_name is not None:
+        Path(checkpoint_name).unlink(missing_ok=True)
 
     return ens.coords, ens.energies

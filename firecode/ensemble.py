@@ -55,24 +55,28 @@ class Ensemble:
         energies = []
         with Path(file).open() as f:
             for num in f:
-                if not num.strip():
-                    continue
+                try:
+                    if not num.strip():
+                        continue
 
-                if read_energies:
-                    energy = next(re.finditer(r"-*\d+\.\d+", next(f))).group()
-                    energies.append(float(energy))
-                else:
-                    _comment = next(f)
+                    if read_energies:
+                        energy = next(re.finditer(r"-*\d+\.\d+", next(f))).group()
+                        energies.append(float(energy))
+                    else:
+                        _comment = next(f)
 
-                conf_atoms = []
-                conf_coords = []
-                for _ in range(int(num)):
-                    atom, *xyz = next(f).split()
-                    conf_atoms.append(atom)
-                    conf_coords.append([float(x) for x in xyz])
+                    conf_atoms = []
+                    conf_coords = []
+                    for _ in range(int(num)):
+                        atom, *xyz = next(f).split()
+                        conf_atoms.append(atom)
+                        conf_coords.append([float(x) for x in xyz])
 
-                atoms.append(conf_atoms)
-                coords.append(conf_coords)
+                    atoms.append(conf_atoms)
+                    coords.append(conf_coords)
+
+                except StopIteration:
+                    pass
 
         atomnos = np.array([pt.number(letter) for letter in atoms[0]])
 

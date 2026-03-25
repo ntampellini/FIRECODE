@@ -22,6 +22,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
+import argparse
 import os as op_sys
 import sys
 from copy import deepcopy
@@ -43,7 +44,7 @@ from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
 from firecode.ensemble import Ensemble
 from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.rdkit_tools import convert_constraint_with_smarts
-from firecode.settings import CALCULATOR
+from firecode.settings import CALCULATOR, DEFAULT_LEVELS
 from firecode.solvents import epsilon_dict, solvent_synonyms
 from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
@@ -51,6 +52,12 @@ from firecode.utils import get_ts_d_estimate, read_xyz, write_xyz
 
 if TYPE_CHECKING:
     from firecode.ase_manipulations import ASEConstraint
+
+_defaults = {
+    "calculator": "UMA",
+    "method": "OMOL",
+    "solvent": "ch2cl2",
+}
 
 
 @dataclass
@@ -167,12 +174,23 @@ class OptimizerOptions:
     def __repr__(self) -> str:
         """Return string representation of object."""
         s = ""
-        for attr in ("calc", "method", "solvent"):
+        for attr in (
+            "calc",
+            "method",
+            "solvent",
+            "constraint_file",
+            "sp",
+            "newfile",
+            "free_energy",
+            "saddle",
+            "T_K",
+            "C_mol_L",
+        ):
             s += f"--> {attr} : {getattr(self, attr)}\n"
         return s
 
 
-def main(filenames: Sequence[str]) -> None:
+def main() -> None:
     """Standalone optimizer entry point.
     args: iterable of strings of structure filenames.
 
@@ -186,8 +204,113 @@ def main(filenames: Sequence[str]) -> None:
         sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
     )
 
-    optimizer = inquire_optimizer_options(filenames)
-    standalone_optimize(optimizer)
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "filenames",
+        help="Input filename(s), in .xyz format",
+        action="store",
+        nargs="+",
+    )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        help="Set options interactively.",
+        action="store_true",
+        required=False,
+    )
+    parser.add_argument(
+        "-t",
+        "--temperature",
+        help="Temperature, in degrees Celsius.",
+        action="store",
+        required=False,
+        default=25,
+    )
+    parser.add_argument(
+        "-c",
+        "--calculator",
+        help=f"Calculator (default {_defaults['calculator']}).",
+        action="store",
+        required=False,
+        default=_defaults["calculator"],
+    )
+    parser.add_argument(
+        "-m",
+        "--method",
+        help=f"Method (default {_defaults['method']} for {_defaults['calculator']}).",
+        action="store",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "-s",
+        "--solvent",
+        help=f"Solvent (default {_defaults['solvent']}).",
+        action="store",
+        required=False,
+        default=_defaults["solvent"],
+    )
+    parser.add_argument(
+        "-sp",
+        "--singlepoint",
+        help="Do a single point energy calc, without optimizing.",
+        action="store_true",
+        required=False,
+    )
+    parser.add_argument(
+        "-g",
+        "--free_energy",
+        help="Calculate free energy (G).",
+        action="store_true",
+        required=False,
+    )
+    parser.add_argument(
+        "-ts",
+        "--saddle",
+        help="Optimize to a TS.",
+        action="store_true",
+        required=False,
+    )
+    parser.add_argument(
+        "-cfile",
+        "--constraint-file",
+        help="Uses a constraint file.",
+        action="store",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "-n",
+        "--newfile",
+        help="Write optimized structure to a new file (*_opt.xyz).",
+        action="store_true",
+        required=False,
+    )
+
+    args = parser.parse_args()
+    if args.method is None:
+        args.method = DEFAULT_LEVELS[args.calculator]
+
+    if args.interactive:
+        optimizer = inquire_optimizer_options(args.filenames)
+
+    else:
+        optimizer = OptimizerOptions(
+            filenames=args.filenames,
+            T_K=args.temperature + 273.15,
+            calc=args.calculator,
+            method=args.method,
+            solvent=args.solvent,
+            auto_charge_and_mult=True,
+            sp=args.singlepoint,
+            newfile=args.newfile,
+            free_energy=args.free_energy,
+            saddle=args.saddle,
+            constraint_file=args.constraint_file,
+        )
+
+    return standalone_optimize(optimizer)
 
 
 def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
@@ -218,7 +341,7 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
     solvent = inquirer.fuzzy(  # type: ignore[attr-defined]
         message="Which solvent would you like to use?",
         choices=solvents,
-        default="ch2cl2",
+        default=_defaults["solvent"],
         validate=lambda x: (x in solvents) or x is None,
         filter=lambda solvent: solvent_synonyms.get(solvent, solvent),
     ).execute()

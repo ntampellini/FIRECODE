@@ -661,7 +661,7 @@ def get_free_energies(
                         exit_str = "??"
 
                 logfunction(
-                    f"    - {title} conf{s:0>4d} - {exit_str} ({num_neg} negative freq{ss}, {time_to_string(elapsed)})"
+                    f"    - {title} conf{s:0>4d} - {exit_str} ({num_neg} negative freq{ss}{time_to_string(elapsed)})"
                 )
 
         loadbar(

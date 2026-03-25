@@ -25,7 +25,7 @@ from __future__ import annotations
 # import pickle
 import time
 from shutil import which
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, getoutput
 from typing import TYPE_CHECKING, Callable, cast
 
 import matplotlib.pyplot as plt
@@ -414,8 +414,9 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
 
 def crest_search_operator(filename: str, embedder: Embedder) -> str:
     """Run a CREST metadynamic conformational search and return the output filename."""
-    assert crest_is_installed(), (
-        "CREST 2 does not seem to be installed. Install it with: mamba install -c conda-forge crest==2.12"
+    crest_version = get_crest_version()
+    assert crest_version is not None, (
+        "CREST (version 2 or 3) does not seem to be installed. Install it with: mamba install -c conda-forge crest=3"
     )
 
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
@@ -514,13 +515,13 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
     embedder.graphs = [m.graph for m in embedder.objects]
     crest_method = embedder.options.crestlevel or "GFN2-XTB//GFN-FF"
 
-    max_workers = embedder.avail_cpus // 2 or 1
+    crest_threads = embedder.avail_cpus
     logfunction(
         f"--> Performing {crest_method}"
         + (
             f"{f'/{embedder.options.solvent.upper()}' if embedder.options.solvent is not None else ''} "
-            + f"metadynamic conformational search on {filename} via CREST.\n"
-            + f"    (2 cores/thread, {max_workers} threads, {embedder.options.kcal_thresh} kcal/mol thr.)"
+            + f"metadynamic conformational search on {filename} via CREST {crest_version}.\n"
+            + f"    ({crest_threads} threads, {embedder.options.kcal_thresh} kcal/mol thr.)"
         )
     )
 
@@ -553,8 +554,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.crestnci,
                 title=mol.rootname + "_CREST",
-                procs=2,
-                threads=max_workers,
+                threads=crest_threads,
             )
 
         # if the run errors out, we retry with XTB2
@@ -577,8 +577,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.crestnci,
                 title=mol.rootname + "_CREST",
-                procs=2,
-                threads=max_workers,
+                threads=crest_threads,
             )
 
         conformers.extend(conf_batch)
@@ -953,12 +952,14 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     return outname
 
 
-def crest_is_installed() -> bool:
-    """Returns True if a CREST installation is found.
-    For now, only CREST 2 is supported.
+def get_crest_version() -> int | None:
+    """Returns an integer (2 or 3) representing the version of CREST that is installed."""
+    if which("crest") is None:
+        return None
 
-    """
-    return which("crest") is not None
+    crest_version = int(getoutput("crest --version | grep Version").split()[1].split(".")[0])
+
+    return crest_version
 
 
 def _get_internal_constraints(filename: str, embedder: Embedder) -> list[tuple[int, int]]:
