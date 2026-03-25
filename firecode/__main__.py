@@ -53,7 +53,6 @@ def main() -> None:
           -cl,--command_line      Read instructions from the command line instead of from an input file.
           -c, --cite              Print citation links.
           -p, --profile           Profile the run through cProfiler.
-          -o, --optimize FILE     Run a standalone structure optimization tool.
 
           """
 
@@ -91,21 +90,13 @@ def main() -> None:
         action="store_true",
         required=False,
     )
-    parser.add_argument(
-        "-o",
-        "--optimize",
-        help="Run a standalone structure optimization tool.",
-        action="store",
-        required=False,
-        nargs="+",
-    )
 
     args = parser.parse_args()
 
     set_up_environmental_variables()
 
-    if (not (args.setup or args.command_line or args.optimize)) and args.inputfile is None:
-        parser.error("One of the following arguments are required: inputfile, -t, -s, -o.\n")
+    if (not (args.setup or args.command_line)) and args.inputfile is None:
+        parser.error("One of the following arguments are required: inputfile, -t, -s.\n")
 
     if args.setup:
         from firecode.modify_settings import run_setup
@@ -117,12 +108,6 @@ def main() -> None:
         print(
             "No citation link is available for FIRECODE yet. You can link to the code on https://www.github.com/ntampellini/firecode"
         )
-        sys.exit(0)
-
-    if args.optimize:
-        from firecode.standalone_optimizer import main
-
-        main(args.optimize)
         sys.exit(0)
 
     if args.command_line:
@@ -153,9 +138,15 @@ def set_up_environmental_variables() -> None:
     """Set up the appropriate env. vars for the run."""
     from firecode.settings import JAX_PLATFORM, SELLA_NUM_THREADS
 
+    # set jax platform ("cpu" or "cuda")
     os.environ.setdefault("JAX_PLATFORMS", JAX_PLATFORM)
     os.environ.setdefault("JAX_PLATFORM_NAME", JAX_PLATFORM)
 
+    # needed to suppress warnings when running CREST 3.
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+    # set num_threads variables to speed up
+    # Sella optimizations
     n = (
         SELLA_NUM_THREADS
         or int(os.environ.get("SLURM_CPUS_PER_TASK", "0"))
@@ -170,8 +161,6 @@ def set_up_environmental_variables() -> None:
     for var in (
         "OMP_NUM_THREADS",
         "MKL_NUM_THREADS",
-        "OPENBLAS_NUM_THREADS",
-        "NUMEXPR_NUM_THREADS",
     ):
         os.environ.setdefault(var, str(n))
 

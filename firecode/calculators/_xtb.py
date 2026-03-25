@@ -23,7 +23,7 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 from __future__ import annotations
 
 import os
-from subprocess import STDOUT, CalledProcessError, check_call
+from subprocess import STDOUT, CalledProcessError, check_call, getoutput
 from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 import numpy as np
@@ -510,7 +510,7 @@ def parse_xtb_out(filename: str) -> Array2D_float:
     return coords * 0.529177249  # Bohrs to Angstroms
 
 
-def crest_mtd_search(
+def crest2_mtd_search(
     atoms: Array1D_str,
     coords: Array2D_float,
     constrained_indices: Sequence[Sequence[int]] | None = None,
@@ -716,6 +716,225 @@ def crest_mtd_search(
         )
 
         return new_coords
+
+
+def crest3_mtd_search(
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
+    constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
+    constrained_angles_indices: Sequence[Sequence[int]] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
+    method: str = "GFN2-XTB//GFN-FF",
+    solvent: str | None = "CH2Cl2",
+    charge: int = 0,
+    kcal: float | None = None,
+    ncimode: bool = False,
+    title: str = "temp",
+    threads: int = 1,
+) -> Array3D_float:
+    """Runs a CREST 3 metadynamic conformational search and returns its output.
+    Generates a TOML input file (CREST >= 3.0) instead of the legacy .inp format.
+
+    coords: array of shape (n,3) with cartesian coordinates for atoms.
+
+    atoms: array of strings for elements.
+
+    constrained_indices: array of shape (n,2), with the indices
+        of atomic pairs to be constrained.
+
+    constrained_distances: optional, target distances for the specified
+        distance constraints (None means "auto").
+
+    constrained_dihedrals_indices: quadruplets of atomic indices to constrain.
+
+    constrained_dihedrals_values: target dihedral angles for dihedral constraints.
+
+    constrained_angles_indices: triplets of atomic indices to constrain.
+
+    constrained_angles_values: target angles for angle constraints.
+
+    method: string, specifying the theory level to be used.
+
+    solvent: solvent to be used in the calculation (ALPB/GBSA model).
+
+    charge: charge to be used in the calculation.
+
+    kcal: energy window for conformer ensemble (default 10 kcal/mol).
+
+    ncimode: use NCI-MTD runtype (wall potential sampling).
+
+    title: string, used as a file name and job title.
+
+    threads: CREST 3 'threads'
+    """
+    with NewFolderContext(title, delete_after=False):
+        # --- Normalize empty inputs ---
+        if constrained_indices is not None and len(constrained_indices) == 0:
+            constrained_indices = None
+        if constrained_distances is not None and len(constrained_distances) == 0:
+            constrained_distances = None
+
+        # --- Write coordinate file ---
+        with open(f"{title}.xyz", "w") as f:
+            write_xyz(atoms, coords, f, title=title)
+
+        # ---------------------------------------------------------------
+        # Build CREST 3 TOML input
+        # ---------------------------------------------------------------
+        lines: list[str] = [f"# CREST 3 input file - {title}"]
+
+        # Top-level keys
+        lines.append(f"input = '{title}.xyz'")
+        lines.append(f"runtype = '{'nci-mtd' if ncimode else 'imtd-gc'}'")
+        lines.append("topo = false")  # replaces --noreftopo
+        lines.append(f"threads = {threads}")
+        lines.append("")
+
+        # --- Resolve method(s) ---
+        method_upper = method.upper()
+        dual_level = method_upper in ("GFN2-XTB//GFN-FF", "GFN2//GFNFF")
+
+        def _method_key(m: str) -> str:
+            """Map old-style method names to CREST 3 method strings."""
+            m = m.upper()
+            if m in ("GFN-FF", "GFNFF"):
+                return "gfnff"
+            elif m in ("GFN2-XTB", "GFN2"):
+                return "gfn2"
+            elif m in ("GFN1-XTB", "GFN1"):
+                return "gfn1"
+            else:
+                return m.lower()
+
+        def _level_block(method_key: str) -> list[str]:
+            """Emit a [[calculation.level]] block."""
+            blk = ["[[calculation.level]]", f"method = '{method_key}'"]
+            if charge != 0:
+                blk.append(f"chrg = {charge}")
+            if solvent is not None:
+                if solvent.lower() == "methanol":
+                    blk.append("gbsa = 'methanol'")  # ALPB unavailable for MeOH
+                else:
+                    xtb_solvent = to_xtb_solvents.get(solvent, solvent)
+                    blk.append(f"alpb = '{xtb_solvent}'")
+            return blk
+
+        if dual_level:
+            # GFN-FF drives the metadynamics; GFN2 is used for optimizations.
+            # Equivalent to old --gfn2//gfnff flag.
+            lines += _level_block("gfnff")
+            lines.append("")
+            lines += _level_block("gfn2")
+            lines.append("")
+            lines.append("[dynamics]")
+            lines.append("active = [1]")  # level 1 (GFN-FF) active for dynamics
+            lines.append("")
+        else:
+            lines += _level_block(_method_key(method_upper))
+            lines.append("")
+
+        # --- Constraints ---
+        # CREST 3 uses [[calculation.constraint]] blocks; each has:
+        #   type  = 'bond' | 'angle' | 'dihedral'
+        #   atoms = [1-based indices]
+        #   val   = target value (optional; omit for "auto")
+
+        if constrained_indices is not None and constrained_distances is not None:
+            constrained_distances = list(constrained_distances) or [None] * len(constrained_indices)
+            for (c1, c2), cd in zip(constrained_indices, constrained_distances):
+                lines += [
+                    "[[calculation.constraint]]",
+                    "type = 'bond'",
+                    f"atoms = [{c1 + 1}, {c2 + 1}]",
+                ]
+                if cd is not None:
+                    lines.append(f"val = {round(cd, 3)}")
+                lines.append("")
+
+        if constrained_angles_indices is not None:
+            constrained_angles_values = list(
+                constrained_angles_values or [None] * len(constrained_angles_indices)
+            )
+            for (a, b, c), angle in zip(constrained_angles_indices, constrained_angles_values):
+                lines += [
+                    "[[calculation.constraint]]",
+                    "type = 'angle'",
+                    f"atoms = [{a + 1}, {b + 1}, {c + 1}]",
+                ]
+                if angle is not None:
+                    lines.append(f"val = {round(angle, 3)}")
+                lines.append("")
+
+        if constrained_dihedrals_indices is not None:
+            constrained_dihedrals_values = list(
+                constrained_dihedrals_values or [None] * len(constrained_dihedrals_indices)
+            )
+            for (a, b, c, d), angle in zip(
+                constrained_dihedrals_indices, constrained_dihedrals_values
+            ):
+                lines += [
+                    "[[calculation.constraint]]",
+                    "type = 'dihedral'",
+                    f"atoms = [{a + 1}, {b + 1}, {c + 1}, {d + 1}]",
+                ]
+                if angle is not None:
+                    lines.append(f"val = {round(angle, 3)}")
+                lines.append("")
+
+        # --- Energy window via [cregen] ---
+        if kcal is None:
+            kcal = 10
+        lines += ["[cregen]", f"ewin = {kcal}", ""]
+
+        # Write TOML file
+        with open(f"{title}.toml", "w") as f:
+            f.write("\n".join(lines))
+
+        # ---------------------------------------------------------------
+        # Run CREST 3
+        # CREST 3 accepts the .toml file directly as the only argument.
+        # ---------------------------------------------------------------
+        try:
+            with open(f"{title}.out", "w") as f:
+                check_call(["crest", f"{title}.toml"], stdout=f, stderr=STDOUT)
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
+
+        new_coords = read_xyz("crest_conformers.xyz").coords
+
+        clean_directory(
+            to_remove=(
+                "gfnff_topo",
+                "charges",
+                "wbo",
+                "xtbrestart",
+                "xtbtopo.mol",
+                ".xtboptok",
+                "gfnff_adjacency",
+                "gfnff_charges",
+            ),
+        )
+
+        return new_coords
+
+
+def crest_mtd_search(*args: Any, **kwargs: Any) -> Any:
+    """Return 2 or 3"""
+    crest_version = int(getoutput("crest --version | grep Version").split()[1].split(".")[0])
+
+    match crest_version:
+        case 2:
+            return crest2_mtd_search(*args, **kwargs)
+        case 3:
+            return crest3_mtd_search(*args, **kwargs)
+        case _:
+            raise AssertionError(
+                "CREST (version 2 or 3) does not seem to be installed. "
+                "Install it with: mamba install -c conda-forge crest=3"
+            )
 
 
 def xtb_gsolv(

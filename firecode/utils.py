@@ -26,7 +26,6 @@ import os
 import re
 import shutil
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import rmtree
 from subprocess import getoutput
@@ -38,7 +37,6 @@ from typing import (
     Iterable,
     Optional,
     ParamSpec,
-    Self,
     Sequence,
     TypeVar,
     cast,
@@ -52,8 +50,8 @@ from prism_pruner.rmsd import rmsd_and_max
 from scipy.spatial.distance import cdist
 
 from firecode.algebra import count_clashes
+from firecode.ensemble import Ensemble
 from firecode.errors import TriangleError
-from firecode.pt import pt
 from firecode.typing_ import Array1D_float, Array1D_int, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import EH_TO_KCAL
 
@@ -156,58 +154,16 @@ def write_xyz(
     output.write(string)
 
 
-@dataclass
-class ConformerEnsemble:
-    """Class representing a conformer ensemble."""
-
-    coords: Array3D_float
-    atoms: Array1D_str
-    atomnos: Array1D_int
-    energies: Array1D_float = field(default_factory=lambda: np.array([]))
-
-    @classmethod
-    def from_xyz(cls, file: Path | str, read_energies: bool = False) -> Self:
-        """Generate ensemble from a multiple conformer xyz file."""
-        coords = []
-        atoms = []
-        energies = []
-        with Path(file).open() as f:
-            for num in f:
-                if not num.strip():
-                    continue
-
-                if read_energies:
-                    energy = next(re.finditer(r"-*\d+\.\d+", next(f))).group()
-                    energies.append(float(energy))
-                else:
-                    _comment = next(f)
-
-                conf_atoms = []
-                conf_coords = []
-                for _ in range(int(num)):
-                    atom, *xyz = next(f).split()
-                    conf_atoms.append(atom)
-                    conf_coords.append([float(x) for x in xyz])
-
-                atoms.append(conf_atoms)
-                coords.append(conf_coords)
-
-        atomnos = np.array([pt.number(letter) for letter in atoms[0]])
-
-        return cls(
-            coords=np.array(coords),
-            atoms=np.array(atoms[0]),
-            atomnos=atomnos,
-            energies=np.array(energies),
-        )
-
-
-def read_xyz(filename: str) -> ConformerEnsemble:
+def read_xyz(filename: str) -> Ensemble:
     """FIRECODE's xyz reader."""
-    return ConformerEnsemble.from_xyz(filename)
+    return Ensemble.from_xyz(filename)
 
 
-def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]:
+def read_xyz_energies(
+    filename: str,
+    verbose: bool = True,
+    logfunction: Callable[[str], None] | None = print,
+) -> list[float] | None:
     """Read energies from a .xyz file. Returns None or a list of floats (in Hartrees)."""
     energies = None
 
@@ -221,13 +177,13 @@ def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]
             # only one energy found with no UOM, assume it's in Eh
             energies = [float(e.split()[0].strip()) for e in comment_lines]
 
-            if verbose:
+            if verbose and logfunction is not None:
                 print(
                     f"--> Read {len(energies)} energies from {filename} (single number, no UOM: assuming Eh units)."
                 )
 
-        elif verbose:
-            print(f"--> Could not parse energies for {filename} - skipping.")
+        elif verbose and logfunction is not None:
+            logfunction(f"--> Could not parse energies for {filename} - skipping.")
 
     else:
         # multiple energies found, parse units
@@ -240,8 +196,8 @@ def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]
                 float(re.findall(r"-*\d+.\d+\sEH", e.upper())[0].split()[0].strip())
                 for e in comment_lines
             ]
-            if verbose:
-                print(
+            if verbose and logfunction is not None:
+                logfunction(
                     f"--> Read {len(comment_lines)} energies from {filename} (first number followed by Eh units)."
                 )
 
@@ -251,21 +207,21 @@ def read_xyz_energies(filename: str, verbose: bool = True) -> None | list[float]
                 / EH_TO_KCAL
                 for e in comment_lines
             ]
-            if verbose:
-                print(
+            if verbose and logfunction is not None:
+                logfunction(
                     f"--> Read {len(comment_lines)} energies from {filename} (first number followed by kcal/mol units)."
                 )
 
         # last resort, parse the first thing that looks like an energy and assume it's in Eh
         elif number_matches:
             energies = [float(re.findall(r"-*\d+.\d+", e)[0].strip()) for e in comment_lines]
-            if verbose:
-                print(
+            if verbose and logfunction is not None:
+                logfunction(
                     f"--> Read {len(comment_lines)} energies from {filename} (first number, no UOM: assuming Eh units)."
                 )
 
-        elif verbose:
-            print(f"--> Could not parse energies for {filename} - skipping.")
+        elif verbose and logfunction is not None:
+            logfunction(f"--> Could not parse energies for {filename} - skipping.")
 
     return energies
 

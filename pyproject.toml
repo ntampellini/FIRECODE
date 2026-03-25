@@ -49,7 +49,7 @@ xtb = ">=6.6.0"
 xtb-python = "*"
 tblite = ">=0.3.0"
 tblite-python = "*"
-crest = "2.12.*"
+crest = "3.*"
 psutil = ">=7.2.2,<8"
 
 [tool.pixi.pypi-dependencies]
@@ -119,6 +119,7 @@ ignore = [
 
 [project.scripts]
 firecode = "firecode.__main__:main"
+firecode_opt = "firecode.standalone_optimizer:main"
 
 [project.optional-dependencies]
 # Optional calculator-specific dependencies

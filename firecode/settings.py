@@ -41,10 +41,13 @@ CALCULATOR = "XTB"
 # Default calculator used to run geometry optimization.
 # Possibilites are (see default levels below)
 
-SINGLE_THREAD_BOOL = True
+FORCE_SINGLE_THREAD = True
 # Enforce the use of a single thread in multimolecular optimization.
-# Multithread optimization is only possible with XTB, TBLITE and ORCA calculators
-# but may suffer from performance issues on some machines.
+# Multithread optimization is possible but may suffer from performance
+# issues in specific cases.
+
+CHECKPOINT_EVERY = 50
+# Save a checkpoint every this many geometry optimizations
 
 UMA_MODEL_PATH = "(set with `firecode -s`)"
 # Path of UMA model to load, either relative (to firecode/calculators/) or absolute
@@ -59,7 +62,7 @@ DEFAULT_LEVELS = {
 # Default levels used to run calculations, overridden by LEVEL keyword
 
 COMMANDS = {
-    "ORCA": "/vast/palmer/apps/avx.grace/software/ORCA/5.0.4-gompi-2020b/bin/orca",
+    "ORCA": "orca",
     "XTB": "xtb",
 }
 # Command with which certain calculators will be called from the command line
