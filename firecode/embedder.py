@@ -548,9 +548,9 @@ class Embedder:
 
                     case "B":
                         if len(parts) == 3:
+                            indices = [int(i) for i in parts[1:3]]
                             i1, i2 = indices
                             target = float(np.linalg.norm(mol.coords[0][i1] - mol.coords[0][i2]))
-                            indices = [int(i) for i in parts[1:3]]
 
                         elif len(parts) == 4:
                             indices = [int(i) for i in parts[1:3]]

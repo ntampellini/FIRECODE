@@ -907,12 +907,10 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
             add_alpb_solvation=embedder.options.calculator in ("UMA", "AIMNET2"),
             solvent=embedder.options.solvent,
             constrained_indices=constrained_indices,
-            conv_thr="vtight",
             assert_convergence=True,
             traj=title + "_traj",
             logfunction=embedder.log,
             title=title,
-            debug=True,
         )
 
         if success:

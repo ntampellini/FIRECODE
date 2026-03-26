@@ -144,8 +144,8 @@ def write_xyz(
     atoms: Array1D_str, coords: Array2D_float, output: TextIOWrapper, title: str = "temp"
 ) -> None:
     """Output is of _io.TextIOWrapper type"""
-    assert atoms.shape[0] == coords.shape[0]
-    assert coords.shape[1] == 3
+    assert atoms.shape[0] == coords.shape[0], f"{atoms.shape[0]=} != {coords.shape[0]=}"
+    assert coords.shape[1] >= 3, f"{coords.shape[1]=}"
     string = ""
     string += str(len(coords))
     string += f"\n{title}\n"

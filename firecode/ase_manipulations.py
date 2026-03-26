@@ -42,6 +42,7 @@ from prism_pruner.graph_manipulations import d_min_bond, find_paths
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, get_double_bonds_indices, time_to_string
 from sella import Sella
+from sella.internal import Internals
 
 from firecode.algebra import point_angle
 from firecode.calculators._xtb import xtb_gsolv
@@ -825,6 +826,38 @@ def set_charge_and_mult_on_ase_atoms(ase_atoms: Atoms, charge: int, mult: int) -
     return ase_atoms
 
 
+def get_sella_internals(atoms: Array1D_str, coords: Array3D_float) -> Internals | bool:
+    """If we have a multimolecular graph,
+    use TRIC (translational and rotation
+    internal coordinates) in Sella.
+    See:
+    Sella 2022 paper: https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395
+    Wang and Song 2016 (TRIC): https://doi.org/10.1063/1.4952956
+    """
+    from networkx import connected_components
+    from prism_pruner.graph_manipulations import graphize
+
+    graph = graphize(atoms, coords)
+    multimolecular = len(list(connected_components(graph))) > 1
+
+    if multimolecular:
+        internals: Internals | bool
+
+        # get ase_atoms object
+        ase_atoms = Atoms(atoms, positions=coords)
+
+        # Use TRICs
+        internals = Internals(ase_atoms, allow_fragments=True)
+        internals.find_all_bonds()
+        internals.find_all_angles()
+        internals.find_all_dihedrals()
+
+        return internals
+
+    else:
+        return True
+
+
 def ase_popt(
     atoms: Array1D_str,
     coords: Array2D_float,
@@ -947,35 +980,6 @@ def ase_popt(
         with HiddenPrints():
             try:
                 if optimizer == "SELLA":
-                    from networkx import connected_components
-                    from prism_pruner.graph_manipulations import graphize
-
-                    # if we have a multimolecular graph,
-                    # use TRIC (translational and rotation
-                    # internal coordinates) in Sella.
-                    # See:
-                    # Sella 2022 paper: https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395
-                    # Wang and Song 2016 (TRIC): https://doi.org/10.1063/1.4952956
-                    graph = graphize(atoms, coords)
-                    multimolecular = len(list(connected_components(graph))) > 1
-
-                    if multimolecular:
-                        from sella.internal import Internals
-
-                        internals: Internals | bool
-
-                        # remove constraints from ase atoms
-                        ase_atoms.set_constraint([])  # type: ignore[no-untyped-call]
-
-                        # Use TRICs
-                        internals = Internals(ase_atoms, allow_fragments=True)
-                        internals.find_all_bonds()
-                        internals.find_all_angles()
-                        internals.find_all_dihedrals()
-
-                    else:
-                        internals = True
-
                     # See if we were passed constrained indices
                     # to provide a better guess for v0
                     if constrained_indices:
@@ -994,13 +998,14 @@ def ase_popt(
 
                     opt = Sella(
                         ase_atoms,
+                        order=order,
                         # Internal coordinates require many less
                         # gradient evaluations to reach convergence
                         # compared to cartesian coordinates.
                         # The "tric" mode is useful in reducing
                         # the number of internal coordinates for large
                         # systems of multiple molecules
-                        internal=internals,
+                        internal=get_sella_internals(atoms, coords),
                         # eta: finite difference step for Hessian-vector
                         # products: default value of 1e-4 could be
                         # dominated by noise for MLIPs, so increasing
@@ -1118,7 +1123,171 @@ def _wrap_with_kwargs(fn: Callable[P, R], fixed_kwargs: dict[str, Any]) -> Calla
 
 
 ase_popt_with_alpb = _wrap_with_kwargs(ase_popt, fixed_kwargs={"add_alpb_solvation": True})
-ase_saddle = _wrap_with_kwargs(ase_popt, fixed_kwargs={"optimizer": "SELLA", "order": 1})
+
+
+def ase_saddle(
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    ase_calc: ASECalculator | None = None,
+    charge: int = 0,
+    mult: int = 1,
+    calculator: str | None = None,
+    method: str | None = None,
+    add_alpb_solvation: bool = False,
+    solvent: str | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    maxiter: int | None = None,
+    irc: bool = True,
+    assert_convergence: bool = False,
+    traj: str | None = None,
+    logfunction: Callable[[str], None] | None = None,
+    title: str = "temp",
+    # debug: bool = False,
+    # **kwargs: Any,
+) -> tuple[Array2D_float, float, bool]:
+    """"""
+    # run saddle optimization
+    opt_coords, energy, success = ase_popt(
+        atoms=atoms,
+        coords=coords,
+        ase_calc=ase_calc,
+        charge=charge,
+        mult=mult,
+        calculator=calculator,
+        method=method,
+        add_alpb_solvation=add_alpb_solvation,
+        solvent=solvent,
+        constrained_indices=constrained_indices,
+        maxiter=maxiter,
+        conv_thr="vtight",
+        assert_convergence=assert_convergence,
+        optimizer="SELLA",
+        order=1,
+        traj=traj,
+        logfunction=logfunction,
+        title=title,
+        debug=True,
+        # **kwargs,
+    )
+
+    if irc:
+        ase_irc(
+            atoms=atoms,
+            coords=opt_coords,
+            method=method,
+            ase_calc=ase_calc,
+            charge=charge,
+            mult=mult,
+            calculator=calculator,
+            solvent=solvent,
+            maxiter=maxiter,
+            # conv_thr="tight",
+            traj=traj,
+            logfunction=logfunction,
+            title=title,
+            work_in=title,
+            # **kwargs,
+        )
+
+    return opt_coords, energy, success
+
+
+def ase_irc(
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    method: str | None = None,
+    ase_calc: ASECalculator | None = None,
+    charge: int = 0,
+    mult: int = 1,
+    calculator: str | None = None,
+    # add_alpb_solvation: bool = False,
+    solvent: str | None = None,
+    maxiter: int | None = None,
+    conv_thr: str = "tight",
+    traj: str | None = None,
+    logfunction: Callable[[str], None] | None = None,
+    title: str = "temp",
+    work_in: str | None = None,
+    # debug: bool = False,
+    **kwargs: Any,
+) -> tuple[Array2D_float, Array2D_float]:
+    """Returns endpoints"""
+    from sella import IRC
+
+    work_in = work_in or title + "_IRC"
+    traj = traj or "temp"
+
+    with NewFolderContext(work_in, delete_after=False, overwrite_if_exists=False):
+        ase_atoms = Atoms(atoms, positions=coords)
+        if ase_calc is None:
+            if calculator is None:
+                raise SyntaxError(
+                    "If you do not provide an ASE calculator object, you have to at least provide the calculator name."
+                )
+            if method is None:
+                method = DEFAULT_LEVELS[calculator]
+
+            from firecode.optimization_methods import Opt_func_dispatcher
+
+            ase_calc = Opt_func_dispatcher(calculator).get_ase_calc(method, solvent)
+
+        ase_atoms.calc = ase_calc
+        ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
+
+        fmax = {
+            "loose": 0.1,
+            "tight": 0.05,
+            "vtight": 0.01,
+        }[conv_thr]
+        maxiter = maxiter or 1000
+
+        irc = IRC(ase_atoms, trajectory=traj)
+
+        # Run forward
+        print("  [IRC] Running forward …")
+        irc.run(steps=maxiter, fmax=fmax, direction="forward")  # type: ignore[no-untyped-call]
+        # fwd_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+
+        # convert traj to .xyz and remove ase traj
+        traj_fwd = f"{title}_irc_traj_fwd.xyz"
+        os.system(f"ase convert {traj} {traj_fwd}")
+        os.remove(traj)
+
+        # Run reverse
+        print("  [IRC] Running reverse …")
+        irc.run(steps=maxiter, fmax=fmax, direction="reverse")  # type: ignore[no-untyped-call]
+        # rev_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+
+        # convert traj to .xyz and remove ase traj
+        traj_rev = f"{title}_irc_traj_rev.xyz"
+        os.system(f"ase convert {traj} {traj_rev}")
+        os.remove(traj)
+
+        # make a single IRC path file
+        outname = f"{title}_irc_traj.xyz"
+        fwd_mol = read_xyz(traj_fwd)
+        rev_mol = read_xyz(traj_rev)
+
+        with open(outname, "w") as f:
+            for c in reversed(fwd_mol.coords):
+                write_xyz(atoms, c, f)
+            for c in rev_mol.coords:
+                write_xyz(atoms, c, f)
+
+        print(f"  [IRC] Wrote {outname} ({len(fwd_mol.coords) + len(rev_mol.coords)} frames)")
+
+        # remove partial traj files
+        os.remove(traj_fwd)
+        os.remove(traj_rev)
+
+        # write endpoints
+        with open(f"{title}_irc_fwd_gs.xyz", "w") as f:
+            write_xyz(atoms, fwd_mol.coords[-1], f)
+
+        with open(f"{title}_irc_rev_gs.xyz", "w") as f:
+            write_xyz(atoms, rev_mol.coords[-1], f)
+
+    return fwd_mol.coords[-1], rev_mol.coords[-1]
 
 
 def ase_dump(

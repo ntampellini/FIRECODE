@@ -948,7 +948,7 @@ def xtb_gsolv(
     assert_convergence: bool = True,
 ) -> float:
     """Returns the solvation free energy in kcal/mol, as computed by XTB.
-    Single-point energy calculation carried out with GFN-FF.
+    Single-point energy calculation carried out with GFN2-XTB.
 
     """
     with NewFolderContext(title):
@@ -958,9 +958,6 @@ def xtb_gsolv(
         # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
         outname = "xtbopt.xyz"
         flags = "--norestart"
-
-        # declaring the use of FF instead of semiempirical
-        flags += " --gfnff"
 
         if charge != 0:
             flags += f" --chrg {charge}"

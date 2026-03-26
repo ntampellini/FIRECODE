@@ -114,7 +114,7 @@ class Ensemble:
         energy_thr = self.dynamic_energy_thr(kcal_thr, verbose=verbose)
         mask = self.rel_energies < energy_thr
 
-        self.apply_mask(("structures", "constrained_indices", "energies", "exit_status"), mask)
+        self.apply_mask(("coords", "energies"), mask)
 
         if False in mask and verbose and self.logfunction is not None:
             self.logfunction(
