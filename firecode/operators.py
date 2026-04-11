@@ -87,7 +87,10 @@ def operate(input_string: str, embedder: Embedder) -> str:
     ):
         outname = crest_search_operator(filename, embedder)
 
-    elif "rdkit_search>" in input_string:
+    elif any(
+        string in input_string
+        for string in ("rdkit_search>", "rdkit>", "racerts>", "racerts_search>")
+    ):
         outname = rdkit_search_operator(filename, embedder)
 
     elif "scan>" in input_string:
@@ -96,7 +99,7 @@ def operate(input_string: str, embedder: Embedder) -> str:
     elif "neb>" in input_string:
         outname = neb_operator(filename, embedder)
 
-    elif "fsm>" in input_string:
+    elif any(string in input_string for string in ("fsm>", "mlfsm>")):
         outname = fsm_operator(embedder)
 
     elif "refine>" in input_string:
@@ -949,7 +952,7 @@ def get_crest_version() -> int | None:
 
 
 def _get_internal_constraints(filename: str, embedder: Embedder) -> list[tuple[int, int]]:
-    """Returns an array with distance constraints indices."""
+    """Returns a list with distance constraints indices."""
     mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
     # get embedder,objects index of molecule to get internal constraints of
 

@@ -149,6 +149,13 @@ def test_operator_fsm() -> None:
     run_firecode_input("operator_fsm")
 
 
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_operator_racerts() -> None:
+    """Tests the racerts operator."""
+    run_firecode_input("operator_racerts")
+
+
 # @pytest.mark.operator
 # @pytest.mark.codecov
 # def test_operator_pka() -> None:

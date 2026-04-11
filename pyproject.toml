@@ -37,6 +37,7 @@ dependencies = [
     "prism_pruner",
     "mlfsm",
     "Sella>=2.4.2",
+    "racerts>=0.1.6",
 ]
 
 [tool.pixi.workspace]
