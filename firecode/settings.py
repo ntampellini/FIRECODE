@@ -37,7 +37,7 @@ DEFAULT_FF_LEVELS = {
 }
 # Default levels used to run calculations, overridden by FFLEVEL keyword
 
-CALCULATOR = "XTB"
+CALCULATOR = "TBLITE"
 # Default calculator used to run geometry optimization.
 # Possibilites are (see default levels below)
 
@@ -49,7 +49,7 @@ FORCE_SINGLE_THREAD = True
 CHECKPOINT_EVERY = 50
 # Save a checkpoint every this many geometry optimizations
 
-UMA_MODEL_PATH = "(set with `firecode -s`)"
+UMA_MODEL_PATH = "(set with ``firecode -s``)"
 # Path of UMA model to load, either relative (to firecode/calculators/) or absolute
 
 DEFAULT_LEVELS = {
@@ -73,9 +73,19 @@ PROCS = 4
 MEM_GB = 4
 # Memory allocated for each job (ORCA)
 
-JAX_PLATFORM = "cpu"
-# "cpu" or "cuda"
-
-SELLA_NUM_THREADS = 0
-# number of threads to run sella on. Zero defaults
-# to SLURM_CPUS_PER_TASK or os.cpu_count()
+# these need to start with FIRECODE_ to ensure uniqueness
+ENV_VARS = dict(
+    FIRECODE_DEFAULT_ASE_OPTIMIZER_XTB="LBFGS",
+    FIRECODE_DEFAULT_ASE_OPTIMIZER_TBLITE="LBFGS",
+    FIRECODE_DEFAULT_ASE_OPTIMIZER_ORCA="LBFGS",
+    FIRECODE_DEFAULT_ASE_OPTIMIZER_AIMNET2="LBFGS",
+    FIRECODE_DEFAULT_ASE_OPTIMIZER_UMA="LBFGS",
+    FIRECODE_FALLBACK_ASE_OPTIMIZER="LBFGS",
+    FIRECODE_SOLV_METHOD_FOR_ML="alpb",  # model of solvation via TBLITE: "alpb" or "cpcm"
+    FIRECODE_SOLV_IMPLEM_FOR_ML="post",  # Implementation of ALPB solvation via TBLITE:
+    # - "post" is post-optimization,
+    # - "opt" adds the energy and gradients to the ASE calculator
+    #   at each step during the optimization.
+    FIRECODE_TBLITE_SOLV_METHOD="alpb",  # model of solvation of TBLITE: "alpb" or "cpcm"
+    FIRECODE_SELLA_INTERNAL_OVERRIDE="",  # if "false" enforces Sella to use cartesian coordinates (constrained optimizations not possible!)
+)

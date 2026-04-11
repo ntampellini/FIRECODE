@@ -26,6 +26,7 @@ import os
 import re
 import shutil
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from shutil import rmtree
 from subprocess import getoutput
@@ -34,6 +35,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Generator,
     Iterable,
     Optional,
     ParamSpec,
@@ -454,16 +456,19 @@ def auto_newline(string: str, max_line_len: int = 50, padding: int = 2) -> str:
 
 def str_to_var(
     string: str, enforced_type: Callable[[str], bool | float | int] | None = None
-) -> bool | float | int | str:
+) -> bool | float | int | str | None:
     """Cast a string into the most appropriate type."""
     if enforced_type is not None:
         return enforced_type(string)
 
     string_lower = string.lower()
-    if string_lower in ("true", "yes", "on", "1"):
-        return True
-    if string_lower in ("false", "no", "off", "0"):
-        return False
+    match string_lower:
+        case "none" | "":
+            return None
+        case "true" | "yes" | "on" | "1":
+            return True
+        case "false" | "no" | "off" | "0":
+            return False
 
     # Check for int, including negative numbers - max 1 neg. sign
     if string.replace("-", "", 1).isdigit():
@@ -763,3 +768,51 @@ class FolderContext:
     def __exit__(self, *args: object) -> None:
         """Get out of working folder on exit."""
         os.chdir(self.initial_folder)
+
+
+@contextmanager
+def env_override(**kwargs: Any) -> Generator[Any]:
+    """Temporarily override environment variables."""
+    old = {k: os.environ.get(k) for k in kwargs}
+    os.environ.update({k: str(v) for k, v in kwargs.items()})
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+@contextmanager
+def sella_env() -> Generator[Any]:
+    """Environment optimized for Sella with JAX internal coordinates."""
+    avail_cpus = len(os.sched_getaffinity(0))
+    sella_threads = str(min(avail_cpus, 4))
+
+    # Build XLA flags additively to avoid clobbering any existing flags
+    existing_flags = os.environ.get("XLA_FLAGS", "")
+    add_flags = ("--xla_cpu_multi_thread_eigen=true", "--xla_force_host_platform_device_count=1")
+    new_flags = ""
+    for new_flag in add_flags:
+        if new_flag not in existing_flags:
+            new_flags = (new_flags + " " + new_flag).strip()
+
+    # take ownership of the sella jax compilation cache so that
+    # we are sure to compile and use our own version of it
+    jax_comp_cache_dir = Path.home() / ".cache/sella/firecode_jax_cache"
+
+    with env_override(
+        # Sella's JAX runs on CPU regardless
+        JAX_PLATFORMS="cpu",
+        JAX_PLATFORM_NAME="cpu",
+        JAX_COMPILATION_CACHE_DIR=str(jax_comp_cache_dir),  # recompile for each
+        # JAX/XLA for Sella's internal coordinate calculations (CPU)
+        XLA_FLAGS=new_flags,
+        OPENBLAS_NUM_THREADS=sella_threads,
+        # multithreaded BLAS, with a modest thread count
+        OMP_NUM_THREADS=sella_threads,
+        MKL_NUM_THREADS=sella_threads,
+    ):
+        yield

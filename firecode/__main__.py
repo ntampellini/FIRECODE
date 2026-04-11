@@ -93,7 +93,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    set_up_environmental_variables()
+    env_variables_handling()
 
     if (not (args.setup or args.command_line)) and args.inputfile is None:
         parser.error("One of the following arguments are required: inputfile, -t, -s.\n")
@@ -134,35 +134,26 @@ def main() -> None:
     # run the program
 
 
-def set_up_environmental_variables() -> None:
-    """Set up the appropriate env. vars for the run."""
-    from firecode.settings import JAX_PLATFORM, SELLA_NUM_THREADS
+def env_variables_handling() -> None:
+    """Handles global environment variables and associated processes.
 
-    # set jax platform ("cpu" or "cuda")
-    os.environ.setdefault("JAX_PLATFORMS", JAX_PLATFORM)
-    os.environ.setdefault("JAX_PLATFORM_NAME", JAX_PLATFORM)
+    Priority should be given to handling env vars with locally-scoped
+    context managers, if possible (see the env_override function).
+    """
+    from pathlib import Path
+    from shutil import rmtree
 
-    # needed to suppress warnings when running CREST 3.
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    # remove compilation cache for jax: we might be running on different
+    # hardware from the last firecode run, and that might result in nasty
+    # compatibility issues with stale compilation of the jax library.
+    jax_comp_cache_dir = Path.home() / ".cache/sella/jax_cache"
+    rmtree(str(jax_comp_cache_dir), ignore_errors=True)
 
-    # set num_threads variables to speed up
-    # Sella optimizations
-    n = (
-        SELLA_NUM_THREADS
-        or int(os.environ.get("SLURM_CPUS_PER_TASK", "0"))
-        or (os.cpu_count() or 1)
-    )
+    # export "FIRECODE_*" environment variables
+    from firecode.settings import ENV_VARS
 
-    flags = os.environ.get("XLA_FLAGS", "")
-    add = "--xla_cpu_multi_thread_eigen=true"
-    if JAX_PLATFORM == "cpu" and add not in flags:
-        os.environ["XLA_FLAGS"] = (flags + " " + add).strip()
-
-    for var in (
-        "OMP_NUM_THREADS",
-        "MKL_NUM_THREADS",
-    ):
-        os.environ.setdefault(var, str(n))
+    for key, value in ENV_VARS.items():
+        os.environ.setdefault(key, value)
 
 
 if __name__ == "__main__":

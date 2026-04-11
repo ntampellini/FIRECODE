@@ -36,7 +36,7 @@ dependencies = [
     "inquirerpy",
     "prism_pruner",
     "mlfsm",
-    "Sella==2.3.5",
+    "Sella>=2.4.2",
 ]
 
 [tool.pixi.workspace]
@@ -45,9 +45,8 @@ platforms = ["linux-64", "osx-arm64"]
 
 [tool.pixi.dependencies]
 # Conda packages that aren't in [project.dependencies]
-xtb = ">=6.6.0"
-xtb-python = "*"
-tblite = ">=0.3.0"
+xtb = "*"
+tblite = ">=0.5.0"
 tblite-python = "*"
 crest = "3.*"
 psutil = ">=7.2.2,<8"
@@ -104,6 +103,7 @@ select = [
     "ICN001", # unconventional-import-alias
 ]
 ignore = [
+    "N802", # Function name should be lowercase
     "N803", # Invalid-argument-name (non-lowercase)
     "N806", # Non-lowercase variable in function
     "N815", # Variable in class scope should not be mixedCase

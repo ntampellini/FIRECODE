@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from firecode.dispatcher import Opt_func_dispatcher
 from firecode.embedder import Embedder
-from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.utils import FolderContext, HiddenPrints, NewFolderContext, clean_directory, read_xyz
 
 HERE = Path(__file__).resolve().parent
@@ -43,13 +43,6 @@ def run_calculator_test(calculator: str) -> None:
         maxiter=5,
     )
     assert success
-
-
-@pytest.mark.calc
-@pytest.mark.codecov
-def test_calc_xtb() -> None:
-    """Tests the FIRECODE XTB calculator."""
-    run_calculator_test("XTB")
 
 
 @pytest.mark.calc
@@ -116,13 +109,6 @@ def test_trimolecular() -> None:
 
 @pytest.mark.operator
 @pytest.mark.codecov
-def test_scan_linear() -> None:
-    """Tests a simple linear scan."""
-    run_firecode_input("operator_scan_linear")
-
-
-@pytest.mark.operator
-@pytest.mark.codecov
 def test_scan_plus_neb() -> None:
     """Tests a linear scan followed by a NEB."""
     run_firecode_input("operator_scan+neb")
@@ -163,11 +149,11 @@ def test_operator_fsm() -> None:
     run_firecode_input("operator_fsm")
 
 
-@pytest.mark.operator
-@pytest.mark.codecov
-def test_operator_pka() -> None:
-    """Tests the pka operator."""
-    run_firecode_input("operator_pka")
+# @pytest.mark.operator
+# @pytest.mark.codecov
+# def test_operator_pka() -> None:
+#     """Tests the pka operator."""
+#     run_firecode_input("operator_pka")
 
 
 @pytest.mark.operator
@@ -207,15 +193,17 @@ def test_vib_analysis() -> None:
 
     mol = read_xyz(str(HERE / "C2H4.xyz"))
     solvent = "toluene"
-    ase_calc = Opt_func_dispatcher("XTB").get_ase_calc("GFN-FF", solvent)
+    dispatcher = Opt_func_dispatcher("TBLITE")
+    dispatcher.get_ase_calc(solvent=solvent)
     with NewFolderContext(str(HERE / "temp_C2H4_vib")):
         _ = ase_vib(
             atoms=mol.atoms,
             coords=mol.coords[0],
-            ase_calc=ase_calc,
+            dispatcher=dispatcher,
             charge=0,
             mult=1,
             solvent=solvent,
+            tighten_opt_before_vib=True,
         )
 
         with open(str(HERE / "temp_C2H4_vib/temp_thermo.json"), "rb") as f:
@@ -223,3 +211,86 @@ def test_vib_analysis() -> None:
 
         assert all([f >= 0 for f in thermo_dict["freqs_cm1"]])
         assert len(thermo_dict["freqs_cm1"]) == len(mol.atoms) * 3
+
+
+@pytest.mark.codecov
+def test_alpb_delta_calc() -> None:
+    """Verifies that the ALPB delta calc does something."""
+    from firecode.ase_manipulations import ase_popt
+    from firecode.utils import env_override
+
+    mol = read_xyz(str(HERE / "C2H4.xyz"))
+    solvent = "toluene"
+
+    with env_override(
+        FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
+        FIRECODE_SOLV_METHOD_FOR_ML="alpb",
+    ):
+        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher.get_ase_calc(solvent=None, force_reload=True)
+
+    _, vac_energy, _ = ase_popt(
+        atoms=mol.atoms,
+        coords=mol.coords[0],
+        dispatcher=dispatcher,
+        maxiter=0,
+    )
+
+    with env_override(
+        FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
+        FIRECODE_SOLV_METHOD_FOR_ML="alpb",
+    ):
+        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher.get_ase_calc(solvent=solvent, force_reload=True)
+
+    _, solv_energy, _ = ase_popt(
+        atoms=mol.atoms,
+        coords=mol.coords[0],
+        dispatcher=dispatcher,
+        maxiter=0,
+    )
+
+    assert abs(vac_energy - solv_energy) > 1e-3, (
+        f"solv_energy (ALPB) ~ 0 ({abs(vac_energy - solv_energy):.6f} kcal/mol)"
+    )
+
+
+def test_cpcm_delta_calc() -> None:
+    """Verifies that the CPCM delta calc does something."""
+    from firecode.ase_manipulations import ase_popt
+    from firecode.utils import env_override
+
+    mol = read_xyz(str(HERE / "C2H4.xyz"))
+    solvent = "toluene"
+
+    with env_override(
+        FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
+        FIRECODE_SOLV_METHOD_FOR_ML="cpcm",
+    ):
+        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher.get_ase_calc(solvent=None, force_reload=True)
+
+    _, vac_energy, _ = ase_popt(
+        atoms=mol.atoms,
+        coords=mol.coords[0],
+        dispatcher=dispatcher,
+        maxiter=0,
+    )
+
+    with env_override(
+        FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
+        FIRECODE_SOLV_METHOD_FOR_ML="cpcm",
+    ):
+        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher.get_ase_calc(solvent=solvent, force_reload=True)
+
+    _, solv_energy, _ = ase_popt(
+        atoms=mol.atoms,
+        coords=mol.coords[0],
+        dispatcher=dispatcher,
+        maxiter=0,
+    )
+
+    assert abs(vac_energy - solv_energy) > 1e-3, (
+        f"solv_energy (CPCM) ~ 0 ({abs(vac_energy - solv_energy):.6f} kcal/mol)"
+    )

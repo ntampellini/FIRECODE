@@ -33,7 +33,7 @@ from firecode.graph_manipulations import get_sum_graph
 from firecode.solvents import to_xtb_solvents
 from firecode.typing_ import Array1D_str, Array2D_float, Array3D_float
 from firecode.units import EH_TO_KCAL
-from firecode.utils import NewFolderContext, clean_directory, read_xyz, write_xyz
+from firecode.utils import NewFolderContext, clean_directory, env_override, read_xyz, write_xyz
 
 if TYPE_CHECKING:
     from networkx import Graph
@@ -898,8 +898,14 @@ def crest3_mtd_search(
         # CREST 3 accepts the .toml file directly as the only argument.
         # ---------------------------------------------------------------
         try:
-            with open(f"{title}.out", "w") as f:
-                check_call(["crest", f"{title}.toml"], stdout=f, stderr=STDOUT)
+            with env_override(
+                OMP_NUM_THREADS=threads,
+                MKL_NUM_THREADS=threads,
+                # needed to suppress nasty printouts
+                OPENBLAS_NUM_THREADS=1,
+            ):
+                with open(f"{title}.out", "w") as f:
+                    check_call(["crest", f"{title}.toml", "--noreftopo"], stdout=f, stderr=STDOUT)
         except KeyboardInterrupt:
             raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
 
@@ -935,67 +941,3 @@ def crest_mtd_search(*args: Any, **kwargs: Any) -> Any:
                 "CREST (version 2 or 3) does not seem to be installed. "
                 "Install it with: mamba install -c conda-forge crest=3"
             )
-
-
-def xtb_gsolv(
-    atoms: Array1D_str,
-    coords: Array2D_float,
-    model: str = "alpb",
-    charge: int = 0,
-    mult: int = 1,
-    solvent: str = "ch2cl2",
-    title: str = "temp",
-    assert_convergence: bool = True,
-) -> float:
-    """Returns the solvation free energy in kcal/mol, as computed by XTB.
-    Single-point energy calculation carried out with GFN2-XTB.
-
-    """
-    with NewFolderContext(title):
-        with open(f"{title}.xyz", "w") as f:
-            write_xyz(atoms, coords, f, title=title)
-
-        # outname = f'{title}_xtbopt.xyz' DOES NOT WORK - XTB ISSUE?
-        outname = "xtbopt.xyz"
-        flags = "--norestart"
-
-        if charge != 0:
-            flags += f" --chrg {charge}"
-
-        if mult != 1:
-            flags += f" --uhf {int(mult - 1)}"
-
-        flags += f" --{model} {to_xtb_solvents.get(solvent, solvent)}"
-
-        try:
-            with open(f"{title}.out", "w") as f:
-                check_call(f"xtb {title}.xyz {flags}".split(), stdout=f, stderr=STDOUT)
-
-        # sometimes the SCC does not converge: only raise the error if specified
-        except CalledProcessError:
-            if assert_convergence:
-                raise CalledProcessError(
-                    1, f"xtb {title}.xyz {flags}", "XTB optimization failed to converge."
-                )
-
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
-
-        else:
-            gsolv = energy_grepper(f"{title}.out", "-> Gsolv", 3)
-            clean_directory((f"{title}.inp", f"{title}.xyz", f"{title}.out", outname))
-
-        clean_directory(
-            to_remove=(
-                "gfnff_topo",
-                "charges",
-                "wbo",
-                "xtbrestart",
-                "xtbtopo.mol",
-                ".xtboptok",
-                "gfnff_adjacency",
-                "gfnff_charges",
-            )
-        )
-
-        return gsolv

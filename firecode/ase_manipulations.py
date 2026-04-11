@@ -25,7 +25,6 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from functools import wraps
 from subprocess import getoutput
 from typing import TYPE_CHECKING, Any, Callable, Iterable, ParamSpec, Sequence, TypeVar, cast
 
@@ -38,15 +37,13 @@ from ase.mep import DyNEB
 from ase.optimize import FIRE, LBFGS
 from numpy.linalg import LinAlgError
 from prism_pruner.algebra import dihedral, normalize
-from prism_pruner.graph_manipulations import d_min_bond, find_paths
+from prism_pruner.graph_manipulations import d_min_bond
 from prism_pruner.rmsd import rmsd_and_max
-from prism_pruner.utils import align_structures, get_double_bonds_indices, time_to_string
-from sella import Sella
-from sella.internal import Internals
+from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.algebra import point_angle
-from firecode.calculators._xtb import xtb_gsolv
-from firecode.settings import DEFAULT_LEVELS
+from firecode.dispatcher import Opt_func_dispatcher
+from firecode.settings import CALCULATOR, DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EV_TO_KCAL
 from firecode.utils import (
@@ -55,20 +52,33 @@ from firecode.utils import (
     cartesian_product,
     read_xyz,
     read_xyz_energies,
+    sella_env,
+    str_to_var,
     write_xyz,
 )
 
+# import with sella env to make sure jax is
+# initialized with the right environmental variables
+with sella_env():
+    from sella import Sella
+    from sella.internal import Internals
+
 if TYPE_CHECKING:
-    from ase.calculators.calculator import Calculator as ASECalculator
     from ase.optimize.optimize import Optimizer as ASEOptimizer
     from mlfsm.cos import FreezingString
     from mlfsm.opt import Optimizer as MLFSMOptimizer
-    from networkx import Graph
 
     from firecode.embedder import Embedder
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+optimizer_dict: dict[str, tuple[ASEOptimizer, dict[str, Any]]] = {
+    # name: tuple(ASEOptimizer, optimizer_kwargs)
+    "LBFGS": (cast("ASEOptimizer", LBFGS), {"maxstep": 0.1}),
+    "FIRE": (cast("ASEOptimizer", FIRE), dict()),
+    "SELLA": (cast("ASEOptimizer", Sella), dict()),
+}
 
 
 class ASEConstraint:
@@ -81,14 +91,15 @@ class ASEConstraint:
 class Spring(ASEConstraint):
     """ASE Custom Constraint Class
     Adds an harmonic force between a pair of atoms.
-    Spring constant is very high to achieve tight convergence,
-    but maximum force is dampened so as not to ruin structures.
+    Spring constant is high to achieve tight convergence,
+    but maximum force is dampened to avoid ruining structures.
     """
 
-    def __init__(self, i1: int, i2: int, d_eq: float, k: float = 300.0) -> None:
+    def __init__(self, i1: int, i2: int, d_eq: float, k: float = 50.0, fmax: float = 10.0) -> None:
         self.i1, self.i2 = i1, i2
         self.d_eq = d_eq
         self.k = k
+        self.fmax = fmax
 
     def adjust_positions(self, atoms: Atoms, newpositions: Array1D_float) -> None:
         pass
@@ -97,18 +108,18 @@ class Spring(ASEConstraint):
         direction = atoms.positions[self.i2] - atoms.positions[self.i1]
         # vector connecting atom1 to atom2
 
-        spring_force = self.k * (np.linalg.norm(direction) - self.d_eq)
-        # absolute spring force (float). Positive if spring is overstretched.
+        # Positive if spring is overstretched.
+        delta_x = np.linalg.norm(direction) - self.d_eq
 
-        spring_force = np.clip(spring_force, -50, 50)
-        # force is clipped at 50 eV/A ()
+        # gated linear force: force is clipped at fmax eV/A
+        spring_force = np.clip(self.k * delta_x, -self.fmax, self.fmax)
 
+        # applying harmonic force to each atom, directed toward the other one
         forces[self.i1] += normalize(direction) * spring_force
         forces[self.i2] -= normalize(direction) * spring_force
-        # applying harmonic force to each atom, directed toward the other one
 
     def __repr__(self) -> str:
-        return f"Spring - ids:{self.i1}/{self.i2} - d_eq:{self.d_eq}, k:{self.k}"
+        return f"Spring - ids:{self.i1}/{self.i2} - d_eq:{self.d_eq}, k:{self.k}, fmax:{self.fmax}"
 
 
 class HalfSpring(ASEConstraint):
@@ -767,49 +778,6 @@ class OrbitalSpring:
                 )
 
 
-def PreventScramblingConstraint(
-    graph: Graph, atoms: Atoms, double_bond_protection: bool = False, fix_angles: bool = False
-) -> FixInternals:
-    """graph: NetworkX graph of the molecule
-    atoms: ASE atoms object
-
-    return: FixInternals constraint to apply to ASE calculations
-    """
-    angles_deg = None
-    if fix_angles:
-        allpaths = set()
-
-        for node in graph:
-            allpaths |= set(find_paths(graph, node, 2))
-
-        allpaths = {tuple(sorted(path)) for path in allpaths}
-
-        angles_deg = []
-        for path in allpaths:
-            angles_deg.append([atoms.get_angle(*path), list(path)])  # type: ignore[no-untyped-call]
-
-    bonds = []
-    for bond in [[a, b] for a, b in graph.edges if a != b]:
-        bonds.append([atoms.get_distance(*bond), bond])  # type: ignore[no-untyped-call]
-
-    dihedrals_deg = None
-    if double_bond_protection:
-        double_bonds = get_double_bonds_indices(atoms.positions, atoms.get_atomic_numbers())  # type: ignore[no-untyped-call]
-        if double_bonds != []:
-            dihedrals_deg = []
-            for a, b in double_bonds:
-                n_a = graph.neighbors(a)
-                n_a.remove(b)
-
-                n_b = graph.neighbors(b)
-                n_b.remove(a)
-
-                d = [n_a[0], a, b, n_b[0]]
-                dihedrals_deg.append([atoms.get_dihedral(*d), d])  # type: ignore[no-untyped-call]
-
-    return FixInternals(dihedrals_deg=dihedrals_deg, angles_deg=angles_deg, bonds=bonds, epsilon=1)  # type: ignore[no-untyped-call]
-
-
 def set_charge_and_mult_on_ase_atoms(ase_atoms: Atoms, charge: int, mult: int) -> Atoms:
     # update charge and mult
     ase_atoms.info.update({"charge": charge, "spin": mult})
@@ -826,25 +794,64 @@ def set_charge_and_mult_on_ase_atoms(ase_atoms: Atoms, charge: int, mult: int) -
     return ase_atoms
 
 
-def get_sella_internals(atoms: Array1D_str, coords: Array3D_float) -> Internals | bool:
-    """If we have a multimolecular graph,
-    use TRIC (translational and rotation
-    internal coordinates) in Sella.
+def get_sella_internals(
+    ase_atoms: Atoms,
+    order: int = 0,
+    ase_constraints: list[ASEConstraint] | None = None,
+) -> Internals | bool:
+    """Returns the Sella Internals to be used in the optimization.
+
+    Internal coordinates require less gradient evaluations to reach
+    convergence compared to cartesian coordinates. The "tric" mode
+    is useful in reducing the number of internal coordinates for large
+    systems of multiple molecules. Still, it can be less robust than
+    cartesian coordinates. If we have a multimolecular graph, use TRIC
+    (translational and rotation internal coordinates).
+
     See:
     Sella 2022 paper: https://pubs.acs.org/doi/10.1021/acs.jctc.2c00395
     Wang and Song 2016 (TRIC): https://doi.org/10.1063/1.4952956
     """
+    override = cast("bool | None", str_to_var(os.environ["FIRECODE_SELLA_INTERNAL_OVERRIDE"]))
+    if override is not None:
+        # if ase_constraints and order == 0:
+        #     raise ValueError(f"You can only run constrained optimizations with Sella with internal coordinates!")
+        print(f"--> OVERRIDE: Using Sella with internal={override}")
+        return override
+
     from networkx import connected_components
     from prism_pruner.graph_manipulations import graphize
 
-    graph = graphize(atoms, coords)
+    graph = graphize(ase_atoms.symbols, ase_atoms.get_positions())  # type: ignore[no-untyped-call]
     multimolecular = len(list(connected_components(graph))) > 1
 
     if multimolecular:
         internals: Internals | bool
 
-        # get ase_atoms object
-        ase_atoms = Atoms(atoms, positions=coords)
+        # build internals respecting constraints
+        # only if we are not optimizing to a saddle point
+        if ase_constraints:
+            # Sella only supports the FixInternals ASE constraint,
+            # so translate our custom ASE constraints into that
+            dihedrals_deg = []
+            bonds = []
+            for constr in ase_constraints:
+                if isinstance(constr, Spring):
+                    bonds.append([constr.d_eq, [constr.i1, constr.i2]])
+                if isinstance(constr, PlanarAngleSpring):
+                    raise NotImplementedError("Sella does not support planar angles yet!")
+                elif isinstance(constr, DihedralSpring):
+                    dihedrals_deg.append(
+                        [constr.eq_angle, [constr.i1, constr.i2, constr.i3, constr.i4]]
+                    )
+
+            fixint = FixInternals(  # type: ignore[no-untyped-call]
+                dihedrals_deg=dihedrals_deg,
+                bonds=bonds,
+                # epsilon=1
+            )
+
+            ase_atoms.set_constraint(fixint)  # type: ignore[no-untyped-call]
 
         # Use TRICs
         internals = Internals(ase_atoms, allow_fragments=True)
@@ -858,54 +865,16 @@ def get_sella_internals(atoms: Array1D_str, coords: Array3D_float) -> Internals 
         return True
 
 
-def ase_popt(
-    atoms: Array1D_str,
+def convert_constraints_to_ase(
     coords: Array2D_float,
-    ase_calc: ASECalculator | None = None,
-    charge: int = 0,
-    mult: int = 1,
-    calculator: str | None = None,
-    method: str | None = None,
-    add_alpb_solvation: bool = False,
-    solvent: str | None = None,
     constrained_indices: Sequence[Sequence[int]] | None = None,
     constrained_distances: Sequence[float | None] | None = None,
     constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
     constrained_dihedrals_values: Sequence[float | None] | None = None,
     constrained_angles_indices: Sequence[Sequence[int]] | None = None,
     constrained_angles_values: Sequence[float | None] | None = None,
-    ase_constraints: list[ASEConstraint] | None = None,
-    maxiter: int | None = None,
-    conv_thr: str = "tight",
-    assert_convergence: bool = False,
-    optimizer: str = "LBFGS",
-    order: int = 0,
-    traj: str | None = None,
-    logfunction: Callable[[str], None] | None = None,
-    title: str = "temp",
-    debug: bool = False,
-    **kwargs: Any,
-) -> tuple[Array2D_float, float, bool]:
-    """ """
-
-    ase_atoms = Atoms(atoms, positions=coords)
-    if ase_calc is None:
-        if calculator is None:
-            raise SyntaxError(
-                "If you do not provide an ASE calculator object, you have to at least provide the calculator name."
-            )
-        if method is None:
-            method = DEFAULT_LEVELS[calculator]
-
-        from firecode.optimization_methods import Opt_func_dispatcher
-
-        ase_calc = Opt_func_dispatcher(calculator).get_ase_calc(method, solvent)
-
-    ase_atoms.calc = ase_calc
-
-    ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
-    maxiter = maxiter or 750
-
+) -> list[ASEConstraint]:
+    """Converts constraints from a list format into ASE Constraints."""
     constraints: list[ASEConstraint] = []
 
     if constrained_indices is not None:
@@ -949,100 +918,169 @@ def ase_popt(
             )
             constraints.append(DihedralSpring(i1, i2, i3, i4, tgt_angle))
 
-    if ase_constraints is not None:
-        constraints.extend(ase_constraints)
+    return constraints
 
-    ase_atoms.set_constraint(constraints)  # type: ignore[no-untyped-call]
 
-    fmax = {
-        "loose": 0.1,
-        "tight": 0.05,
-        "vtight": 0.01,
-    }[conv_thr]
-
-    optimizer_dict = {
-        "LBFGS": LBFGS,
-        "FIRE": FIRE,
-        "SELLA": Sella,
-    }
-
-    optimizer = optimizer.upper()
-    if optimizer not in optimizer_dict:
-        raise NameError(f'Optimizer "{optimizer}" is unknown. {list(optimizer_dict.keys())}')
-
-    ase_optimizer = optimizer_dict[optimizer]
+def ase_popt(
+    atoms: Array1D_str,
+    coords: Array2D_float,
+    dispatcher: Opt_func_dispatcher | None = None,
+    charge: int = 0,
+    mult: int = 1,
+    calculator: str | None = None,
+    method: str | None = None,
+    solvent: str | None = None,
+    constrained_indices: Sequence[Sequence[int]] | None = None,
+    constrained_distances: Sequence[float | None] | None = None,
+    constrained_dihedrals_indices: Sequence[Sequence[int]] | None = None,
+    constrained_dihedrals_values: Sequence[float | None] | None = None,
+    constrained_angles_indices: Sequence[Sequence[int]] | None = None,
+    constrained_angles_values: Sequence[float | None] | None = None,
+    ase_constraints: list[ASEConstraint] | None = None,
+    maxiter: int | None = None,
+    conv_thr: str = "tight",
+    assert_convergence: bool = False,
+    optimizer: str | None = None,
+    order: int = 0,
+    traj: str | None = None,
+    logfunction: Callable[[str], None] | None = None,
+    title: str = "temp",
+    debug: bool = False,
+    **kwargs: Any,
+) -> tuple[Array2D_float, float, bool]:
+    """ """
 
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
+        calculator = calculator or CALCULATOR
+        dispatcher = dispatcher or Opt_func_dispatcher(calculator)
+        ase_constraints = ase_constraints or []
+        ase_atoms = Atoms(atoms, positions=coords)
+        if method is None:
+            method = DEFAULT_LEVELS[calculator]
+
+        ase_calc = dispatcher.get_ase_calc(method, solvent, logfunction=None)
+
+        ase_atoms.calc = ase_calc
+
+        ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
+        maxiter = 750 if maxiter is None else maxiter
+
+        converted_constr_list = convert_constraints_to_ase(
+            coords,
+            constrained_indices=constrained_indices,
+            constrained_distances=constrained_distances,
+            constrained_dihedrals_indices=constrained_dihedrals_indices,
+            constrained_dihedrals_values=constrained_dihedrals_values,
+            constrained_angles_indices=constrained_angles_indices,
+            constrained_angles_values=constrained_angles_values,
+        )
+
+        if converted_constr_list:
+            ase_constraints += converted_constr_list
+
+        ase_atoms.set_constraint(ase_constraints)  # type: ignore[no-untyped-call]
+
+        fmax = {
+            "loose": 0.1,
+            "tight": 0.05,
+            "vtight": 0.01,
+        }[conv_thr]
+
+        _sella_defaults = {
+            0: dict(),
+            1: dict(
+                # eta: finite difference step for Hessian-vector
+                # products: default value of 1e-4 could be
+                # dominated by noise for MLIPs, so increasing
+                # it a little bit for robustness
+                eta=0.005,
+                # gamma: tighter diagonalizations
+                # compared to the default 0.1 value
+                # optimized for expensive QM, since
+                # we are not using slow methods here
+                gamma=0.05,
+                # delta0: akin to stepsize - more conservative
+                # than the default 0.1, should lead to
+                # a more robust implementation. Again,
+                # number of gradient calls is less important
+                delta0=0.05,
+                # sigma_inc: recover the trust radius a bit more aggressively
+                # once a good step lands (default 1.15)
+                sigma_inc=1.25,
+                # re-diagonalize the hessian every 5 steps
+                # diag_every_n=5,
+            ),
+        }
+
+        # get optimizer name (str) from dispatcher
+        if optimizer is None:
+            optimizer = dispatcher.get_optimizer_str()
+
+        # get ASEOptimizer from dictionary
+        ase_optimizer, _ = optimizer_dict[optimizer]
+
         t_start_opt = time.perf_counter()
         iterations: int = 0
 
         with HiddenPrints():
             try:
                 if optimizer == "SELLA":
-                    # See if we were passed constrained indices
-                    # to provide a better guess for v0
-                    if constrained_indices:
-                        v0 = np.zeros(3 * len(atoms))
+                    # constraints via sella are provided
+                    # to the Internals Class.
+                    # Removing them from the ase atoms object
+                    ase_atoms.set_constraint([])  # type: ignore[no-untyped-call]
+                    internal = get_sella_internals(ase_atoms, order, ase_constraints)
+                    # v0 = get_eigenvector_guess(
+                    #     atoms,
+                    #     coords,
+                    #     order,
+                    #     internal,
+                    #     ase_constraints,
+                    #     logfunction=logfunction,
+                    # )
 
-                        for i1, i2 in constrained_indices:
-                            diff = coords[i2] - coords[i1]
-                            diff /= np.linalg.norm(diff)
-                            v0[3 * i1 : 3 * i1 + 3] = -diff
-                            v0[3 * i2 : 3 * i2 + 3] = diff
+                    with sella_env():
+                        opt = Sella(
+                            ase_atoms,
+                            order=order,
+                            internal=internal,
+                            # If we were given any distance constraint and this is
+                            # a saddle point optimization, provide an initial guess
+                            # for the leftmost eigenvector
+                            # v0=v0,  # type: ignore[arg-type]
+                            # trajectory: save trajectory to traj
+                            trajectory=traj,
+                            # logfile for debugging
+                            logfile=title + "_sella.log",
+                            # rest of defaults
+                            **_sella_defaults[order],  # type: ignore[arg-type]
+                        )
 
-                        v0 /= np.linalg.norm(v0)
-
-                    else:
-                        v0 = None
-
-                    opt = Sella(
-                        ase_atoms,
-                        order=order,
-                        # Internal coordinates require many less
-                        # gradient evaluations to reach convergence
-                        # compared to cartesian coordinates.
-                        # The "tric" mode is useful in reducing
-                        # the number of internal coordinates for large
-                        # systems of multiple molecules
-                        internal=get_sella_internals(atoms, coords),
-                        # eta: finite difference step for Hessian-vector
-                        # products: default value of 1e-4 could be
-                        # dominated by noise for MLIPs, so increasing
-                        # it a little bit for robustness
-                        eta=0.005,
-                        # gamma: tighter diagonalizations
-                        # compared to the default 0.1 value
-                        # optimized for expensive QM, since
-                        # we are not using slow methods here
-                        gamma=0.05,
-                        # delta0: akin to stepsize - more conservative
-                        # than the default 0.1, should lead to
-                        # a more robust implementation. Again,
-                        # number of gradient calls is less important
-                        delta0=0.05,
-                        # sigma_inc: recover the trust radius a bit more aggressively
-                        # once a good step lands (default 1.15)
-                        sigma_inc=1.25,
-                        # If we were given any distance constraint,
-                        # provide an initial guess for the leftmost eigenvector
-                        v0=v0,  # type: ignore[arg-type]
-                        # trajectory: save trajectory to traj
-                        trajectory=traj,
-                    )
-
-                    opt.run(fmax=0.01, steps=maxiter)  # type: ignore[no-untyped-call]
-                    iterations += opt.nsteps
+                        opt.run(fmax=0.01, steps=maxiter)  # type: ignore[no-untyped-call]
+                        iterations += opt.nsteps
 
                 else:
                     # Step 1: larger maxstep, looser convergence
-                    with ase_optimizer(ase_atoms, maxstep=0.2, trajectory=traj) as opt:
+                    with ase_optimizer(  # type: ignore[operator]
+                        ase_atoms,
+                        maxstep=0.2,
+                        trajectory=traj,
+                        logfile=title + f"_{optimizer.lower()}.log",
+                    ) as opt:
+                        opt.logfile.write("--> Step 1: fmax=0.1, maxstep=0.2\n")
                         opt.run(fmax=0.1, steps=maxiter)
                         iterations += opt.nsteps
 
                     # Step 2: Refinement with smaller maxstep
                     if "tight" in conv_thr:
-                        with ase_optimizer(ase_atoms, maxstep=0.05, trajectory=traj) as opt:
+                        with ase_optimizer(  # type: ignore[operator]
+                            ase_atoms,
+                            maxstep=0.05,
+                            trajectory=traj,
+                            logfile=title + f"_{optimizer.lower()}.log",
+                        ) as opt:
+                            opt.logfile.write(f"--> Step 2: fmax={fmax}, maxstep=0.05\n")
                             opt.run(fmax=fmax, steps=maxiter)
                             iterations += opt.nsteps
 
@@ -1056,34 +1094,39 @@ def ase_popt(
 
         if debug:
             if traj is not None:
+                # write optimized structure
+                with open(f"{title}_opt.xyz", "w") as f:
+                    write_xyz(atoms, ase_atoms.get_positions(), f)  # type: ignore[no-untyped-call]
+
                 # convert ASE trajectory and remove the original
                 getoutput(f"ase convert {traj} {traj}.xyz")
                 os.remove(traj)
 
                 # read energies from the .xyz file
-                energies = cast("list[float]", read_xyz_energies(f"{traj}.xyz", verbose=False))
+                energies = read_xyz_energies(f"{traj}.xyz", verbose=False)
 
-                # since it came from "ase convert" the UOM is not Eh but eV
-                energies_kcal = np.array(energies) * EV_TO_KCAL
+                if energies is not None:
+                    # since it came from "ase convert" the UOM is not Eh but eV
+                    energies_kcal = np.array(energies) * EV_TO_KCAL
 
-                plt.figure()
-                plt.plot(
-                    range(1, len(energies) + 1),
-                    np.array(energies_kcal) - min(energies_kcal),
-                    color="tab:blue",
-                    label="Energy (kcal/mol)",
-                    linewidth=3,
-                )
+                    plt.figure()
+                    plt.plot(
+                        range(1, len(energies) + 1),
+                        np.array(energies_kcal) - min(energies_kcal),
+                        color="tab:blue",
+                        label="Energy (kcal/mol)",
+                        linewidth=3,
+                    )
 
-                plt.legend()
-                plt.title(title)
-                plt.xlabel("Iteration #")
-                plt.ylabel("Rel. E. (kcal/mol)")
-                plt.savefig(f"{title.replace(' ', '_')}_opt.svg")
+                    plt.legend()
+                    plt.title(title)
+                    plt.xlabel("Iteration #")
+                    plt.ylabel("Rel. E. (kcal/mol)")
+                    plt.savefig(f"{title.replace(' ', '_')}_opt.svg")
 
         new_structure = ase_atoms.get_positions()  # type: ignore[no-untyped-call]
 
-        if assert_convergence:
+        if assert_convergence and maxiter != 0:
             success = iterations < maxiter - 1
         else:
             success = True
@@ -1096,44 +1139,23 @@ def ase_popt(
 
         energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
 
-        if solvent is not None and add_alpb_solvation:
-            gsolv = xtb_gsolv(
-                atoms,
-                new_structure,
-                model="alpb",
-                charge=charge,
-                mult=mult,
-                solvent=solvent,
-                title=title,
-                assert_convergence=True,
+        if solvent is not None and os.environ.get("FIRECODE_SOLV_IMPLEM_FOR_ML") == "post":
+            energy += dispatcher.solv_calc.get_solvation_delta(
+                atoms=atoms,
+                coords=new_structure,
             )
-            energy += gsolv
 
     return new_structure, energy, success
-
-
-def _wrap_with_kwargs(fn: Callable[P, R], fixed_kwargs: dict[str, Any]) -> Callable[P, R]:
-    @wraps(fn)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        for key, value in fixed_kwargs.items():
-            kwargs[key] = value
-        return fn(*args, **kwargs)
-
-    return wrapper
-
-
-ase_popt_with_alpb = _wrap_with_kwargs(ase_popt, fixed_kwargs={"add_alpb_solvation": True})
 
 
 def ase_saddle(
     atoms: Array1D_str,
     coords: Array2D_float,
-    ase_calc: ASECalculator | None = None,
+    dispatcher: Opt_func_dispatcher | None = None,
     charge: int = 0,
     mult: int = 1,
     calculator: str | None = None,
     method: str | None = None,
-    add_alpb_solvation: bool = False,
     solvent: str | None = None,
     constrained_indices: Sequence[Sequence[int]] | None = None,
     maxiter: int | None = None,
@@ -1150,15 +1172,14 @@ def ase_saddle(
     opt_coords, energy, success = ase_popt(
         atoms=atoms,
         coords=coords,
-        ase_calc=ase_calc,
+        dispatcher=dispatcher,
         charge=charge,
         mult=mult,
         calculator=calculator,
         method=method,
-        add_alpb_solvation=add_alpb_solvation,
         solvent=solvent,
         constrained_indices=constrained_indices,
-        maxiter=maxiter,
+        maxiter=maxiter or 1000,
         conv_thr="vtight",
         assert_convergence=assert_convergence,
         optimizer="SELLA",
@@ -1171,23 +1192,29 @@ def ase_saddle(
     )
 
     if irc:
-        ase_irc(
-            atoms=atoms,
-            coords=opt_coords,
-            method=method,
-            ase_calc=ase_calc,
-            charge=charge,
-            mult=mult,
-            calculator=calculator,
-            solvent=solvent,
-            maxiter=maxiter,
-            # conv_thr="tight",
-            traj=traj,
-            logfunction=logfunction,
-            title=title,
-            work_in=title,
-            # **kwargs,
-        )
+        from sella.optimize.irc import IRCInnerLoopConvergenceFailure
+
+        try:
+            ase_irc(
+                atoms=atoms,
+                coords=opt_coords,
+                method=method,
+                dispatcher=dispatcher,
+                charge=charge,
+                mult=mult,
+                calculator=calculator,
+                solvent=solvent,
+                maxiter=maxiter,
+                # conv_thr="tight",
+                traj=traj,
+                logfunction=logfunction,
+                title=title,
+                work_in=title,
+                # **kwargs,
+            )
+        except IRCInnerLoopConvergenceFailure:
+            if logfunction is not None:
+                logfunction(f"--> IRC on {title} failed (IRCInnerLoopConvergenceFailure).")
 
     return opt_coords, energy, success
 
@@ -1196,11 +1223,10 @@ def ase_irc(
     atoms: Array1D_str,
     coords: Array2D_float,
     method: str | None = None,
-    ase_calc: ASECalculator | None = None,
+    dispatcher: Opt_func_dispatcher | None = None,
     charge: int = 0,
     mult: int = 1,
     calculator: str | None = None,
-    # add_alpb_solvation: bool = False,
     solvent: str | None = None,
     maxiter: int | None = None,
     conv_thr: str = "tight",
@@ -1216,76 +1242,74 @@ def ase_irc(
 
     work_in = work_in or title + "_IRC"
     traj = traj or "temp"
+    calculator = calculator or CALCULATOR
+    dispatcher = dispatcher or Opt_func_dispatcher(calculator)
 
     with NewFolderContext(work_in, delete_after=False, overwrite_if_exists=False):
-        ase_atoms = Atoms(atoms, positions=coords)
-        if ase_calc is None:
-            if calculator is None:
-                raise SyntaxError(
-                    "If you do not provide an ASE calculator object, you have to at least provide the calculator name."
-                )
+        with open("sella_irc.log", "w") as logfile:
+            ase_atoms = Atoms(atoms, positions=coords)
             if method is None:
                 method = DEFAULT_LEVELS[calculator]
 
-            from firecode.optimization_methods import Opt_func_dispatcher
+            ase_calc = dispatcher.get_ase_calc(method, solvent)
 
-            ase_calc = Opt_func_dispatcher(calculator).get_ase_calc(method, solvent)
+            ase_atoms.calc = ase_calc
+            ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
 
-        ase_atoms.calc = ase_calc
-        ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge, mult)
+            fmax = {
+                "loose": 0.1,
+                "tight": 0.05,
+                "vtight": 0.01,
+            }[conv_thr]
+            maxiter = maxiter or 1000
 
-        fmax = {
-            "loose": 0.1,
-            "tight": 0.05,
-            "vtight": 0.01,
-        }[conv_thr]
-        maxiter = maxiter or 1000
+            irc = IRC(ase_atoms, dx=0.1, trajectory=traj)
 
-        irc = IRC(ase_atoms, trajectory=traj)
+            # Run forward
+            logfile.write("  [IRC] Running forward ...")
+            irc.run(steps=maxiter, fmax=fmax, direction="forward")  # type: ignore[no-untyped-call]
+            # fwd_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
 
-        # Run forward
-        print("  [IRC] Running forward …")
-        irc.run(steps=maxiter, fmax=fmax, direction="forward")  # type: ignore[no-untyped-call]
-        # fwd_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+            # convert traj to .xyz and remove ase traj
+            traj_fwd = f"{title}_irc_traj_fwd.xyz"
+            os.system(f"ase convert {traj} {traj_fwd}")
+            os.remove(traj)
 
-        # convert traj to .xyz and remove ase traj
-        traj_fwd = f"{title}_irc_traj_fwd.xyz"
-        os.system(f"ase convert {traj} {traj_fwd}")
-        os.remove(traj)
+            # Run reverse
+            logfile.write("  [IRC] Running reverse ...")
+            irc.run(steps=maxiter, fmax=fmax, direction="reverse")  # type: ignore[no-untyped-call]
+            # rev_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
 
-        # Run reverse
-        print("  [IRC] Running reverse …")
-        irc.run(steps=maxiter, fmax=fmax, direction="reverse")  # type: ignore[no-untyped-call]
-        # rev_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+            # convert traj to .xyz and remove ase traj
+            traj_rev = f"{title}_irc_traj_rev.xyz"
+            os.system(f"ase convert {traj} {traj_rev}")
+            os.remove(traj)
 
-        # convert traj to .xyz and remove ase traj
-        traj_rev = f"{title}_irc_traj_rev.xyz"
-        os.system(f"ase convert {traj} {traj_rev}")
-        os.remove(traj)
+            # make a single IRC path file
+            outname = f"{title}_irc_traj.xyz"
+            fwd_mol = read_xyz(traj_fwd)
+            rev_mol = read_xyz(traj_rev)
 
-        # make a single IRC path file
-        outname = f"{title}_irc_traj.xyz"
-        fwd_mol = read_xyz(traj_fwd)
-        rev_mol = read_xyz(traj_rev)
+            with open(outname, "w") as f:
+                for c in reversed(fwd_mol.coords):
+                    write_xyz(atoms, c, f)
+                for c in rev_mol.coords:
+                    write_xyz(atoms, c, f)
 
-        with open(outname, "w") as f:
-            for c in reversed(fwd_mol.coords):
-                write_xyz(atoms, c, f)
-            for c in rev_mol.coords:
-                write_xyz(atoms, c, f)
+            logfile.write(
+                f"  [IRC] Wrote {outname} ({len(fwd_mol.coords) + len(rev_mol.coords)} frames)"
+            )
 
-        print(f"  [IRC] Wrote {outname} ({len(fwd_mol.coords) + len(rev_mol.coords)} frames)")
+            # remove partial traj files
+            os.remove(traj_fwd)
+            os.remove(traj_rev)
 
-        # remove partial traj files
-        os.remove(traj_fwd)
-        os.remove(traj_rev)
+            # write endpoints
+            with open(f"{title}_irc_fwd_gs.xyz", "w") as f:
+                write_xyz(atoms, fwd_mol.coords[-1], f)
 
-        # write endpoints
-        with open(f"{title}_irc_fwd_gs.xyz", "w") as f:
-            write_xyz(atoms, fwd_mol.coords[-1], f)
-
-        with open(f"{title}_irc_rev_gs.xyz", "w") as f:
-            write_xyz(atoms, rev_mol.coords[-1], f)
+            with open(f"{title}_irc_rev_gs.xyz", "w") as f:
+                write_xyz(atoms, rev_mol.coords[-1], f)
 
     return fwd_mol.coords[-1], rev_mol.coords[-1]
 

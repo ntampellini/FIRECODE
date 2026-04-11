@@ -64,7 +64,7 @@ from firecode.utils import cartesian_product, write_xyz
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
 
-    from firecode.optimization_methods import Opt_func_dispatcher
+    from firecode.dispatcher import Opt_func_dispatcher
 
 
 class Torsion:

@@ -41,14 +41,14 @@ from prism_pruner.utils import time_to_string
 
 from firecode.algebra import point_angle
 from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
+from firecode.dispatcher import Opt_func_dispatcher
 from firecode.ensemble import Ensemble
-from firecode.optimization_methods import Opt_func_dispatcher
 from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.settings import CALCULATOR, DEFAULT_LEVELS
 from firecode.solvents import epsilon_dict, solvent_synonyms
 from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
-from firecode.utils import get_ts_d_estimate, read_xyz, write_xyz
+from firecode.utils import get_ts_d_estimate, read_xyz, str_to_var, write_xyz
 
 if TYPE_CHECKING:
     from firecode.ase_manipulations import ASEConstraint
@@ -73,13 +73,14 @@ class OptimizerOptions:
     C_mol_L: float = 0.1
     auto_charge_and_mult: bool = True
     constraint_file: str | None = None
+    opt: bool = False
     sp: bool = False
-    optimize: bool = True
+    freq: bool = False
     newfile: bool = False
-    free_energy: bool = False
     saddle: bool = False
     irc: bool = False
     smarts_string: str | None = None
+    debug: bool = False
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
@@ -89,8 +90,23 @@ class OptimizerOptions:
         self.charge_and_mult_dict = {f: self._get_charge_mult_for_file(f) for f in self.filenames}
         self._set_constraints_from_file()
 
-        if self.irc:
-            self.optimize = False
+        if self.saddle:
+            self.freq = True
+
+        if not self.opt and not self.saddle and not self.irc:
+            print(
+                "--> No optimization, saddle point optimization, or IRC requested: will perform single point calculations only."
+            )
+            self.sp = True
+
+        if self.freq:
+            print("--> Performing vibrational analysis")
+
+        if self.saddle:
+            print("--> Requested saddle optimization")
+
+        if self.newfile:
+            print("--> Writing optimized structures to new files")
 
     def _get_charge_mult_for_file(self, filename: str) -> tuple[int, int]:
         """Get charge and multiplicity for a given file."""
@@ -184,9 +200,9 @@ class OptimizerOptions:
             "method",
             "solvent",
             "constraint_file",
-            "sp",
+            "opt",
             "newfile",
-            "free_energy",
+            "freq",
             "saddle",
             "irc",
             "T_K",
@@ -201,6 +217,10 @@ def main() -> None:
     args: iterable of strings of structure filenames.
 
     """
+    from firecode.__main__ import env_variables_handling
+
+    env_variables_handling()
+
     # Redirect stdout and stderr to handle encoding errors
     sys.stdout = TextIOWrapper(
         sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
@@ -258,36 +278,34 @@ def main() -> None:
         default=_defaults["solvent"],
     )
     parser.add_argument(
-        "-sp",
-        "--singlepoint",
-        help="Do a single point energy calc, without optimizing.",
+        "-o",
+        "--opt",
+        help="Optimize the geometry.",
         action="store_true",
         required=False,
     )
     parser.add_argument(
-        "-g",
-        "--free_energy",
-        help="Calculate free energy (G).",
+        "-f",
+        "--freq",
+        help="Perform vibrational analysis.",
         action="store_true",
         required=False,
     )
     parser.add_argument(
-        "-ts",
+        "--ts",
         "--saddle",
         help="Optimize to a TS.",
         action="store_true",
         required=False,
     )
     parser.add_argument(
-        "-irc",
         "--irc",
         help="Run an IRC calculation.",
         action="store_true",
         required=False,
     )
     parser.add_argument(
-        "-cfile",
-        "--constraint-file",
+        "--cfile",
         help="Uses a constraint file.",
         action="store",
         required=False,
@@ -300,8 +318,15 @@ def main() -> None:
         action="store_true",
         required=False,
     )
+    parser.add_argument(
+        "--debug",
+        help="Does not delete optimization data.",
+        action="store_true",
+        required=False,
+    )
 
     args = parser.parse_args()
+    args.calculator = args.calculator.upper()
     if args.method is None:
         args.method = DEFAULT_LEVELS[args.calculator]
 
@@ -314,14 +339,15 @@ def main() -> None:
             T_K=args.temperature + 273.15,
             calc=args.calculator,
             method=args.method,
-            solvent=args.solvent,
+            solvent=cast("str | None", str_to_var(args.solvent)),
             auto_charge_and_mult=True,
-            sp=args.singlepoint,
+            opt=args.opt,
             newfile=args.newfile,
-            free_energy=args.free_energy,
-            saddle=args.saddle,
+            freq=args.freq,
+            saddle=args.ts,
             irc=args.irc,
-            constraint_file=args.constraint_file,
+            constraint_file=args.cfile,
+            debug=args.debug,
         )
 
     return standalone_optimize(optimizer)
@@ -371,16 +397,15 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
             name="Constraints      - Manually apply constraints to the optimization.",
         ),
         Choice(value="constraint_file", name="Constraint file  - Load a constraint file."),
-        Choice(
-            value="sp", name="Single point     - Do a single point energy calc, without optimizing."
-        ),
+        Choice(value="opt", name="Optimization     - Optimize the geometry."),
         Choice(
             value="newfile",
             name="Newfile          - Write optimized structure to a new file (*_opt.xyz).",
         ),
-        Choice(value="free_energy", name="Free Energy      - Calculate free energy (G)."),
+        Choice(value="freq", name="Freq             - Perform vibrational analysis."),
         Choice(value="saddle", name="Saddle Opt.      - Optimize to a TS."),
         Choice(value="irc", name="IRC              - Run an IRC calculation."),
+        Choice(value="debug", name="Debug            - Does not delete optimization data."),
     ]
 
     options_to_set = inquirer.checkbox(  # type: ignore[attr-defined]
@@ -402,7 +427,7 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
     else:
         constraint_file = None
 
-    if "free_energy" in options_to_set or "saddle" in options_to_set:
+    if "freq" in options_to_set or "saddle" in options_to_set:
         temp_C = inquirer.number(  # type: ignore[attr-defined]
             message="Specify temperature for free energy calculation (°C):",
             default=25,
@@ -431,11 +456,12 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
         method=method,
         solvent=solvent,
         auto_charge_and_mult="auto_charge_and_mult" in options_to_set,
-        sp="sp" in options_to_set,
+        opt="opt" in options_to_set,
         newfile="newfile" in options_to_set,
-        free_energy="free_energy" in options_to_set,
+        freq="freq" in options_to_set,
         saddle="saddle" in options_to_set,
         constraint_file=constraint_file,
+        debug="debug" in options_to_set,
     )
 
     if "constraints" in options_to_set:
@@ -487,20 +513,6 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
     args: OptimizerOptions object, iterable of strings of structure filenames.
 
     """
-    if optimizer.free_energy:
-        print("--> Requested free energy calculation - performing vibrational analysis")
-        from firecode.thermochemistry import ase_vib
-
-    if optimizer.saddle:
-        print("--> Requested saddle optimization")
-        from firecode.thermochemistry import ase_vib
-
-    if optimizer.sp:
-        print("--> Single point calculation requested (no optimization)")
-
-    if optimizer.newfile:
-        print("--> Writing optimized structures to new files")
-
     print(optimizer)
 
     energies, names_confs = [], []
@@ -513,17 +525,17 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
         # set charge
         charge, mult = optimizer.charge_and_mult_dict[name]
 
-        if optimizer.optimize:
-            try:
-                # define outname and clear existing
-                outname = name if not optimizer.newfile else name[:-4] + "_opt.xyz"
-                if optimizer.newfile and (outname in op_sys.listdir()):
-                    op_sys.remove(outname)
-                write_type = "a" if optimizer.newfile else "w"
+        try:
+            # define outname and clear existing
+            outname = name if not optimizer.newfile else name[:-4] + "_opt.xyz"
+            if optimizer.newfile and (outname in op_sys.listdir()):
+                op_sys.remove(outname)
+            write_type = "a" if optimizer.newfile else "w"
 
-                for c_n, coords in enumerate(mol.coords):
-                    active_ase_constraints: list[ASEConstraint] = []
+            for c_n, coords in enumerate(mol.coords):
+                active_ase_constraints: list[ASEConstraint] = []
 
+                if optimizer.opt or optimizer.sp:
                     for constraint in optimizer.constraints[name]:
                         if constraint.type_ == "B":
                             a, b = constraint.indices
@@ -546,173 +558,162 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         # convert to ASE constraint and add to list of active
                         active_ase_constraints.append(constraint.ase_constraint)
 
-                    if active_ase_constraints or not optimizer.saddle:
-                        action = "Calculating SP energy on" if optimizer.sp else "Optimizing"
+                    action = "Optimizing" if optimizer.opt else "Calculating SP energy on"
 
-                        if optimizer.calc in ("AIMNET2", "UMA") and optimizer.solvent is not None:
-                            post = f"+ALPB({optimizer.solvent})"
-                        else:
-                            post = ""
+                    if optimizer.calc in ("AIMNET2", "UMA") and optimizer.solvent is not None:
+                        post = f"+ALPB({optimizer.solvent})"
+                    else:
+                        post = ""
 
-                        print(
-                            f"{action} {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
-                        )
-                        t_start = perf_counter()
-
-                        coords, energy, _ = ase_popt(
-                            mol.atoms,
-                            coords,
-                            method=optimizer.method,
-                            ase_calc=optimizer.ase_calc,
-                            ase_constraints=active_ase_constraints,
-                            charge=charge,
-                            mult=mult,
-                            traj=name[:-4] + "_traj",
-                            logfunction=print,
-                            maxiter=1 if optimizer.sp else 750,
-                            conv_thr="vtight" if optimizer.free_energy else "tight",
-                            solvent=optimizer.solvent,
-                            # title='OPT_temp',
-                            # debug=True,
-                        )
-
-                        elapsed = perf_counter() - t_start
-
-                        if energy is None:
-                            print(
-                                f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
-                            )
-
-                        elif not optimizer.sp:
-                            with open(outname, write_type) as f:
-                                write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
-                            print(
-                                f"{'Appended' if write_type == 'a' else 'Wrote'} optimized structure at {outname} - {time_to_string(elapsed)}\n"
-                            )
-
-                    if optimizer.saddle:
-                        if optimizer.calc in ("AIMNET2", "UMA") and optimizer.solvent is not None:
-                            post = f"+ALPB({optimizer.solvent})"
-                        else:
-                            post = ""
-
-                        print(
-                            f"Optimizing TS for {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
-                        )
-                        t_start = perf_counter()
-
-                        constrained_indices_saddle = [
-                            (c.i1, c.i2) for c in active_ase_constraints if type(c) == Spring
-                        ]
-
-                        if constrained_indices_saddle:
-                            s = "s" if len(constrained_indices_saddle) > 1 else ""
-                            i_str = ""
-                            for i1, i2 in constrained_indices_saddle:
-                                i_str += f"B({i1}-{i2}) "
-
-                            print(f" Biasing v0 with bond vibration{s} [{i_str[:-1]}]")
-
-                        coords, energy, success = ase_saddle(
-                            mol.atoms,
-                            coords,
-                            method=optimizer.method,
-                            ase_calc=optimizer.ase_calc,
-                            constrained_indices=constrained_indices_saddle,
-                            charge=charge,
-                            mult=mult,
-                            traj=name[:-4] + "_traj",
-                            title=f"{name[:-4]}_saddle",
-                            logfunction=print,
-                            maxiter=750,
-                            solvent=optimizer.solvent,
-                        )
-
-                        elapsed = perf_counter() - t_start
-
-                        if not success:
-                            print(
-                                f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
-                            )
-
-                        elif not optimizer.sp:
-                            with open(outname, write_type) as f:
-                                write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
-                            print(
-                                f"{'Appended' if write_type == 'a' else 'Wrote'} saddle structure at {outname} - {time_to_string(elapsed)}\n"
-                            )
-
-                    if optimizer.free_energy or optimizer.saddle:
-                        # sph = (len(constraints) != 0)
-                        # print(f'Calculating Free Energy contribution{" (SPH)" if sph else ""} on {name} - {i+1} of {len(names)}, conf {c_n+1} of {len(data.coords)} ({method})')
-                        # gcorr = xtb_get_free_energy(coords, data.atomnos, method='GFN-FF', solvent=options["solvent"], charge=options["charge"], sph=sph, grep='Gcorr')
-                        # print(f'GCORR: {name}, conf {c_n+1} - {gcorr:.2f} kcal/mol')
-                        # energy += gcorr
-
-                        print(
-                            f"Performing vibrational analysis on {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method})"
-                        )
-                        t_start = perf_counter()
-
-                        freqs, gcorr = ase_vib(
-                            mol.atoms,
-                            coords,
-                            ase_calc=optimizer.ase_calc,
-                            charge=charge,
-                            mult=mult,
-                            T_K=optimizer.T_K,
-                            solvent=optimizer.solvent,
-                            add_alpb_solvation=optimizer.calc in ("AIMNET2", "UMA"),
-                            C_mol_L=optimizer.C_mol_L,
-                            title=f"{name[:-4]}",
-                            tighten_opt_before_vib=(not optimizer.saddle),
-                        )
-
-                        energy += gcorr
-                        num_neg = np.count_nonzero(freqs < 0.0)
-                        elapsed = perf_counter() - t_start
-                        print(
-                            f"Calculated vibrational frequencies ({num_neg} negative) in {time_to_string(elapsed)}\n"
-                        )
-
-                    energies.append(energy)
-                    names_confs.append(name[:-4] + f"_conf{c_n + 1}")
-
-            except Exception as e:
-                print("--> ", name, " - ", e)
-                raise (e)
-
-            if optimizer.constraints[name]:
-                print("Constraints: final values")
-
-                for constraint in optimizer.constraints[name]:
-                    if constraint.type_ == "B":
-                        a, b = constraint.indices
-                        final_value = float(np.linalg.norm(coords[a] - coords[b]))
-                        uom = " Å"
-
-                    elif constraint.type_ == "A":
-                        a, b, c = constraint.indices
-                        final_value = point_angle(coords[a], coords[b], coords[c])
-                        uom = "°"
-
-                    elif constraint.type_ == "D":
-                        a, b, c, d = constraint.indices
-                        final_value = dihedral(
-                            np.array([coords[a], coords[b], coords[c], coords[d]])
-                        )
-                        uom = "°"
-
-                    indices_string = "-".join([str(i) for i in constraint.indices])
                     print(
-                        f"CONSTRAIN -> {constraint.type_}({indices_string}) = {round(final_value, 3)}{uom}"
+                        f"{action} {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
+                    )
+                    t_start = perf_counter()
+
+                    coords, energy, success = ase_popt(
+                        mol.atoms,
+                        coords,
+                        method=optimizer.method,
+                        dispatcher=optimizer.dispatcher,
+                        ase_constraints=active_ase_constraints,
+                        charge=charge,
+                        mult=mult,
+                        calculator=optimizer.calc,
+                        traj=name[:-4] + f"_conf{c_n}_traj",
+                        logfunction=print,
+                        maxiter=1000 if optimizer.opt else 0,
+                        conv_thr="vtight",
+                        solvent=optimizer.solvent,
+                        debug=optimizer.debug,
+                        title=name[:-4] + f"_conf{c_n}_opt",
                     )
 
-                    # revert original indices for the next molecule
-                    if optimizer.smarts_string is not None:
-                        constraint.indices = constraint.old_indices  # type: ignore[attr-defined]
+                    if not success:
+                        raise Exception
 
-                print()
+                    elapsed = perf_counter() - t_start
+
+                    if energy is None:
+                        print(
+                            f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
+                        )
+
+                    elif optimizer.opt:
+                        with open(outname, write_type) as f:
+                            write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
+                        print(
+                            f"{'Appended' if write_type == 'a' else 'Wrote'} optimized structure at {outname} - {time_to_string(elapsed)}\n"
+                        )
+
+                if optimizer.saddle:
+                    if optimizer.calc in ("AIMNET2", "UMA") and optimizer.solvent is not None:
+                        post = f"+ALPB({optimizer.solvent})"
+                    else:
+                        post = ""
+
+                    print(
+                        f"Optimizing TS for {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
+                    )
+                    t_start = perf_counter()
+
+                    constrained_indices_saddle = [
+                        (c.i1, c.i2) for c in active_ase_constraints if type(c) == Spring
+                    ]
+
+                    coords, energy, success = ase_saddle(
+                        mol.atoms,
+                        coords,
+                        method=optimizer.method,
+                        dispatcher=optimizer.dispatcher,
+                        calculator=optimizer.calc,
+                        constrained_indices=constrained_indices_saddle,
+                        irc=False,  # take care of this later
+                        charge=charge,
+                        mult=mult,
+                        traj=name[:-4] + f"_conf{c_n}_traj",
+                        title=name[:-4] + f"_conf{c_n}_saddle",
+                        logfunction=print,
+                        solvent=optimizer.solvent,
+                    )
+
+                    elapsed = perf_counter() - t_start
+
+                    if not success:
+                        print(
+                            f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
+                        )
+
+                    elif optimizer.opt:
+                        with open(outname, write_type) as f:
+                            write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
+                        print(
+                            f"{'Appended' if write_type == 'a' else 'Wrote'} saddle structure at {outname} - {time_to_string(elapsed)}\n"
+                        )
+
+                if optimizer.freq:
+                    from firecode.thermochemistry import ase_vib
+
+                    print(
+                        f"Performing vibrational analysis on {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method})"
+                    )
+                    t_start = perf_counter()
+
+                    freqs, gcorr = ase_vib(
+                        mol.atoms,
+                        coords,
+                        dispatcher=optimizer.dispatcher,
+                        charge=charge,
+                        mult=mult,
+                        T_K=optimizer.T_K,
+                        solvent=optimizer.solvent,
+                        C_mol_L=optimizer.C_mol_L,
+                        title=f"{name[:-4]}",
+                        tighten_opt_before_vib=False,
+                    )
+
+                    energy += gcorr
+                    num_neg = np.count_nonzero(freqs < 0.0)
+                    elapsed = perf_counter() - t_start
+                    print(
+                        f"Calculated vibrational frequencies ({num_neg} negative) in {time_to_string(elapsed)}\n"
+                    )
+
+                energies.append(energy)
+                names_confs.append(name[:-4] + f"_conf{c_n + 1}")
+
+        except Exception as e:
+            print("--> ", name, " - ", e)
+            raise (e)
+
+        if optimizer.constraints[name]:
+            print("Constraints: final values")
+
+            for constraint in optimizer.constraints[name]:
+                if constraint.type_ == "B":
+                    a, b = constraint.indices
+                    final_value = float(np.linalg.norm(coords[a] - coords[b]))
+                    uom = " Å"
+
+                elif constraint.type_ == "A":
+                    a, b, c = constraint.indices
+                    final_value = point_angle(coords[a], coords[b], coords[c])
+                    uom = "°"
+
+                elif constraint.type_ == "D":
+                    a, b, c, d = constraint.indices
+                    final_value = dihedral(np.array([coords[a], coords[b], coords[c], coords[d]]))
+                    uom = "°"
+
+                indices_string = "-".join([str(i) for i in constraint.indices])
+                print(
+                    f"CONSTRAIN -> {constraint.type_}({indices_string}) = {round(final_value, 3)}{uom}"
+                )
+
+                # revert original indices for the next molecule
+                if optimizer.smarts_string is not None:
+                    constraint.indices = constraint.old_indices  # type: ignore[attr-defined]
+
+            print()
 
         if optimizer.irc:
             from firecode.ase_manipulations import ase_irc
@@ -742,8 +743,8 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
         from prettytable import PrettyTable
 
         table = PrettyTable()
-        energy_type = "Free Energy G(Eh)" if optimizer.free_energy else "Potential Energy E(Eh)"
-        letter = "G" if optimizer.free_energy else "E"
+        energy_type = "Free Energy G(Eh)" if optimizer.freq else "Potential Energy E(Eh)"
+        letter = "G" if optimizer.freq else "E"
         table.field_names = ["#", "Filename", energy_type, f"Rel. {letter} (kcal/mol)"]
 
         print()
@@ -762,3 +763,7 @@ def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1)
     electrons = sum(atomnos) - charge
 
     return (multiplicity % 2) != (electrons % 2)
+
+
+if __name__ == "__main__":
+    main()

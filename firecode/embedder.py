@@ -48,6 +48,7 @@ from psutil import virtual_memory
 
 from firecode.algebra import count_clashes, point_angle
 from firecode.ase_manipulations import Constraint
+from firecode.dispatcher import Opt_func_dispatcher
 from firecode.embedder_options import Options, OptionSetter, keywords_dict
 from firecode.embeds import (
     _get_monomolecular_reactive_indices,
@@ -60,7 +61,7 @@ from firecode.graph_manipulations import get_sum_graph
 from firecode.hypermolecule_class import Hypermolecule, Pivot, align_by_moi
 from firecode.multiembed import multiembed_dispatcher
 from firecode.operators import operate
-from firecode.optimization_methods import Opt_func_dispatcher, fitness_check
+from firecode.optimization_methods import fitness_check
 from firecode.references import references
 from firecode.settings import DEFAULT_LEVELS, PROCS
 from firecode.typing_ import Array1D_int
@@ -686,8 +687,8 @@ class Embedder:
 
             if i > 0:
                 cumulative_offset = int(sum(self.ids[:i]))
-                for z in pairings:
-                    z = (z[0] + cumulative_offset, z[1])
+                for i, (index, letter) in enumerate(pairings[:]):
+                    pairings[i] = (index + cumulative_offset, letter)
 
                 if unlabeled != []:
                     for zz in unlabeled:
@@ -710,7 +711,7 @@ class Embedder:
             links[tag].append(index)
 
         # sorting values so that 'a' is the first pairing
-        # cumulative, looks like {'a':[3,45]}
+        # index is cumulative, looks like {'a':[3,45]}
         self.pairings_table: dict[str, tuple[int, int]] = {
             lett: tuple(sorted(indices))  # type: ignore[misc]
             for lett, indices in sorted(links.items(), key=lambda x: x[0])
@@ -1311,13 +1312,9 @@ class Embedder:
                 )
                 self.options.theory_level = "wB97M-NSE"
 
-            self.dispatcher.load_aimnet2_calc(self.options.theory_level, logfunction=self.log)
-
-        if self.options.calculator == "TBLITE":
-            self.dispatcher.load_tblite_calc(self.options.theory_level, self.options.solvent)
-
-        if self.options.calculator == "UMA":
-            self.dispatcher.load_uma_calc(self.options.theory_level)
+        self.dispatcher.get_ase_calc(
+            self.options.theory_level, solvent=self.options.solvent, logfunction=self.log
+        )
 
     def energy_pruning(self, kcal_thr: float | None = None, verbose: bool = True) -> None:
         """Remove high energy structures above kcal_thr."""
@@ -2623,7 +2620,7 @@ class RunEmbedding(Embedder):
             result = opt_func_time_wrapped(
                 atoms=self.atoms,
                 coords=structure,
-                ase_calc=self.dispatcher.ase_calc,
+                dispatcher=self.dispatcher,
                 solvent=self.options.solvent,
                 charge=self.options.charge,
                 mult=self.options.mult,

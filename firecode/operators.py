@@ -36,7 +36,7 @@ from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
-from firecode.calculators._xtb import crest_mtd_search
+from firecode.calculators.xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
 from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
@@ -722,7 +722,6 @@ def distance_scan(embedder: Embedder) -> str:
             mol.atoms,
             coords,
             calculator=embedder.options.calculator,
-            ase_calc=embedder.dispatcher.ase_calc,
             constrained_indices=[list(mol.reactive_indices)],
             constrained_distances=(d,),
             solvent=embedder.options.solvent,
@@ -848,16 +847,6 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
 
     constrained_indices = _get_internal_constraints(filename, embedder)
 
-    if constrained_indices:
-        s = "s" if len(constrained_indices) > 1 else ""
-        i_str = ""
-        for i1, i2 in constrained_indices:
-            i_str += f"B({i1}-{i2}) "
-
-        constr_str = f"- biasing v0 with bond vibration{s} [{i_str[:-1]}]"
-    else:
-        constr_str = "(ignoring all constraints)"
-
     # The distance_scan> operator returns all
     # structures of the scan, but we want to
     # perform a saddle optimization only on
@@ -886,7 +875,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
 
     s = "s" if len(mol.coords) > 1 else ""
     embedder.log(
-        f"\n--> Saddle operator: performing {len(mol.coords)} saddle optimization{s} via Sella {constr_str}"
+        f"\n--> Saddle operator: performing {len(mol.coords)} saddle optimization{s} via Sella"
     )
 
     opt_coords_list: list[Array2D_float] = []
@@ -899,12 +888,11 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
         opt_coords, _, success = ase_saddle(
             atoms=mol.atoms,
             coords=coords,
-            ase_calc=embedder.dispatcher.ase_calc,
+            dispatcher=embedder.dispatcher,
             charge=hypmol.charge,
             mult=hypmol.mult,
             calculator=embedder.options.calculator,
             method=embedder.options.theory_level,
-            add_alpb_solvation=embedder.options.calculator in ("UMA", "AIMNET2"),
             solvent=embedder.options.solvent,
             constrained_indices=constrained_indices,
             assert_convergence=True,
