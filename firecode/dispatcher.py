@@ -141,7 +141,8 @@ class Opt_func_dispatcher:
             import torch
             from aimnet.calculators import AIMNet2ASE
 
-        except ImportError:
+        except ImportError as err:
+            print(err)
             raise Exception(
                 (
                     "Cannot import AIMNet2 python bindings for FIRECODE. Install them with:\n"

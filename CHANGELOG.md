@@ -19,6 +19,7 @@
 - Added delta solvation implementation for gas-phase ML models, providing energies _and_ forces via TBLITE in the geometry optimization loop. Activate with environmental variable FIRECODE_SOLV_IMPLEM_FOR_ML="opt"
 - Dropped support for native XTB calculator, and XTB-pyhton interface, since TBLITE is the modern successor.
 - Added basic [racerts](https://github.com/digital-chemistry-laboratory/racerts) interface ("rdkit_search>" operator, alias of "racerts>").
+- Added `freq>` operator.
 
 ## FIRECODE 1.6.0 🔥 (March 11 2026)
 - Refreshed constraints handling in operators.

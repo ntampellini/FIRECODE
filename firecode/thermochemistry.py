@@ -137,6 +137,7 @@ def rrho_thermo(
     qrrho_ref_cm1: float = 100.0,
     qrrho_alpha: float = 4.0,
     solv: Optional[str] = None,
+    assert_gs_or_ts: bool = False,
 ) -> dict[str, Any]:
     # Remove 3/5/6 zero modes
     I = atoms.get_moments_of_inertia()  # type:ignore[no-untyped-call]
@@ -162,10 +163,11 @@ def rrho_thermo(
         if abs(f) > 1e-3:
             vib_cm_all.append(abs(f))
 
-    assert (len(freqs_cm1) - len(vib_cm_all) - start) <= 1, (
-        f"Frequency mismatch: expected {len(freqs_cm1) - start} (GS) or "
-        f"{len(freqs_cm1) - start - 1} (TS) frequencies, but {len(vib_cm_all)} were read."
-    )
+    if assert_gs_or_ts:
+        assert (len(freqs_cm1) - len(vib_cm_all) - start) <= 1, (
+            f"Frequency mismatch: expected {len(freqs_cm1) - start} (GS) or "
+            f"{len(freqs_cm1) - start - 1} (TS) frequencies, but {len(vib_cm_all)} were read."
+        )
 
     if cutoff_cm1 is None:
         cutoff_cm1 = 1.0 if qrrho else 35.0

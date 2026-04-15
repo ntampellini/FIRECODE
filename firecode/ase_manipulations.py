@@ -45,7 +45,7 @@ from firecode.algebra import point_angle
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.settings import CALCULATOR, DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
-from firecode.units import EV_TO_KCAL
+from firecode.units import EH_TO_KCAL, EV_TO_KCAL
 from firecode.utils import (
     HiddenPrints,
     NewFolderContext,
@@ -1094,10 +1094,6 @@ def ase_popt(
 
         if debug:
             if traj is not None:
-                # write optimized structure
-                with open(f"{title}_opt.xyz", "w") as f:
-                    write_xyz(atoms, ase_atoms.get_positions(), f)  # type: ignore[no-untyped-call]
-
                 # convert ASE trajectory and remove the original
                 getoutput(f"ase convert {traj} {traj}.xyz")
                 os.remove(traj)
@@ -1145,6 +1141,13 @@ def ase_popt(
                 coords=new_structure,
             )
 
+        if debug:
+            # write optimized structure
+            with open(f"{title}_opt.xyz", "w") as f:
+                write_xyz(
+                    atoms, new_structure, f, title=f"Final energy: {energy / EH_TO_KCAL:.8f} Eh"
+                )
+
     return new_structure, energy, success
 
 
@@ -1179,7 +1182,7 @@ def ase_saddle(
         method=method,
         solvent=solvent,
         constrained_indices=constrained_indices,
-        maxiter=maxiter or 1000,
+        maxiter=maxiter or 250,
         conv_thr="vtight",
         assert_convergence=assert_convergence,
         optimizer="SELLA",

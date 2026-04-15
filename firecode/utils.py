@@ -216,11 +216,14 @@ def read_xyz_energies(
 
         # last resort, parse the first thing that looks like an energy and assume it's in Eh
         elif number_matches:
-            energies = [float(re.findall(r"-*\d+.\d+", e)[0].strip()) for e in comment_lines]
-            if verbose and logfunction is not None:
-                logfunction(
-                    f"--> Read {len(comment_lines)} energies from {filename} (first number, no UOM: assuming Eh units)."
-                )
+            try:
+                energies = [float(re.findall(r"-*\d+.\d+", e)[0].strip()) for e in comment_lines]
+                if verbose and logfunction is not None:
+                    logfunction(
+                        f"--> Read {len(comment_lines)} energies from {filename} (first number, no UOM: assuming Eh units)."
+                    )
+            except Exception:
+                return None
 
         elif verbose and logfunction is not None:
             logfunction(f"--> Could not parse energies for {filename} - skipping.")

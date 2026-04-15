@@ -114,6 +114,9 @@ def operate(input_string: str, embedder: Embedder) -> str:
     elif any(string in input_string for string in ("saddle>", "ts>")):
         outname = saddle_operator(filename, embedder)
 
+    elif any(string in input_string for string in ("freq>", "thermo>")):
+        outname = freq_operator(filename, embedder)
+
     else:
         op = input_string.split(">", maxsplit=1)[0]
         raise Exception(f"Operator {op} not recognized.")
@@ -936,6 +939,52 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
                 coords,
                 f,
                 title=f"Saddle-optimized conf. {i} - G = {free_energy / EH_TO_KCAL:.8f} Eh - Rel. G. = {free_energy - free_energies[0]:.2f} kcal/mol",
+            )
+
+    return outname
+
+
+def freq_operator(filename: str, embedder: Embedder) -> str:
+    """Run a frequency calculation on the input structure(s)."""
+    from firecode.thermochemistry import get_free_energies
+
+    mol = read_xyz(filename)
+
+    # link corresponding hypermolecule
+    for i, hypmol in enumerate(embedder.objects):
+        if hypmol.filename == filename:
+            break
+
+    s = "s" if len(mol.coords) > 1 else ""
+    embedder.log(
+        f"\n--> Freq operator: performing {len(mol.coords)} frequency calculation{s} via ASE"
+    )
+
+    free_energies = get_free_energies(
+        embedder=embedder,
+        atoms=mol.atoms,
+        structures=mol.coords,
+        charge=hypmol.charge,
+        mult=hypmol.mult,
+        title=f"{hypmol.rootname}",
+        tighten_opt_before_vib=False,
+        logfunction=embedder.log,
+    )
+
+    # sorting structures based on energy
+    sorted_indices = np.argsort(free_energies)
+    free_energies = free_energies[sorted_indices]
+    coords = mol.coords[sorted_indices]
+
+    outname = f"{hypmol.rootname}_freq.xyz"
+
+    with open(outname, "w") as f:
+        for i, (coords, free_energy) in enumerate(zip(align_structures(coords), free_energies)):
+            write_xyz(
+                mol.atoms,
+                coords,
+                f,
+                title=f"Conf. {i} - G = {free_energy / EH_TO_KCAL:.8f} Eh - Rel. G. = {free_energy - free_energies[0]:.2f} kcal/mol",
             )
 
     return outname

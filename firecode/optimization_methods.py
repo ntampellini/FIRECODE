@@ -117,6 +117,7 @@ def optimize(
         constrained_dihedrals_values=constrained_dihedrals_values,
         constrained_angles_indices=constrained_angles_indices,
         constrained_angles_values=constrained_angles_values,
+        calculator=calculator,
         method=method,
         procs=procs,
         solvent=solvent,
