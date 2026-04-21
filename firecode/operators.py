@@ -38,10 +38,13 @@ from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
 from firecode.calculators.xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
+from firecode.md.equilibration import equilibrate_operator
+from firecode.md.packmol import solvate_molecule
 from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
+from firecode.solvents import solvent_data
 from firecode.typing_ import Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EH_TO_KCAL
 from firecode.utils import (
@@ -117,6 +120,14 @@ def operate(input_string: str, embedder: Embedder) -> str:
     elif any(string in input_string for string in ("freq>", "thermo>")):
         outname = freq_operator(filename, embedder)
 
+    elif "packmol>" in input_string:
+        outname = packmol_operator(filename, embedder)
+
+    elif "equilibrate>" in input_string:
+        outname = equilibrate_operator(filename, embedder)
+
+    ##### OVERLOAD
+
     else:
         op = input_string.split(">", maxsplit=1)[0]
         raise Exception(f"Operator {op} not recognized.")
@@ -156,7 +167,7 @@ def csearch_operator(
             opt_coords,
             charge=embedder.options.charge,
             mult=embedder.options.mult,
-            constrained_indices=_get_internal_constraints(filename, embedder),
+            constrained_indices=embedder._get_internal_constraints(filename),
             keep_hb=keep_hb,
             mode=mode,
             n_out=embedder.options.max_confs // len(data.coords),
@@ -175,7 +186,7 @@ def csearch_operator(
 
     print(f"Writing conformers to file...{' ' * 10}", end="\r")
 
-    confname = filename[:-4] + "_confs.xyz"
+    confname = data.basename + "_confs.xyz"
     with open(confname, "w") as f:
         for i, conformer in enumerate(conformers_array):
             write_xyz(data.atoms, conformer, f, title=f"Generated conformer {i}")
@@ -203,7 +214,7 @@ def opt_operator(
             )
         )
 
-    constrained_indices = _get_internal_constraints(filename, embedder)
+    constrained_indices = embedder._get_internal_constraints(filename)
     constrained_distances = [
         embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
     ]
@@ -294,7 +305,7 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
 
     from firecode.ase_manipulations import ase_neb
 
-    title = filename[:-4] + "_NEB"
+    title = data.basename + "_NEB"
     ci_str = "-CI" if embedder.options.neb.climbing_image else ""
 
     # preopt unless user specifies not to
@@ -437,7 +448,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
             )
 
     logfunction = embedder.log
-    constrained_indices = _get_internal_constraints(filename, embedder)
+    constrained_indices = embedder._get_internal_constraints(filename)
     constrained_distances = [
         embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
     ]
@@ -851,7 +862,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     from firecode.ase_manipulations import ase_saddle
     from firecode.thermochemistry import get_free_energies
 
-    constrained_indices = _get_internal_constraints(filename, embedder)
+    constrained_indices = embedder._get_internal_constraints(filename)
 
     # The distance_scan> operator returns all
     # structures of the scan, but we want to
@@ -990,6 +1001,31 @@ def freq_operator(filename: str, embedder: Embedder) -> str:
     return outname
 
 
+def packmol_operator(filename: str, embedder: Embedder) -> str:
+    """Solvate the input molecule."""
+    if embedder.options.solvent is None:
+        raise Exception("Please specify a solvent for `packmol>`.")
+
+    mol = read_xyz(filename)
+
+    if len(mol.coords) > 1:
+        raise NotImplementedError
+
+    out_dict = solvate_molecule(
+        solute_atoms=mol.atoms,
+        solute_coords=mol.coords[0],
+        solvent_name=embedder.options.solvent,
+        solvent_data=solvent_data,
+        title=mol.basename,
+        logfunction=embedder.log,
+    )
+
+    # save meaningful attributes to embedder md_data dict
+    embedder.options.md_data = out_dict
+
+    return str(out_dict["output_xyz"])
+
+
 def get_crest_version() -> int | None:
     """Returns an integer (2 or 3) representing the version of CREST that is installed."""
     if which("crest") is None:
@@ -998,16 +1034,3 @@ def get_crest_version() -> int | None:
     crest_version = int(getoutput("crest --version | grep Version").split()[1].split(".")[0])
 
     return crest_version
-
-
-def _get_internal_constraints(filename: str, embedder: Embedder) -> list[tuple[int, int]]:
-    """Returns a list with distance constraints indices."""
-    mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
-    # get embedder,objects index of molecule to get internal constraints of
-
-    out = []
-    for _, tgt in embedder.pairings_dict[mol_id].items():
-        if isinstance(tgt, tuple):
-            out.append(tgt)
-
-    return out

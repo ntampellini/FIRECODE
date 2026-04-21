@@ -49,9 +49,7 @@ def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 100
     """Run an rdkit conformational search, using racerts if constraints are present."""
     from prism_pruner.utils import flatten
 
-    from firecode.operators import _get_internal_constraints
-
-    constrained_indices = set(flatten(_get_internal_constraints(filename, embedder), typefunc=int))
+    constrained_indices = set(flatten(embedder._get_internal_constraints(filename), typefunc=int))
 
     if constrained_indices:
         embedder.log(f"--> Performing a racerTS conformational search via RDKit on {filename}.")

@@ -921,6 +921,33 @@ def convert_constraints_to_ase(
     return constraints
 
 
+def get_ase_constraints_from_embedder(filename: str, embedder: Embedder) -> list[ASEConstraint]:
+    """Get a list of ASEConstraint objects from the filename and an Embedder object."""
+    mol = read_xyz(filename)
+
+    constrained_indices = embedder._get_internal_constraints(filename)
+    constrained_distances = [
+        embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
+    ]
+
+    (
+        constrained_angles_indices,
+        constrained_angles_values,
+        constrained_dihedrals_indices,
+        constrained_dihedrals_values,
+    ) = embedder._get_angle_dih_constraints(filename)
+
+    return convert_constraints_to_ase(
+        mol.coords[0],
+        constrained_indices=constrained_indices,
+        constrained_distances=constrained_distances,
+        constrained_dihedrals_indices=constrained_dihedrals_indices,
+        constrained_dihedrals_values=constrained_dihedrals_values,
+        constrained_angles_indices=constrained_angles_indices,
+        constrained_angles_values=constrained_angles_values,
+    )
+
+
 def ase_popt(
     atoms: Array1D_str,
     coords: Array2D_float,

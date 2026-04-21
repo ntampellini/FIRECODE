@@ -178,7 +178,7 @@ class Options:
     freq: bool = False
     calculator: str = CALCULATOR
     theory_level: str | MaybeNone = None  # set later in _calculator_setup()
-    solvent: str | None = None
+    solvent: str | MaybeNone = None
     scramble_check: bool = False
     charge: int = 0
     mult: int = 1
@@ -231,6 +231,9 @@ class Options:
 
     single_thread: bool = FORCE_SINGLE_THREAD
     # enforce the use of a single thread in multimolecular optimization
+
+    md_data: dict[str, Any] = field(default_factory=dict)
+    # data for and from MD simulations
 
     def __repr__(self) -> str:
         d = {var: self.__getattribute__(var) for var in dir(self) if var[0] != "_"}

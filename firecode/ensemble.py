@@ -43,12 +43,13 @@ class Ensemble:
     atoms: Array1D_str
     coords: Array3D_float
     filename: str = ""
+    basename: str = ""
     atomnos: Array1D_int = field(default_factory=lambda: np.array([], dtype=int))
     energies: Array1D_float = field(default_factory=lambda: np.array([], dtype=float))
     logfunction: Callable[[str], None] | None = print
 
     @classmethod
-    def from_xyz(cls, file: Path | str, read_energies: bool = False) -> Self:
+    def from_xyz(self, file: Path | str, read_energies: bool = False) -> Self:
         """Generate ensemble from a multiple conformer xyz file."""
         coords = []
         atoms = []
@@ -70,7 +71,7 @@ class Ensemble:
                     for _ in range(int(num)):
                         atom, *xyz = next(f).split()
                         conf_atoms.append(atom)
-                        conf_coords.append([float(x) for x in xyz])
+                        conf_coords.append([float(x) for x in xyz[0:3]])
 
                     atoms.append(conf_atoms)
                     coords.append(conf_coords)
@@ -80,10 +81,11 @@ class Ensemble:
 
         atomnos = np.array([pt.number(letter) for letter in atoms[0]])
 
-        return cls(
+        return self(
             atoms=np.array(atoms[0]),
             coords=np.array(coords),
             filename=str(file),
+            basename=Path(str(file)).stem,
             atomnos=atomnos,
             energies=np.array(energies),
         )

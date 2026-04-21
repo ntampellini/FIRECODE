@@ -1633,6 +1633,18 @@ class Embedder:
         )
         return [self.get_pairing_dists_from_constrained_indices(pair) for pair in constraints]
 
+    def _get_internal_constraints(self, filename: str) -> list[tuple[int, int]]:
+        """Returns a list with distance constraints indices."""
+        mol_id = next((i for i, mol in enumerate(self.objects) if mol.filename == filename))
+        # get embedder,objects index of molecule to get internal constraints of
+
+        out = []
+        for _, tgt in self.pairings_dict[mol_id].items():
+            if isinstance(tgt, tuple):
+                out.append(tgt)
+
+        return out
+
     def write_structures(
         self,
         tag: str,

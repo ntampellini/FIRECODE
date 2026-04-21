@@ -527,7 +527,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
 
         try:
             # define outname and clear existing
-            outname = name if not optimizer.newfile else name[:-4] + "_opt.xyz"
+            outname = name if not optimizer.newfile else mol.basename + "_opt.xyz"
             if optimizer.newfile and (outname in op_sys.listdir()):
                 op_sys.remove(outname)
             write_type = "a" if optimizer.newfile else "w"
@@ -579,13 +579,13 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         charge=charge,
                         mult=mult,
                         calculator=optimizer.calc,
-                        traj=name[:-4] + f"_conf{c_n}_traj",
+                        traj=mol.basename + f"_conf{c_n}_traj",
                         logfunction=print,
                         maxiter=1000 if optimizer.opt else 0,
                         conv_thr="vtight",
                         solvent=optimizer.solvent,
                         debug=optimizer.debug,
-                        title=name[:-4] + f"_conf{c_n}_opt",
+                        title=mol.basename + f"_conf{c_n}_opt",
                     )
 
                     if not success:
@@ -630,8 +630,8 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         irc=False,  # take care of this later
                         charge=charge,
                         mult=mult,
-                        traj=name[:-4] + f"_conf{c_n}_traj",
-                        title=name[:-4] + f"_conf{c_n}_saddle",
+                        traj=mol.basename + f"_conf{c_n}_traj",
+                        title=mol.basename + f"_conf{c_n}_saddle",
                         logfunction=print,
                         solvent=optimizer.solvent,
                     )
@@ -667,7 +667,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                         T_K=optimizer.T_K,
                         solvent=optimizer.solvent,
                         C_mol_L=optimizer.C_mol_L,
-                        title=f"{name[:-4]}",
+                        title=mol.basename,
                         tighten_opt_before_vib=False,
                     )
 
@@ -679,7 +679,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     )
 
                 energies.append(energy)
-                names_confs.append(name[:-4] + f"_conf{c_n + 1}")
+                names_confs.append(mol.basename + f"_conf{c_n + 1}")
 
         except Exception as e:
             print("--> ", name, " - ", e)
@@ -726,8 +726,8 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     ase_calc=optimizer.ase_calc,
                     charge=charge,
                     mult=mult,
-                    traj=name[:-4] + "_traj",
-                    title=f"{name[:-4]}_conf{c_n}",
+                    traj=mol.basename + "_traj",
+                    title=f"{mol.basename}_conf{c_n}",
                     logfunction=print,
                     solvent=optimizer.solvent,
                 )

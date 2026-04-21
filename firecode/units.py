@@ -20,13 +20,15 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from scipy.constants import N_A
+
 ANGSTROEM_TO_BOHR = 0.529177249
 EH_TO_EV = 27.211399
 EH_TO_KCAL = 627.5096080305927
 EV_TO_KCAL = 23.060541945329334
 EV_TO_WAVENUMS = 8065.544
 R = 0.001985877534  # kcal/(mol*K)
-AVOGADRO_NA = 6.02214076e23
+AVOGADRO_NA = N_A
 
 KB__J_K = 1.380649e-23
 PLANCK_h__J_s = 6.62607015e-34

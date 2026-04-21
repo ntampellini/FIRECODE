@@ -37,7 +37,7 @@ the elements' covalent radii.
 Constraint lines, like molecule lines, can also read properties. The only implemented for now is
 "fixed" (default is ``fixed=true``) mirroring the behavior of uppercase and lowercase constraints.
 
-Examples of inputs can be found on the :ref:`examples <exs>` page.
+Examples of inputs can be found below.
 
 Operators
 =========
@@ -141,9 +141,7 @@ Work is in progress to expand this section with more examples.
    # enforcing all 4 constraints.
 
    # saddle> The structures will be optimized to a first order saddle point
-   # with no active constraints, using the two fixed constraints
-   # to generate a guess for the saddle eigenvector.
-   # The temporary (i.e. non-fixed) constraints will be ignored.
+   # with no active constraints.
 
    # Thermochemistry will be calculated at 300 K.
 
