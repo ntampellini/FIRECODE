@@ -22,21 +22,18 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
 from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.ensemble import Ensemble
-from firecode.settings import (
-    CHECKPOINT_EVERY,
-    DEFAULT_LEVELS,
-)
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
-from firecode.utils import loadbar, molecule_check, scramble_check, write_xyz
+from firecode.utils import loadbar, molecule_check, scramble_check, str_to_var, write_xyz
 
 if TYPE_CHECKING:
     from networkx import Graph
@@ -56,7 +53,6 @@ def optimize(
     constrained_angles_indices: Sequence[Sequence[int]] | None = None,
     constrained_angles_values: Sequence[float | None] | None = None,
     mols_graphs: Sequence[Graph] | None = None,
-    procs: int | None = 1,
     solvent: str | None = None,
     charge: int = 0,
     mult: int = 1,
@@ -93,7 +89,7 @@ def optimize(
         )
 
     if method is None:
-        method = DEFAULT_LEVELS[calculator]
+        method = os.environ.get(f"FIRECODE_DEFAULT_LEVEL_{calculator}")
 
     if constrained_distances is not None:
         len_ci = len(constrained_indices) if constrained_indices is not None else 0
@@ -105,7 +101,6 @@ def optimize(
     t_start = perf_counter()
 
     constrained_indices = constrained_indices or []
-    procs = procs or 1
 
     # success checks that calculation had a normal termination
     opt_coords, energy, success = opt_func(  # type: ignore[operator]
@@ -119,7 +114,6 @@ def optimize(
         constrained_angles_values=constrained_angles_values,
         calculator=calculator,
         method=method,
-        procs=procs,
         solvent=solvent,
         maxiter=maxiter,
         conv_thr=conv_thr,
@@ -188,7 +182,6 @@ def refine_structures(
     structures: Array2D_float,
     calculator: str,
     method: str | None,
-    procs: int | None,
     charge: int = 0,
     mult: int = 1,
     constrained_indices: Sequence[Sequence[int]] | None = None,
@@ -208,6 +201,9 @@ def refine_structures(
     """
     checkpoint_name = None
     old_checkpoint_name = None
+    checkpoint_every = cast(
+        "int", str_to_var(os.environ.get("FIRECODE_CHECKPOINT_EVERY", ""), enforced_type=int) or 50
+    )
 
     # make ensemble
     ens = Ensemble(
@@ -241,7 +237,6 @@ def refine_structures(
             constrained_angles_indices=constrained_angles_indices,
             constrained_angles_values=constrained_angles_values,
             method=method,
-            procs=procs,
             solvent=solvent,
             title=f"Structure_{i + 1}",
             logfunction=logfunction,
@@ -258,7 +253,7 @@ def refine_structures(
 
         # Update checkpoint every 50 optimized structures,
         # and give an estimate of the remaining time
-        if i % CHECKPOINT_EVERY == CHECKPOINT_EVERY - 1:
+        if i % checkpoint_every == checkpoint_every - 1:
             if checkpoint_name is not None:
                 old_checkpoint_name = checkpoint_name[:]
 

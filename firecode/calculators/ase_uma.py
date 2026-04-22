@@ -25,8 +25,6 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Callable
 
-from firecode.settings import DEFAULT_LEVELS, UMA_MODEL_PATH
-
 if TYPE_CHECKING:
     from fairchem.core import FAIRChemCalculator
 
@@ -50,7 +48,7 @@ def get_uma_calc(
         )
 
     gpu_bool = cuda.is_available()
-    method = method or DEFAULT_LEVELS["UMA"]
+    method = method or str(os.environ.get("FIRECODE_DEFAULT_LEVEL_UMA"))
 
     if gpu_bool:
         if logfunction is not None:
@@ -60,18 +58,21 @@ def get_uma_calc(
         logfunction("--> No CUDA devices detected: loading model on CPU")
         logfunction(f"--> Loading UMA/{method.upper()} model from file")
 
-    if UMA_MODEL_PATH[0] == ".":
-        path = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), os.path.basename(UMA_MODEL_PATH)
+    model_path = os.environ.get("FIRECODE_PATH_TO_UMA_MODEL")
+
+    # make relative path absolute
+    if model_path == ".":
+        model_path = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)), os.path.basename(model_path)
         )
-    else:
-        path = UMA_MODEL_PATH
 
     try:
-        predictor = load_predict_unit(path, device="cuda" if gpu_bool else "cpu")
+        predictor = load_predict_unit(model_path, device="cuda" if gpu_bool else "cpu")
 
     except FileNotFoundError:
-        raise FileNotFoundError(f'Invalid path for UMA model: UMA_MODEL_PATH="{path}".')
+        raise FileNotFoundError(
+            f'Invalid path for UMA model: FIRECODE_PATH_TO_UMA_MODEL="{model_path}".'
+        )
 
     ase_calc = FAIRChemCalculator(predictor, task_name=method.lower())
     return ase_calc

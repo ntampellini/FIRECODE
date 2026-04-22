@@ -21,12 +21,22 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 """
 
 import os
+import re
+from pathlib import Path
 
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import PathValidator
 
-from firecode.settings import DEFAULT_FF_LEVELS, DEFAULT_LEVELS, UMA_MODEL_PATH
+
+def sub_value(string: str, key: str, value: str) -> str:
+    """Returns a new string with the settings.py syntax."""
+    return re.sub(
+        f'{key}=".*"',
+        f'{key}="{value}"',
+        string,
+        count=1,
+    )
 
 
 def run_setup() -> None:
@@ -39,37 +49,17 @@ def run_setup() -> None:
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
     properties = {
-        "FF_OPT_BOOL": False,
-        "FF_CALC": None,
-        "NEW_FF_DEFAULT": None,
-        "CALCULATOR": None,
-        "NEW_DEFAULT": None,
-        "NEW_COMMAND": None,
-        "UMA_MODEL_PATH": None,
-        "PROCS": 4,
-        "MEM_GB": 4,
+        "FIRECODE_CALCULATOR": "",
+        "FIRECODE_PATH_TO_UMA_MODEL": "",
     }
 
     print("\nFIRECODE setup:\n")
 
     #########################################################################################
 
-    selected_calc = inquirer.select(  # type: ignore[attr-defined]
-        message="What Force Field calculator would you like to use?",
-        choices=[
-            Choice(value=None, name="None (turn off FF optimization)"),
-            Choice(value="XTB", name="XTB"),
-        ],
-        default=None,
-    ).execute()
+    # FIRECODE_CALCULATOR
 
-    if selected_calc is not None:
-        properties["FF_CALC"] = selected_calc
-        properties["FF_OPT_BOOL"] = True
-    else:
-        properties["FF_OPT_BOOL"] = False
-
-    properties["CALCULATOR"] = inquirer.select(  # type: ignore[attr-defined]
+    properties["FIRECODE_CALCULATOR"] = inquirer.select(  # type: ignore[attr-defined]
         message="What main calculator would you like to use?",
         choices=[
             Choice(value="AIMNET2", name="AIMNET2"),
@@ -78,53 +68,34 @@ def run_setup() -> None:
             Choice(value="ORCA", name="ORCA"),
             Choice(value="UMA", name="UMA"),
         ],
-        default="XTB",
+        default="TBLITE",
     ).execute()
 
     #########################################################################################
 
-    properties["NEW_DEFAULT"] = inquirer.text(  # type: ignore[attr-defined]
-        message=f"The default level for {properties['CALCULATOR']} calculations is '{DEFAULT_LEVELS[properties['CALCULATOR']]}'.\n"  # type: ignore[index]
+    # FIRECODE_DEFAULT_LEVEL_{calc}
+
+    kw_name = f"FIRECODE_DEFAULT_LEVEL_{properties['FIRECODE_CALCULATOR']}"
+    old_default = str(os.environ.get(kw_name))
+    properties[kw_name] = inquirer.text(  # type: ignore[attr-defined]
+        message=f"The default level for {properties['FIRECODE_CALCULATOR']} calculations is '{old_default}'.\n"
         + "If you would like to change it, type it here, otherwise press enter:",
-        default=DEFAULT_LEVELS[properties["CALCULATOR"]],  # type: ignore[index]
+        default=old_default,
     ).execute()
 
     #########################################################################################
 
-    if properties["CALCULATOR"] == "UMA":  # type: ignore
-        properties["UMA_MODEL_PATH"] = inquirer.filepath(  # type: ignore[attr-defined]
+    # FIRECODE_PATH_TO_UMA_MODEL
+
+    if properties["FIRECODE_CALCULATOR"] == "UMA":
+        old_default = str(Path(str(os.environ.get("FIRECODE_PATH_TO_UMA_MODEL", ""))))
+        properties["FIRECODE_PATH_TO_UMA_MODEL"] = inquirer.filepath(  # type: ignore[attr-defined]
             message="Please specify the location of the UMA model:",
-            default=UMA_MODEL_PATH,
+            default=old_default,
             validate=PathValidator(is_file=True, message="Please specify a file"),
         ).execute()
 
-    if properties["CALCULATOR"] in ["ORCA", "XTB"]:  # type: ignore
-        properties["PROCS"] = inquirer.text(  # type: ignore[attr-defined]
-            message=f"How many cores should {properties['CALCULATOR']} jobs run on?:",
-            default=str(properties["PROCS"]),
-            validate=lambda inp: inp.isdigit(),
-            filter=int,
-        ).execute()
-
-    if properties["CALCULATOR"] == "ORCA":  # type: ignore
-        properties["MEM_GB"] = inquirer.text(  # type: ignore[attr-defined]
-            message="How much memory per core should a ORCA job have, in GBs?:",
-            default=str(properties["MEM_GB"]),
-            validate=lambda inp: inp.isdigit(),
-            filter=int,
-        ).execute()
-
     #########################################################################################
-
-    rank = {
-        "XTB": 1,
-        "TBLITE": 2,
-        "AIMNET2": 3,
-        "UMA": 4,
-        "ORCA": 5,
-    }
-
-    q = '"'
 
     with open("settings.py", "r") as f:
         lines = f.readlines()
@@ -132,63 +103,21 @@ def run_setup() -> None:
     old_lines = lines.copy()
 
     for _l, line in enumerate(old_lines):
-        if "FF_OPT_BOOL =" in line:
-            lines[_l] = "FF_OPT_BOOL = " + str(properties["FF_OPT_BOOL"]) + "\n"
-            FF_OPT_BOOL = properties["FF_OPT_BOOL"]
-
-        if "FF_CALC =" in line:
-            _q = q if properties["FF_CALC"] is not None else ""
-            lines[_l] = "FF_CALC: str | None = " + _q + str(properties["FF_CALC"]) + _q + "\n"
-            FF_CALC = properties["FF_CALC"]
-
-        elif "CALCULATOR =" in line:
-            lines[_l] = "CALCULATOR = " + q + properties["CALCULATOR"] + q + "\n"  # type: ignore
-            CALCULATOR = properties["CALCULATOR"]
-
-        elif "DEFAULT_LEVELS = {" in line:
-            if properties["NEW_DEFAULT"] is not None:
-                lines[_l + rank[properties["CALCULATOR"]]] = (  # type: ignore[index]
-                    f"    {q}{properties['CALCULATOR']}{q}:{q}{properties['NEW_DEFAULT']}{q},\n"
-                )
-                DEFAULT_LEVELS[CALCULATOR] = properties["NEW_DEFAULT"]  # type: ignore
-
-        elif "DEFAULT_FF_LEVELS = {" in line:
-            if properties["NEW_FF_DEFAULT"] is not None:
-                lines[_l + rank[properties["FF_CALC"]]] = (  # type: ignore[index]
-                    f"    {q}{properties['FF_CALC']}{q}:{q}{properties['NEW_FF_DEFAULT']}{q},\n"
-                )
-                DEFAULT_FF_LEVELS[FF_CALC] = properties["NEW_FF_DEFAULT"]  # type: ignore
-
-        elif "COMMANDS = {" in line:
-            if properties["NEW_COMMAND"] is not None:
-                lines[_l + rank[properties["CALCULATOR"]]] = (  # type: ignore[index]
-                    f"    {q}{properties['CALCULATOR']}{q}:{q}{properties['NEW_COMMAND']}{q},\n"
-                )
-
-        elif "PROCS =" in line:
-            lines[_l] = f"PROCS = {properties['PROCS']}\n"
-            PROCS = properties["PROCS"]
-
-        elif "MEM_GB =" in line:
-            lines[_l] = f"MEM_GB = {properties['MEM_GB']}\n"
-            MEM_GB = properties["MEM_GB"]
-
-        elif "UMA_MODEL_PATH =" in line:
-            lines[_l] = f"UMA_MODEL_PATH = {q}{properties['UMA_MODEL_PATH']}{q}\n"
+        for key, value in properties.items():
+            if key in line:
+                lines[_l] = sub_value(line, key, value=value)
 
     with open("settings.py", "w") as f:
         f.write("".join(lines))
 
     print("\nFIRECODE setup performed correctly.")
 
-    ff = f"{FF_CALC}/{DEFAULT_FF_LEVELS[FF_CALC]}" if FF_OPT_BOOL else "Turned off"  # type: ignore[index]
-    opt = f"{CALCULATOR}/{DEFAULT_LEVELS[CALCULATOR]}"  # type: ignore[index]
+    opt = f"{properties['FIRECODE_CALCULATOR']}/{properties[kw_name]}"
 
-    s = f"  FF OPT    : {ff}\n  OPT       : {opt}\n  PROCS     : {PROCS}"
-    s += f"\n  MEM       : {MEM_GB} GB"
+    s = f"  OPT       : {opt}\n"
 
-    if properties["CALCULATOR"] == "UMA":  # type: ignore
-        s += f"\n  UMA MODEL : {properties['UMA_MODEL_PATH']}"
+    if properties["FIRECODE_CALCULATOR"] == "UMA":
+        s += f"  UMA MODEL : {properties['FIRECODE_PATH_TO_UMA_MODEL']}"
 
     s += "\n"
 

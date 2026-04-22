@@ -7,10 +7,11 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import Mol as RDKitMol
 
+from firecode.context_managers import NewFolderContext
 from firecode.pt import pt
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float
 from firecode.units import AVOGADRO_NA
-from firecode.utils import NewFolderContext, read_xyz, write_xyz
+from firecode.utils import read_xyz, write_xyz
 
 
 def solvate_molecule(

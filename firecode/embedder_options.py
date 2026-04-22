@@ -22,17 +22,12 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable, cast
 
-from firecode.settings import (
-    CALCULATOR,
-    DEFAULT_FF_LEVELS,
-    FF_CALC,
-    FF_OPT_BOOL,
-    FORCE_SINGLE_THREAD,
-)
 from firecode.typing_ import MaybeNone
+from firecode.utils import str_to_var
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder
@@ -54,7 +49,7 @@ keywords_dict = {
     # the distance threshold at which two atoms are considered
     # clashing. The more forgiving, the more structures will reach
     # the geometry optimization step. Syntax: `CLASHES(num=3,dist=1.2)`
-    "CRESTNCI": 1,  # passes the "--nci" flag to CREST metadynamic conformational searches.
+    "NCI": 1,  # applies ellipsoid potential in CREST and GOAT runs.
     "CRESTLEVEL": 1,  # level of the CREST run
     "DEEP": 1,  # Performs a deeper search, retaining more starting points
     # for calculations and smaller turning angles.
@@ -67,9 +62,6 @@ keywords_dict = {
     "EZPROT": 1,  # Double bond protection
     "FFOPT": 1,  # Manually turn on ``FF=ON`` or off ``FF=OFF`` the force
     # field optimization step, overriding the value in ``settings.py``.
-    "FFCALC": 1,  # Manually overrides the force field calculator in "settings.py"
-    "FFLEVEL": 1,  # Manually set the theory level to be used.
-    # . Syntax: `FFLEVEL=UFF
     "FREQ": 1,  # Run frequency calculation after geometry optimization.
     "IMAGES": 1,  # Number of images to be used in neb>/NEB jobs
     "KCAL": 1,  # Trim output structures to a given value of relative energy.
@@ -87,7 +79,6 @@ keywords_dict = {
     "ONLYREFINED": 1,  # Discard structures that do not successfully refine bonding distances.
     "P": 1,  # Pressure, in atmospheres.
     "PKA": 1,  # Set reference pKa for a specific compound
-    "PROCS": 1,  # Set the number of parallel cores to be used by ORCA
     "REFINE": 1,  # Same as calling refine> on a single file
     "RMSD": 1,  # RMSD threshold (Angstroms) for structure pruning. The smaller,
     # the more retained structures. Default is 0.5 A.
@@ -176,7 +167,7 @@ class Options:
 
     optimization: bool = True
     freq: bool = False
-    calculator: str = CALCULATOR
+    calculator: str = str(os.environ.get("FIRECODE_CALCULATOR"))
     theory_level: str | MaybeNone = None  # set later in _calculator_setup()
     solvent: str | MaybeNone = None
     scramble_check: bool = False
@@ -185,13 +176,8 @@ class Options:
     T: float = 298.15  # in K
     P: float | None = None  # in atm
     C: float = 0.1  # in mol/L
-    ff_opt: bool = FF_OPT_BOOL
-    ff_calc: str | None = FF_CALC
 
-    if ff_opt and FF_CALC is not None:
-        ff_level: str = DEFAULT_FF_LEVELS[FF_CALC]
-
-    crestnci: bool = False
+    nci: bool = False
     crestlevel: str | None = None
     shrink: bool = False
     shrink_multiplier: float = 1.0
@@ -229,7 +215,9 @@ class Options:
     operators_dict: dict[int, list[str]] = field(default_factory=dict)
     # Analogous dictionary that will contain the seuquences of operators for each molecule
 
-    single_thread: bool = FORCE_SINGLE_THREAD
+    single_thread: bool = cast(
+        "bool", str_to_var(os.environ.get("FIRECODE_FORCE_SINGLE_THREAD", ""))
+    )
     # enforce the use of a single thread in multimolecular optimization
 
     md_data: dict[str, Any] = field(default_factory=dict)
@@ -241,12 +229,11 @@ class Options:
         repr_if_true = (
             "bypass",
             "check_structures",
-            "crestnci",
+            "nci",
             "debug",
             "let",
             "metadynamics",
             "ts",
-            "ff_opt",
             "noembed",
             "keep_hb",
             "operators",
@@ -274,9 +261,6 @@ class Options:
         for name in repr_if_not_none:
             if d[name] is None:
                 d.pop(name)
-
-        if not FF_OPT_BOOL:
-            d.pop("ff_calc")
 
         padding = 1 + max([len(key) for key in d.keys()])
 
@@ -360,7 +344,10 @@ class OptionSetter:
         options.max_confs = int(kw.split("=")[1])
 
     def crestnci(self, options: Options, *args: Any) -> None:
-        options.crestnci = True
+        options.nci = True
+
+    def nci(self, options: Options, *args: Any) -> None:
+        options.nci = True
 
     def dryrun(self, options: Options, *args: Any) -> None:
         options.dryrun = True
@@ -388,20 +375,6 @@ class OptionSetter:
 
     def noopt(self, options: Options, *args: Any) -> None:
         options.optimization = False
-
-    def ffopt(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("FFOPT")]
-        value = kw.split("=")[1].upper()
-
-        on = ("ON", "TRUE", "YES")
-        off = ("OFF", "FALSE", "NO")
-
-        if value not in on and value not in off:
-            raise SystemExit(
-                "FFOPT keyword can only have values ON/TRUE/YES or OFF/NO/FALSE (i.e. 'FFOPT=OFF')"
-            )
-
-        options.ff_opt = True if value in on else False
 
     def images(self, options: Options, *args: Any) -> None:
         kw = self.keywords_simple[self.keywords.index("IMAGES")]
@@ -475,10 +448,6 @@ class OptionSetter:
 
         self.embedder.log(f"--> Set LEVEL to {options.theory_level}")
 
-    def fflevel(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("FFLEVEL")]
-        options.ff_level = kw.split("=")[1].upper().replace("_", " ")
-
     def onlyrefined(self, options: Options, *args: Any) -> None:
         options.only_refined = True
 
@@ -517,11 +486,6 @@ class OptionSetter:
 
         basicConfig(filename=debug_log_filename, filemode="a")
 
-    def procs(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("PROCS")]
-        self.embedder.procs = int(kw.split("=")[1])
-        self.embedder.log(f"--> Set PROCS to {self.embedder.procs!s}")
-
     def ezprot(self, options: Options, *args: Any) -> None:
         options.double_bond_protection = True
 
@@ -529,11 +493,6 @@ class OptionSetter:
         kw = self.keywords_simple[self.keywords.index("CALC")]
         options.calculator = kw.split("=")[1]
         self.embedder.log(f"--> Set CALC to {options.calculator}")
-
-    def ffcalc(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("FFCALC")]
-        options.ff_calc = kw.split("=")[1]
-        self.embedder.log(f"--> Set FFCALC to {options.ff_calc}")
 
     def solvent(self, options: Options, *args: Any) -> None:
         from firecode.solvents import solvent_synonyms

@@ -589,7 +589,6 @@ def csearch(
     mult: int = 1,
     constrained_indices: Sequence[tuple[int, int]] | None = None,
     keep_hb: bool = False,
-    ff_opt: bool = False,
     n: int = 100,
     n_out: int = 100,
     mode: int = 1,
@@ -743,13 +742,7 @@ def clustered_csearch(
     tag = "diverse"
     # criteria to choose the best structure of each torsional cluster
 
-    # if len(torsions) < 9:
     grouped_torsions = [torsions]
-
-    # else:
-    #     grouped_torsions = _group_torsions_dbscan(coords,
-    #                                           torsions,
-    #                                           max_size=3 if ff_opt else 5)
 
     ############################################## LOG TORSIONS
 

@@ -38,10 +38,7 @@ def main() -> None:
         sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
     )
 
-    usage = """\n\n    🔥 python -m firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
-    🔥 python -m firecode -cl "refine> crest_search> mol.xyz"
-    🔥 python -m firecode -c
-    🔥 python -m firecode -o mol.xyz
+    usage = """\n\n    🔥 firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
 
         positional arguments:
           inpufile.txt            Input filename, can be any text file.
@@ -51,7 +48,6 @@ def main() -> None:
           -s, --setup             Guided setup of the calculation settings.
           -n, --name NAME         Specify a custom name for the run.
           -cl,--command_line      Read instructions from the command line instead of from an input file.
-          -c, --cite              Print citation links.
           -p, --profile           Profile the run through cProfiler.
 
           """
@@ -77,13 +73,6 @@ def main() -> None:
         "-n", "--name", help="Specify a custom name for the run.", action="store", required=False
     )
     parser.add_argument(
-        "-c",
-        "--cite",
-        help="Print the appropriate document links for citation purposes.",
-        action="store_true",
-        required=False,
-    )
-    parser.add_argument(
         "-p",
         "--profile",
         help="Profile the run through cProfiler.",
@@ -102,12 +91,6 @@ def main() -> None:
         from firecode.modify_settings import run_setup
 
         run_setup()
-        sys.exit(0)
-
-    if args.cite:
-        print(
-            "No citation link is available for FIRECODE yet. You can link to the code on https://www.github.com/ntampellini/firecode"
-        )
         sys.exit(0)
 
     if args.command_line:
@@ -154,6 +137,28 @@ def env_variables_handling() -> None:
 
     for key, value in ENV_VARS.items():
         os.environ.setdefault(key, value)
+
+    # override/add from global .firecoderc
+    if Path("~/.firecoderc").exists():
+        set_env_vars_from_file("~/.firecoderc")
+
+    # override/add from local .firecoderc
+    if ".firecoderc" in os.listdir(os.getcwd()):
+        set_env_vars_from_file(".firecoderc")
+
+
+def set_env_vars_from_file(filename: str) -> None:
+    """Set environment variable from a text file."""
+    with open(filename, "r") as f:
+        lines = f.readlines()
+
+    print(f"--> Setting environment variables from {filename}")
+    for line in lines:
+        key, value = line.split("=")
+        key = key.strip().upper()
+        value = value.strip()
+        os.environ[key] = value
+        print(f"  {key}={value}")
 
 
 if __name__ == "__main__":

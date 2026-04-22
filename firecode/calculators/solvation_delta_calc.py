@@ -29,10 +29,10 @@ from ase.calculators.calculator import all_changes
 from tblite.ase import TBLite
 from tblite.exceptions import TBLiteValueError
 
+from firecode.context_managers import HiddenPrints
 from firecode.solvents import epsilon_dict, to_xtb_solvents
 from firecode.typing_ import Array1D_str, Array2D_float
 from firecode.units import EV_TO_KCAL
-from firecode.utils import HiddenPrints
 
 
 class SolvationDeltaCalculator:
@@ -52,7 +52,6 @@ class SolvationDeltaCalculator:
         accuracy: float = 1.0,
         **kwargs: Any,
     ) -> None:
-
         # set up gas phase calculator
         self.gas_calc = TBLite(method=method, max_iterations=maxiter, accuracy=accuracy)
 

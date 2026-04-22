@@ -27,13 +27,36 @@
 
 </p>
 
-FIRECODE is a computational chemistry workflow driver for the generation, optimization and refinement of conformational ensembles, also implementing some transition state utilities.
+FIRECODE is a computational chemistry workflow driver and hub for the generation, optimization and refinement of conformational ensembles, including  transition state and thermochemical utilities.
 
-It implements flexible and customizable workflows for conformer generation (via [CREST](https://github.com/crest-lab/crest), [RDKit](https://github.com/rdkit/rdkit)), double-ended TS search ([NEB](https://ase-lib.org/ase/neb.html) via [ASE](https://github.com/rosswhitfield/ase), [ML-FSM](https://github.com/thegomeslab/ML-FSM)), and (constrained) ensemble optimization through popular calculators like [XTB](https://github.com/grimme-lab/xtb), [TBLITE](https://github.com/tblite/tblite), [ORCA](https://www.orcasoftware.de/tutorials_orca/), and Pytorch Neural Network models ([AIMNET2](https://github.com/isayevlab/AIMNet2), [UMA](https://huggingface.co/facebook/UMA)) via [ASE](https://github.com/rosswhitfield/ase).
+
+
+<!-- It runs flexible workflows for conformer generation (via [CREST](https://github.com/crest-lab/crest), [RDKit](https://github.com/rdkit/rdkit)), double-ended TS search ([NEB](https://ase-lib.org/ase/neb.html) via [ASE](https://github.com/rosswhitfield/ase), [ML-FSM](https://github.com/thegomeslab/ML-FSM)), and (constrained) ensemble optimization through popular calculators like [XTB](https://github.com/grimme-lab/xtb), [TBLITE](https://github.com/tblite/tblite), [ORCA](https://www.orcasoftware.de/tutorials_orca/), and Pytorch Neural Network models ([AIMNET2](https://github.com/isayevlab/AIMNet2), [UMA](https://huggingface.co/facebook/UMA)) via [ASE](https://github.com/rosswhitfield/ase).
 
 Conformational pruning is performed with the now standalone [PRISM Pruner](https://github.com/ntampellini/prism_pruner).
 
-As a legacy feature from [TSCoDe](https://github.com/ntampellini/TSCoDe), FIRECODE can also assemble non-covalent adducts from conformational ensembles (embedding) programmatically.
+As a legacy feature from [TSCoDe](https://github.com/ntampellini/TSCoDe), FIRECODE can also assemble non-covalent adducts from conformational ensembles (embedding) programmatically. -->
+
+## Calculators
+
+- [xTB](https://github.com/grimme-lab/xtb) *(native)*
+- [tblite](https://github.com/tblite/tblite) *(via [ASE](https://github.com/rosswhitfield/ase))*
+- [AIMNET2](https://github.com/isayevlab/AIMNet2) *(via [ASE](https://github.com/rosswhitfield/ase))*
+- [UMA](https://huggingface.co/facebook/UMA) *(via [ASE](https://github.com/rosswhitfield/ase))*
+
+## Interfaces / utilities
+
+- [CREST](https://github.com/crest-lab/crest) *(conformational search)*
+- [GOAT](https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.202500393) *(conformational search)*
+- [racerts](https://github.com/digital-chemistry-laboratory/racerts) *(conformational search)*
+- [ETKDG](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00025) *(via [rdkit](https://github.com/rdkit/rdkit), conformational search)*
+- [TSCoDe](https://github.com/ntampellini/TSCoDe) *(conformational embedding)*
+- [prism_pruner](https://github.com/ntampellini/prism_pruner) *(conformational pruning)*
+- [ML-FSM](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00025) *(two-ended TS search)*
+- [Sella](https://github.com/zadorlab/sella) *(saddle point optimization)*
+<!-- - [packmol](https://github.com/m3g/packmol) *(explicit solvation)* -->
+
+...plus frequency calculation, NEB optimization, and more are all implemented in the code in a calculator-agnostic way.
 
 ## Installation
 
@@ -48,5 +71,50 @@ uv pip install firecode[full]     # + AIMNET2, UMA/OMOL
 
 More installation details in the documentation.
 
+## Usage
+
+Installation exposes the main program working on a plain text file as well as a standalone optimizer.
+
+```
+🔥 firecode [-h] [-s] [-t] input.txt [-n NAME] [-p]
+
+    positional arguments:
+      inpufile.txt            Input filename, can be any text file.
+
+    optional arguments:
+      -h, --help              Show this help message and exit.
+      -s, --setup             Guided setup of the calculation settings.
+      -n, --name NAME         Specify a custom name for the run.
+      -cl,--command_line      Read instructions from the command line instead of from an input file.
+      -p, --profile           Profile the run through cProfiler.
+```
+
+```
+🔥 firecode_opt [-h] [-i] [-t TEMPERATURE] [-c CALCULATOR] [-m METHOD] [-s SOLVENT] [-o] [-f] [--ts] [--irc] [--cfile CFILE] [-n] [--debug]
+                    filenames [filenames ...]
+
+positional arguments:
+  filenames             Input filename(s), in .xyz format
+
+options:
+  -h, --help            show this help message and exit
+  -i, --interactive     Set options interactively.
+  -t TEMPERATURE, --temperature TEMPERATURE
+                        Temperature, in degrees Celsius.
+  -c CALCULATOR, --calculator CALCULATOR
+                        Calculator (default UMA).
+  -m METHOD, --method METHOD
+                        Method (default OMOL for UMA).
+  -s SOLVENT, --solvent SOLVENT
+                        Solvent (default ch2cl2).
+  -o, --opt             Optimize the geometry.
+  -f, --freq            Perform vibrational analysis.
+  --ts, --saddle        Optimize to a TS.
+  --irc                 Run an IRC calculation.
+  --cfile CFILE         Uses a constraint file.
+  -n, --newfile         Write optimized structure to a new file (*_opt.xyz).
+  --debug               Does not delete optimization data.
+```
+
 ## Documentation
-Additional documentation on how to install and use the program can be found on [readthedocs](https://firecode.readthedocs.io/en/latest/index.html).
+Documentation on how to install and use the program can be found on [readthedocs](https://firecode.readthedocs.io/en/latest/index.html).

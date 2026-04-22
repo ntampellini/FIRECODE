@@ -28,9 +28,6 @@ from typing import TYPE_CHECKING, Callable, cast
 from ase.calculators.calculator import Calculator as ASECalculator
 
 from firecode.calculators.xtb import xtb_opt
-from firecode.settings import (
-    DEFAULT_LEVELS,
-)
 from firecode.solvents import epsilon_dict, to_xtb_solvents
 from firecode.typing_ import MaybeNone
 
@@ -92,7 +89,6 @@ class Opt_func_dispatcher:
         raise_err: bool = True,
         logfunction: Callable[[str], None] | None = print,
     ) -> ASECalculator | MaybeNone:
-
         self.solvent = solvent
 
         if self.ase_calc is not None and not force_reload:
@@ -203,7 +199,7 @@ class Opt_func_dispatcher:
                 )
             )
 
-        method = method or DEFAULT_LEVELS["TBLITE"]
+        method = method or str(os.environ.get("FIRECODE_DEFAULT_LEVEL_TBLITE"))
 
         # tblite is picky with names
         synonyms = {

@@ -462,7 +462,6 @@ def dihedral_scan(embedder: Embedder) -> None:
             coords,
             embedder.options.calculator,
             method=embedder.options.theory_level,
-            procs=embedder.procs,
             solvent=embedder.options.solvent,
             debug=embedder.options.debug,
         )

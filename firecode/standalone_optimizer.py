@@ -44,7 +44,6 @@ from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.ensemble import Ensemble
 from firecode.rdkit_tools import convert_constraint_with_smarts
-from firecode.settings import CALCULATOR, DEFAULT_LEVELS
 from firecode.solvents import epsilon_dict, solvent_synonyms
 from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
@@ -328,7 +327,7 @@ def main() -> None:
     args = parser.parse_args()
     args.calculator = args.calculator.upper()
     if args.method is None:
-        args.method = DEFAULT_LEVELS[args.calculator]
+        args.method = op_sys.environ.get(f"FIRECODE_DEFAULT_LEVEL_{args.calculator}")
 
     if args.interactive:
         optimizer = inquire_optimizer_options(args.filenames)
@@ -370,7 +369,9 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
     calc, method = inquirer.select(  # type: ignore[attr-defined]
         message="Which level of theory would you like to use?:",
         choices=choices,
-        default=next(c.value for c in choices if c.value[0] == CALCULATOR),
+        default=next(
+            c.value for c in choices if c.value[0] == op_sys.environ.get("FIRECODE_CALCULATOR")
+        ),
     ).execute()
 
     solvents = (

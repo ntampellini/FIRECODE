@@ -32,7 +32,14 @@ from prism_pruner.pruner import prune_by_moment_of_inertia, prune_by_rmsd, prune
 from prism_pruner.utils import time_to_string
 
 from firecode.pt import pt
-from firecode.typing_ import Array1D_bool, Array1D_float, Array1D_int, Array1D_str, Array3D_float
+from firecode.typing_ import (
+    Array1D_bool,
+    Array1D_float,
+    Array1D_int,
+    Array1D_str,
+    Array2D_float,
+    Array3D_float,
+)
 from firecode.units import EH_TO_KCAL
 
 
@@ -273,3 +280,18 @@ class Ensemble:
         sorted_indices = np.argsort(self.energies)
         self.energies = self.energies[sorted_indices]
         self.coords = self.coords[sorted_indices]
+
+    def to_xyz(self, file: Path | str) -> None:
+        """Write ensemble to an xyz file."""
+
+        def to_xyz(coords: Array2D_float) -> str:
+            return (
+                f"{len(coords)}\nExported from FIRECODE Ensemble ({self.basename})\n"
+                + "\n".join(
+                    f"{atom} {x:15.8f} {y:15.8f} {z:15.8f}"
+                    for atom, (x, y, z) in zip(self.atoms, coords, strict=True)
+                )
+            )
+
+        with Path(file).open("w") as f:
+            f.write("\n".join(map(to_xyz, self.coords)))

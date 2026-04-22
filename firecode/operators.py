@@ -24,8 +24,7 @@ from __future__ import annotations
 
 # import pickle
 import time
-from shutil import which
-from subprocess import CalledProcessError, getoutput
+from subprocess import CalledProcessError
 from typing import TYPE_CHECKING, Callable, cast
 
 import matplotlib.pyplot as plt
@@ -36,8 +35,9 @@ from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
-from firecode.calculators.xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
+from firecode.interfaces.crest import crest_mtd_search, get_crest_version
+from firecode.interfaces.goat import goat_operator
 from firecode.md.equilibration import equilibrate_operator
 from firecode.md.packmol import solvate_molecule
 from firecode.optimization_methods import optimize, refine_structures
@@ -89,6 +89,9 @@ def operate(input_string: str, embedder: Embedder) -> str:
         string in input_string for string in ("mtd_search>", "mtd>", "crest>", "crest_search>")
     ):
         outname = crest_search_operator(filename, embedder)
+
+    elif "goat>" in input_string:
+        outname = goat_operator(filename, embedder)
 
     elif any(
         string in input_string
@@ -242,7 +245,6 @@ def opt_operator(
         mol.coords,
         calculator=embedder.options.calculator,
         method=embedder.options.theory_level,
-        procs=embedder.procs,
         charge=embedder.options.charge,
         mult=embedder.options.mult,
         constrained_indices=constrained_indices,
@@ -328,7 +330,6 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
         maxiter=750 if embedder.options.neb.preopt else 1,
         charge=embedder.options.charge,
         mult=embedder.options.mult,
-        procs=embedder.procs,
         solvent=embedder.options.solvent,
         title="reagents",
         logfunction=embedder.log,
@@ -344,7 +345,6 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
         maxiter=750 if embedder.options.neb.preopt else 1,
         charge=embedder.options.charge,
         mult=embedder.options.mult,
-        procs=embedder.procs,
         solvent=embedder.options.solvent,
         title="products",
         logfunction=embedder.log,
@@ -485,7 +485,6 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 solvent=embedder.options.solvent,
                 charge=embedder.options.charge,
                 mult=embedder.options.mult,
-                procs=embedder.procs,
                 dispatcher=embedder.dispatcher,
                 constrained_indices=constrained_indices,
                 constrained_distances=constrained_distances,
@@ -542,8 +541,8 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
         )
     )
 
-    if embedder.options.crestnci:
-        logfunction("--> CRESTNCI: Running crest in NCI mode (wall potential applied)")
+    if embedder.options.nci:
+        logfunction("--> NCI: Running crest in NCI mode (wall potential applied)")
 
     if len(mol.coords) > 1:
         embedder.log(
@@ -569,7 +568,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 charge=mol.charge,
                 method=crest_method,
                 kcal=embedder.options.kcal_thresh,
-                ncimode=embedder.options.crestnci,
+                ncimode=embedder.options.nci,
                 title=mol.rootname + "_CREST",
                 threads=crest_threads,
             )
@@ -592,7 +591,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 charge=mol.charge,
                 method="GFN2-XTB",  # try with XTB2
                 kcal=embedder.options.kcal_thresh,
-                ncimode=embedder.options.crestnci,
+                ncimode=embedder.options.nci,
                 title=mol.rootname + "_CREST",
                 threads=crest_threads,
             )
@@ -1024,13 +1023,3 @@ def packmol_operator(filename: str, embedder: Embedder) -> str:
     embedder.options.md_data = out_dict
 
     return str(out_dict["output_xyz"])
-
-
-def get_crest_version() -> int | None:
-    """Returns an integer (2 or 3) representing the version of CREST that is installed."""
-    if which("crest") is None:
-        return None
-
-    crest_version = int(getoutput("crest --version | grep Version").split()[1].split(".")[0])
-
-    return crest_version

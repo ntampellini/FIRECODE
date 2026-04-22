@@ -21,10 +21,11 @@ from firecode.ase_manipulations import (
     optimizer_dict,
     set_charge_and_mult_on_ase_atoms,
 )
+from firecode.context_managers import NewFolderContext
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.errors import FatalError
 from firecode.solvents import solvent_data
-from firecode.utils import NewFolderContext, read_xyz
+from firecode.utils import read_xyz
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder

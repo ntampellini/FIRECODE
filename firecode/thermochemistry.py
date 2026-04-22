@@ -37,6 +37,7 @@ from prettytable import PrettyTable
 from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import optimizer_dict, set_charge_and_mult_on_ase_atoms
+from firecode.context_managers import HiddenPrints, NewFolderContext
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.solvents import solvent_data, solvent_synonyms
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
@@ -55,7 +56,7 @@ from firecode.units import (
     PLANCK_h__J_s,
     theta_per_cm1_K,
 )
-from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar, write_xyz
+from firecode.utils import clean_directory, loadbar, write_xyz
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder

@@ -85,7 +85,7 @@ def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 100
     # Generate conformers
     conf_ids = EmbedMultipleConfs(
         rdkit_mol,
-        numConfs=embedder.options.max_confs,
+        numConfs=attempts,
         numThreads=0,  # Use all available threads
         maxAttempts=attempts,
         pruneRmsThresh=0.5,  # Prune conformers that are too similar

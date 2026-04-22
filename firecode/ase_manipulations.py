@@ -42,17 +42,18 @@ from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.algebra import point_angle
+from firecode.context_managers import (
+    HiddenPrints,
+    NewFolderContext,
+    sella_env,
+)
 from firecode.dispatcher import Opt_func_dispatcher
-from firecode.settings import CALCULATOR, DEFAULT_LEVELS
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EH_TO_KCAL, EV_TO_KCAL
 from firecode.utils import (
-    HiddenPrints,
-    NewFolderContext,
     cartesian_product,
     read_xyz,
     read_xyz_energies,
-    sella_env,
     str_to_var,
     write_xyz,
 )
@@ -979,12 +980,12 @@ def ase_popt(
 
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
-        calculator = calculator or CALCULATOR
+        calculator = calculator or str(os.environ.get("FIRECODE_CALCULATOR"))
         dispatcher = dispatcher or Opt_func_dispatcher(calculator)
         ase_constraints = ase_constraints or []
         ase_atoms = Atoms(atoms, positions=coords)
         if method is None:
-            method = DEFAULT_LEVELS[calculator]
+            method = os.environ.get(f"FIRECODE_DEFAULT_LEVEL_{calculator}]")
 
         ase_calc = dispatcher.get_ase_calc(method, solvent, logfunction=None)
 
@@ -1272,14 +1273,14 @@ def ase_irc(
 
     work_in = work_in or title + "_IRC"
     traj = traj or "temp"
-    calculator = calculator or CALCULATOR
+    calculator = calculator or str(os.environ.get("FIRECODE_CALCULATOR"))
     dispatcher = dispatcher or Opt_func_dispatcher(calculator)
 
     with NewFolderContext(work_in, delete_after=False, overwrite_if_exists=False):
         with open("sella_irc.log", "w") as logfile:
             ase_atoms = Atoms(atoms, positions=coords)
             if method is None:
-                method = DEFAULT_LEVELS[calculator]
+                method = os.environ.get(f"FIRECODE_DEFAULT_LEVEL_{calculator}]")
 
             ase_calc = dispatcher.get_ase_calc(method, solvent)
 

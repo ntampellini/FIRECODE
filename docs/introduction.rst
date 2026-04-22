@@ -1,76 +1,103 @@
 .. _introduction:
 
+Introduction
+++++++++++++
+
 .. figure:: /images/logo.png
    :alt: FIRECODE logo
    :align: center
    :width: 600px
 
-.. figure:: /images/intro_embed.PNG
-   :alt: Embed logic scheme
-   :align: center
-   :width: 700px
+.. .. figure:: /images/intro_embed.PNG
+..    :alt: Embed logic scheme
+..    :align: center
+..    :width: 700px
+
+**FIRECODE** is a computational chemistry workflow driver and hub for the generation, optimization and refinement
+of conformational ensembles, including  transition state and thermochemical utilities.
+
+.. code::
+
+   # TS workflow example (input.txt)
+
+   calc=uma solvent=toluene T_C=100
+   saddle> opt> goat> mol.xyz
+     B 0 1 2.25
+
+The program is written in Python and is designed to be run on both personal computers and HPC clusters via SLURM.
+
+All workflows are implemented in a calculator-agnostic way, so that maximum modularity is mantained. Most calculators
+are interfaced via `ASE <https://github.com/rosswhitfield/ase>`__. Most external utilities are interfaced via :ref:`operators <op_kw>`, interacting via dedicated functions
+reading a molecular ``.xyz`` file and returning the filename of the processed ensemble.
+
+For example:
+
+.. code:: python
+
+   def center_operator(filename: str, embedder: Embedder) -> str:
+       """Example operator centering the molecule."""
+
+       # read input file
+       mol = read_xyz(filename)
+
+       # embedder stores global run information
+       embedder.options.solvent # "ch2cl2"
+       embedder.options.T # 298.15
+
+       # center coordinates
+       mol.coords[0] -= np.mean(mol.coords[0], axis=0)
+
+       # write outfile and return its name
+       outfile = f"{mol.basename}_centered.xyz"
+       mol.to_xyz(outfile)
+
+       return outfile
 
 
-What it is
-----------
+.. What it does
+.. ------------
 
-FIRECODE is a computational chemistry toolbox for the generation, optimization and refinement
-of conformational ensembles. It features many flexible and highly customizable workflow utilities
-including conformer generation (via `CREST <https://github.com/crest-lab/crest>`_ or FIRECODE),
-constrained ensemble optimization through popular calculators like `XTB <https://github.com/grimme-lab/xtb>`_,
-`ORCA <https://www.orcasoftware.de/tutorials_orca/>`_, `GAUSSIAN <https://gaussian.com/>`_
-and Pytorch Neural Network models via `ASE <https://github.com/rosswhitfield/ase>`_
-(`AIMNET2 <https://github.com/isayevlab/AIMNet2>`_). It implements a series of conformational
-pruning routines based on inertia tensors, RMSD, symmetry-corrected RMSD, and more. It can
-also assemble non-covalent adducts from conformational ensembles (embedding) for fast and
-automated generation and evaluation of ground and transtition state-like structures. CPU and
-GPU multithreading is implemented throughout the codebase and linear algebra-intensive modules
-are compiled at runtime via `Numba <https://github.com/numba/numba>`_.
+.. **Generate accurately spaced poses** for bimolecular and trimolecular
+.. ground or transition states of organic molecules by assembling combinations of conformations (embedding).
+.. The distance between pairs of atoms can be specified, so as to obtain
+.. different poses with precise molecular spacings.
 
-What it does
-------------
+.. **Perform ensemble refinement** by optimizing conformers with the option of applying ensemble-wide
+.. constraints, and rejecting similar structures (rotamers and enantiomers).
 
-**Generate accurately spaced poses** for bimolecular and trimolecular
-ground or transition states of organic molecules by assembling combinations of conformations (embedding).
-The distance between pairs of atoms can be specified, so as to obtain 
-different poses with precise molecular spacings.
+.. First, :ref:`operators<op_kw>` (if provided) are applied to input structures. Then, if more
+.. than one input file is provided and the input format conforms to some embedding algorithm,
+.. a series of poses is created and then refined. Alternatively, it is also
+.. possible to generate and refine an ensemble starting from a single structure or refine
+.. user-provided ensembles (see :ref:`some examples<exs>`).
 
-**Perform ensemble refinement** by optimizing conformers with the option of applying ensemble-wide
-constraints, and rejecting similar structures (rotamers and enantiomers).
+.. How the embedding works
+.. -----------------------
 
-First, :ref:`operators<op_kw>` (if provided) are applied to input structures. Then, if more
-than one input file is provided and the input format conforms to some embedding algorithm,
-a series of poses is created and then refined. Alternatively, it is also
-possible to generate and refine an ensemble starting from a single structure or refine
-user-provided ensembles (see :ref:`some examples<exs>`).
+.. Combinations of conformations of individual molecules are arranged in space using
+.. some basic modeling of atomic orbitals and a good dose of linear algebra.
 
-How the embedding works
------------------------
+.. .. figure:: /images/orbitals.png
+..    :align: center
+..    :alt: Schematic representation of orbital models used for the embeddings
+..    :width: 85%
 
-Combinations of conformations of individual molecules are arranged in space using
-some basic modeling of atomic orbitals and a good dose of linear algebra.
-
-.. figure:: /images/orbitals.png
-   :align: center
-   :alt: Schematic representation of orbital models used for the embeddings
-   :width: 85%
-
-   *Schematic representation of orbital models used for the embeddings*
+..    *Schematic representation of orbital models used for the embeddings*
 
 
-How the ensemble refinement works
----------------------------------
+.. How the ensemble refinement works
+.. ---------------------------------
 
-Ensemble refinement is a combination of free or constrained optimizations and similarity pruning.
-Similarity is evaluated in a series of ways:
+.. Ensemble refinement is a combination of free or constrained optimizations and similarity pruning.
+.. Similarity is evaluated in a series of ways:
 
- - **TFD** (torsion fingerprint deviation) - only for monomolecular embeds/ensembles
+..  - **TFD** (torsion fingerprint deviation) - only for monomolecular embeds/ensembles
 
- - **MOI** (moment of inertia) - quickly removes enantiomers and rotamers
+..  - **MOI** (moment of inertia) - quickly removes enantiomers and rotamers
 
- - **Heavy-atoms RMSD**
+..  - **Heavy-atoms RMSD**
 
- - **Rotationally-corrected heavy-atoms RMSD** - invariant for periodic rotation of locally symmetrical groups (i.e. tBu, Ph, NMe2)
+..  - **Rotationally-corrected heavy-atoms RMSD** - invariant for periodic rotation of locally symmetrical groups (i.e. tBu, Ph, NMe2)
 
 .. Extra features
 .. --------------

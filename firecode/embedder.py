@@ -63,7 +63,6 @@ from firecode.multiembed import multiembed_dispatcher
 from firecode.operators import operate
 from firecode.optimization_methods import fitness_check
 from firecode.references import references
-from firecode.settings import DEFAULT_LEVELS, PROCS
 from firecode.typing_ import Array1D_int
 from firecode.utils import (
     auto_newline,
@@ -118,7 +117,10 @@ class Embedder:
         except AttributeError:
             self.avail_cpus = os.cpu_count() or 1  # Fallback for Windows/macOS
 
+        os.environ["FIRECODE_AVAIL_CPUS"] = str(self.avail_cpus)
+
         self.avail_mem_gb = virtual_memory().available / 1e9
+        os.environ["FIRECODE_AVAIL_MEM_GB"] = str(self.avail_mem_gb)
 
         try:
             from torch.cuda import device_count
@@ -126,8 +128,6 @@ class Embedder:
             self.avail_gpus = device_count()
         except ImportError:
             self.avail_gpus = 0
-
-        self.procs = int(procs) if procs is not None else PROCS or 4
 
         try:
             os.remove(f"firecode_{self.stamp}.log")
@@ -294,28 +294,30 @@ class Embedder:
             + f"    {references['FIRECODE']}\n"
         )
 
-        cite_ff = self.options.ff_opt and self.options.ff_calc == "XTB"
-        cite_gfn2 = self.options.calculator in ("XTB", "TBLITE")
-        cite_crest = any(("mtd" in op or "crest>" in op) for op in self.options.operators)
-        cite_uma = self.options.calculator == "UMA"
-        cite_aimnet2 = self.options.calculator == "AIMNET2"
-        cite_aimnet2_nse = self.options.calculator == "AIMNET2" and self.options.mult != 1
+        cite_if: dict[str, bool] = {
+            "GFN2-XTB": (
+                self.options.calculator in ("XTB", "TBLITE")
+                or any("goat" in op for op in self.options.operators)
+            ),
+            "CREST": any(("mtd" in op or "crest" in op) for op in self.options.operators),
+            "UMA": self.options.calculator == "UMA",
+            "AIMNET2": self.options.calculator == "AIMNET2",
+            "AIMNET2-NSE": self.options.calculator == "AIMNET2" and self.options.mult != 1,
+            "NEB": any("neb" in op for op in self.options.operators),
+            "FSM": any("fsm" in op for op in self.options.operators),
+            "GOAT": any("goat" in op for op in self.options.operators),
+            "GFN-FF": any("goat" in op for op in self.options.operators),
+            "RACERTS": any("racerts" in op for op in self.options.operators),
+            "PACKMOL": any("packmol" in op for op in self.options.operators),
+            "ALPB": self.options.solvent is not None,
+        }
+
+        references_to_cite = {key: value for key, value in references.items() if cite_if[key]}
 
         s = ""
-
-        if any((cite_ff, cite_gfn2, cite_crest)):
-            s += f"    GFN-FF : {references['GFN-FF']}\n" if cite_ff else ""
-            s += f"    GFN2-XTB : {references['GFN2-XTB']}\n" if cite_gfn2 else ""
-            s += f"    CREST : {references['CREST']}\n" if cite_crest else ""
-            s += f"    AIMNET2 : {references['AIMNET2']}\n" if cite_aimnet2 else ""
-            s += f"    AIMNET2-NSE : {references['AIMNET2-NSE']}\n" if cite_aimnet2_nse else ""
-            s += f"    UMA : {references['UMA']}\n" if cite_uma else ""
-
-        if any("neb>" in op for op in self.options.operators):
-            s += f"    NEB : {'\n          '.join(references['NEB'].split('\n'))}\n"
-
-        if any("fsm>" in op for op in self.options.operators):
-            s += f"    FSM : {'\n          '.join(references['FSM'].split('\n'))}\n"
+        longest = max([len(key) for key in references_to_cite.items()])
+        for key, value in references_to_cite.items():
+            s += f"    {key:{longest}} : {value}\n"
 
         if s != "":
             self.log(
@@ -1301,7 +1303,9 @@ class Embedder:
 
         # Setting default theory level if user did not specify it
         if self.options.theory_level is None:
-            self.options.theory_level = DEFAULT_LEVELS[self.options.calculator]
+            self.options.theory_level = os.environ.get(
+                f"FIRECODE_DEFAULT_LEVEL_{self.options.calculator}"
+            )
 
         self.dispatcher = Opt_func_dispatcher(self.options.calculator)
 
@@ -2027,269 +2031,6 @@ class RunEmbedding(Embedder):
 
         return n_constr
 
-    def force_field_refining(
-        self,
-        conv_thr: str = "tight",
-        only_fixed_constraints: bool = False,
-        prevent_scrambling: bool = False,
-    ) -> None:
-        """Performs structural optimizations with the embedder force field caculator.
-        Only structures that do not scramble during FF optimization are updated,
-        while the rest are kept as they are.
-        conv_thr: convergence threshold, passed to calculator
-        only_fixed_constraints: only uses fixed (UPPERCASE) constraints in optimization
-        prevent_scrambling: preserves molecular identities constraining bonds present in graphs (XTB only)
-        """
-        ################################################# CHECKPOINT BEFORE FF OPTIMIZATION
-
-        self.outname = f"firecode_checkpoint_{self.stamp}.xyz"
-        if not only_fixed_constraints:
-            with open(self.outname, "w") as f:
-                for i, structure in enumerate(align_structures(self.structures)):
-                    write_xyz(
-                        self.atoms,
-                        structure,
-                        f,
-                        title=f"TS candidate {i + 1} - Checkpoint before FF optimization",
-                    )
-            self.log(
-                f"\n--> Checkpoint output - Wrote {len(self.structures)} unoptimized structures to {self.outname} file before FF optimization.\n"
-            )
-
-        ################################################# GEOMETRY OPTIMIZATION - FORCE FIELD
-
-        if only_fixed_constraints:
-            task = "Structure optimization (tight) / relaxing interactions"
-        else:
-            task = f"Structure {'pre-' if prevent_scrambling else ''}optimization (loose)"
-
-        self.log(
-            f"--> {task} ({self.options.ff_level}{f'/{self.options.solvent}' if self.options.solvent is not None else ''} level via {self.options.ff_calc}, {self.avail_cpus} thread{'s' if self.avail_cpus > 1 else ''})"
-        )
-
-        t_start_ff_opt = time.perf_counter()
-
-        processes = []
-        cum_time: float = 0.0
-        timed_opt_func_with_payload: Callable[
-            ..., tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
-        ] = timing_decorator_with_payload()(self.dispatcher.opt_func)  # type: ignore[arg-type]
-
-        # Running as many threads as we have procs
-        # since FF does not parallelize well with more cores
-        with ProcessPoolExecutor(max_workers=self.avail_cpus) as executor:
-            for i, structure in enumerate(deepcopy(self.structures)):
-                if only_fixed_constraints:
-                    constraints = np.array(
-                        [value for key, value in self.pairings_table.items() if key.isupper()]
-                    )
-
-                else:
-                    constraints = (
-                        np.concatenate([self.constrained_indices[i], self.internal_constraints])
-                        if len(self.internal_constraints) > 0
-                        else self.constrained_indices[i]
-                    )
-
-                pairing_dists = [
-                    self.get_pairing_dists_from_constrained_indices(_c) for _c in constraints
-                ]
-
-                (
-                    constrained_angles_indices,
-                    constrained_angles_values,
-                    constrained_dihedrals_indices,
-                    constrained_dihedrals_values,
-                ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
-
-                process = executor.submit(
-                    timed_opt_func_with_payload,
-                    self.atoms,
-                    structure,
-                    graphs=self.graphs,
-                    calculator=self.options.ff_calc,
-                    method=self.options.ff_level,
-                    solvent=self.options.solvent,
-                    charge=self.options.charge,
-                    maxiter=None,
-                    conv_thr=conv_thr,
-                    constrained_indices=constraints,
-                    constrained_distances=pairing_dists,
-                    constrained_angles_indices=constrained_angles_indices,
-                    constrained_angles_values=constrained_angles_values,
-                    constrained_dihedrals_indices=constrained_dihedrals_indices,
-                    constrained_dihedrals_values=constrained_dihedrals_values,
-                    procs=2,  # FF just needs two per structure
-                    title=f"Candidate_{i + 1}",
-                    spring_constant=0.2 if prevent_scrambling else 1,
-                    payload=(self.constrained_indices[i],),
-                    debug=self.options.debug,
-                    # not pickleable!
-                    # logfunction=self.debuglog if self.options.debug else None,
-                )
-                processes.append(process)
-
-            for i, process in enumerate(as_completed(processes)):
-                loadbar(
-                    i,
-                    len(self.structures),
-                    prefix=f"Optimizing structure {i + 1}/{len(self.structures)} ",
-                )
-
-                (
-                    (new_structure, new_energy, self.exit_status[i]),
-                    # from optimization function
-                    (self.constrained_indices[i],),
-                    # from payload
-                    t_struct,
-                    # from timing_wrapper
-                ) = process.result()
-
-                # assert that the structure did not scramble during optimization
-                if self.options.scramble_check and self.exit_status[i]:
-                    constraints = (
-                        np.concatenate([self.constrained_indices[i], self.internal_constraints])
-                        if len(self.internal_constraints) > 0
-                        else self.constrained_indices[i]
-                    )
-
-                    self.exit_status[i] = scramble_check(
-                        self.atoms,
-                        new_structure,
-                        excluded_atoms=constraints.ravel(),
-                        mols_graphs=self.graphs,
-                        max_newbonds=self.options.max_newbonds,
-                        logfunction=self.log if self.options.debug else None,
-                        title=f"Candidate_{i + 1}",
-                    )
-
-                cum_time += t_struct
-
-                if self.options.debug:
-                    exit_status = "REFINED  " if self.exit_status[i] else "SCRAMBLED"
-                    self.debuglog(
-                        f"DEBUG: force_field_refining ({conv_thr}) - Candidate_{i + 1} - {exit_status} {time_to_string(t_struct, digits=3)}"
-                    )
-
-                if self.exit_status[i] and new_energy is not None:
-                    self.structures[i] = new_structure
-                    self.energies[i] = new_energy
-
-                else:
-                    self.energies[i] = 1e10
-
-                ### Update checkpoint every (20*max_workers) optimized structures, and give an estimate of the remaining time
-                chk_freq = self.avail_cpus * self.options.checkpoint_frequency
-                if i % chk_freq == chk_freq - 1:
-                    with open(self.outname, "w") as f:
-                        for j, (structure, status, energy) in enumerate(
-                            zip(
-                                align_structures(self.structures),
-                                self.exit_status,
-                                self.rel_energies(),
-                            )
-                        ):
-                            kind = "REFINED - " if status else "NOT REFINED - "
-                            write_xyz(
-                                self.atoms,
-                                structure,
-                                f,
-                                title=f"Structure {j + 1} - {kind}Rel. E. = {round(energy, 3)} kcal/mol ({self.options.ff_level})",
-                            )
-
-                    elapsed = time.perf_counter() - t_start_ff_opt
-                    average = (elapsed) / (i + 1)
-                    time_left = time_to_string((average) * (len(self.structures) - i - 1))
-                    speedup = cum_time / elapsed
-                    self.log(
-                        f"    - Optimized {i + 1:>4}/{len(self.structures):>4} structures - updated checkpoint file (avg. {time_to_string(average)}/struc, {round(speedup, 1)}x speedup, est. {time_left} left)",
-                        p=False,
-                    )
-
-        loadbar(1, 1, prefix=f"Optimizing structure {len(self.structures)}/{len(self.structures)} ")
-
-        elapsed = time.perf_counter() - t_start_ff_opt
-        average = (elapsed) / (len(self.structures))
-        speedup = cum_time / elapsed
-
-        self.log(
-            f"{self.options.ff_calc}/{self.options.ff_level} optimization took {time_to_string(elapsed)} (~{time_to_string(average)} per structure, {round(speedup, 1)}x speedup)"
-        )
-
-        ################################################# EXIT STATUS
-
-        self.log(
-            f"Successfully optimized {len([b for b in self.exit_status if b])}/{len(self.structures)} candidates at {self.options.ff_level} level."
-        )
-
-        ################################################# PRUNING: ENERGY
-
-        # sort structures based on energy
-        sorted_indices = np.argsort(self.energies)
-        self.energies = self.energies[sorted_indices]
-        self.structures = self.structures[sorted_indices]
-        self.constrained_indices = self.constrained_indices[sorted_indices]
-
-        if self.options.debug:
-            self.dump_status(
-                f"force_field_refining_{conv_thr}", only_fixed_constraints=only_fixed_constraints
-            )
-            self.debuglog(
-                f'DEBUG: Dumped emebedder status after generating candidates ("force_field_refining_{conv_thr}")'
-            )
-
-        mask = self.rel_energies() < 1e10
-        self.apply_mask(("structures", "constrained_indices", "energies", "exit_status"), mask)
-
-        if False in mask:
-            self.log(
-                f"Discarded {len([b for b in mask if not b])} scrambled candidates ({np.count_nonzero(mask)} left)"
-            )
-
-        ################################################# PRUNING: FITNESS (POST FORCE FIELD OPT)
-
-        self.fitness_refining(threshold=2)
-
-        ################################################# PRUNING: SIMILARITY (POST FORCE FIELD OPT)
-
-        self.zero_candidates_check()
-        self.similarity_refining()
-
-        ################################################# CHECKPOINT AFTER FF OPTIMIZATION
-
-        s = f"--> Checkpoint output - Updated {len(self.structures)} optimized structures to {self.outname} file"
-
-        if (
-            self.options.optimization
-            and (self.options.ff_level != self.options.theory_level)
-            and conv_thr != "tight"
-        ):
-            s += f" before {self.options.calculator} optimization."
-
-        else:
-            self.outname = (
-                f"firecode_{'ensemble' if self.embed == 'refine' else 'poses'}_{self.stamp}.xyz"
-            )
-            # if the FF optimization was the last one, call the outfile accordingly
-
-        self.log(s + "\n")
-
-        with open(self.outname, "w") as f:
-            for i, (structure, status, energy) in enumerate(
-                zip(align_structures(self.structures), self.exit_status, self.rel_energies())
-            ):
-                kind = "REFINED - " if status else "NOT REFINED - "
-                write_xyz(
-                    self.atoms,
-                    structure,
-                    f,
-                    title=f"Structure {i + 1} - {kind}Rel. E. = {round(energy, 3)} kcal/mol ({self.options.ff_level})",
-                )
-
-        # do not retain energies for the next optimization step if optimization was not tight
-        if not only_fixed_constraints:
-            self.energies.fill(0)
-
     def optimization_refining(
         self,
         maxiter: int | None = None,
@@ -2320,7 +2061,7 @@ class RunEmbedding(Embedder):
 
         max_workers = {
             "XTB": int(self.avail_cpus // 4),
-            "ORCA": int(self.avail_cpus // self.procs),
+            # "ORCA": int(self.avail_cpus // self.procs),
             "TBLITE": int(self.avail_cpus // 4),
         }[self.options.calculator]
 
@@ -2388,7 +2129,6 @@ class RunEmbedding(Embedder):
                     constrained_angles_values=constrained_angles_values,
                     constrained_dihedrals_indices=constrained_dihedrals_indices,
                     constrained_dihedrals_values=constrained_dihedrals_values,
-                    procs=self.procs,
                     title=f"Candidate_{i + 1}",
                     traj=f"Candidate_{i + 1}.traj",
                     spring_constant=2 if only_fixed_constraints else 1,
@@ -3001,9 +2741,6 @@ class RunEmbedding(Embedder):
             if not self.options.optimization and line.split()[0] in (
                 "calculator",
                 "double_bond_protection",
-                "ff_opt",
-                "ff_calc",
-                "ff_level",
                 "fix_angles_in_deformation",
                 "only_refined",
                 "rigid",
@@ -3018,9 +2755,6 @@ class RunEmbedding(Embedder):
                 continue
 
             if not self.options.shrink and line.split()[0] in ("shrink_multiplier",):
-                continue
-
-            if not self.options.ff_opt and line.split()[0] in ("ff_calc", "ff_level"):
                 continue
 
             self.log(f"    - {line}")
@@ -3069,34 +2803,15 @@ class RunEmbedding(Embedder):
 
                 # perform geometry optimizations
                 if self.options.optimization:
-                    # perform initial ff optimization
-                    if self.options.ff_opt:
-                        # embeds do a first pass with prevent_scrambling
-                        if len(self.objects) > 1 and self.options.ff_calc == "XTB":
-                            self.force_field_refining(conv_thr="loose", prevent_scrambling=True)
+                    # do a first pass with looser convergence
+                    # if there are a lot of structures or if there is
+                    # some temporary (non-fixed) constraint
+                    # (both fixed constraints and interactions enforced)
+                    if len(self.structures) > 500 or self.temporary_constraints_present():
+                        self.optimization_refining(conv_thr="loose")
 
-                        # non-embeds do a first pass with looser convergence
-                        # if there are a lot of structures or if there is
-                        # some temporary (non-fixed) constraint
-                        elif len(self.structures) > 500 or self.temporary_constraints_present():
-                            self.force_field_refining(conv_thr="loose")
-
-                        self.force_field_refining(conv_thr="tight")
-
-                    # If we just optimized at a (FF) level and the final
-                    # optimization level is the same, avoid repeating it
-                    if not (
-                        self.options.ff_opt and self.options.theory_level == self.options.ff_level
-                    ):
-                        # do a first pass with looser convergence
-                        # if there are a lot of structures or if there is
-                        # some temporary (non-fixed) constraint
-                        # (both fixed constraints and interactions enforced)
-                        if len(self.structures) > 500 or self.temporary_constraints_present():
-                            self.optimization_refining(conv_thr="loose")
-
-                        # final uncompromised optimization (only fixed constraints)
-                        self.optimization_refining(conv_thr="tight", only_fixed_constraints=True)
+                    # final uncompromised optimization (only fixed constraints)
+                    self.optimization_refining(conv_thr="tight", only_fixed_constraints=True)
 
                 else:
                     # writing an output for "refine" runs with NOOPT

@@ -28,4 +28,13 @@ references = {
         "Marks, J.; Gomes, J. J. Chem. Theory Comput. 2025, 21, 12110-12120 - https://doi.org/10.1021/acs.jctc.5c01492\n"
         + "Marks, J.; Gomes, J. arXiv 2025 - http://arxiv.org/abs/2501.06159"
     ),
+    "PACKMOL": (
+        "Martínez, L.; Andrade, R.; Birgin, E. G.; Martínez, J. M. J. Comput. Chem., 30: 2157-2164 - https://doi.org/10.1002/jcc.21224"
+    ),
+    "RACERTS": (
+        "Schmid, S. P.; Seng, H.; Kläy, T.; Jorner, K. J. Chem. Inf. Model. 2026, 66, 5, 2777-2790 - https://doi.org/10.1021/acs.jcim.5c02794"
+    ),
+    "GOAT": (
+        "de Souza, B. Angew. Chem. Int. Ed. 2025, 64, e202500393 - https://doi.org/10.1002/anie.202500393"
+    ),
 }

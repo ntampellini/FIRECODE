@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from firecode.context_managers import FolderContext, HiddenPrints, NewFolderContext
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.embedder import Embedder
-from firecode.utils import FolderContext, HiddenPrints, NewFolderContext, clean_directory, read_xyz
+from firecode.utils import clean_directory, read_xyz
 
 HERE = Path(__file__).resolve().parent
 
@@ -224,7 +225,7 @@ def test_vib_analysis() -> None:
 def test_alpb_delta_calc() -> None:
     """Verifies that the ALPB delta calc does something."""
     from firecode.ase_manipulations import ase_popt
-    from firecode.utils import env_override
+    from firecode.context_managers import env_override
 
     mol = read_xyz(str(HERE / "C2H4.xyz"))
     solvent = "toluene"
@@ -265,7 +266,7 @@ def test_alpb_delta_calc() -> None:
 def test_cpcm_delta_calc() -> None:
     """Verifies that the CPCM delta calc does something."""
     from firecode.ase_manipulations import ase_popt
-    from firecode.utils import env_override
+    from firecode.context_managers import env_override
 
     mol = read_xyz(str(HERE / "C2H4.xyz"))
     solvent = "toluene"

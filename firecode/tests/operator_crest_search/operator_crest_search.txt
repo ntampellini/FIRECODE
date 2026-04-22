@@ -1,2 +1,2 @@
-calc=tblite solvent=chloroform crestnci dist(A=1.48, B=1.06)
+calc=tblite solvent=chloroform nci dist(A=1.48, B=1.06)
 refine> crest_search> salt.xyz 1AB 17A 7B
