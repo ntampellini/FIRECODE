@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from itertools import permutations, product
+from subprocess import check_call
 from time import perf_counter
 from typing import TYPE_CHECKING, List, Tuple, Union
 
@@ -45,13 +46,27 @@ if TYPE_CHECKING:
 
 
 def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 1000) -> str:
+    """Run an rdkit conformational search, using racerts if constraints are present."""
+    from prism_pruner.utils import flatten
+
+    constrained_indices = set(flatten(embedder._get_internal_constraints(filename), typefunc=int))
+
+    if constrained_indices:
+        embedder.log(f"--> Performing a racerTS conformational search via RDKit on {filename}.")
+
+        outname = filename[:-4] + "_racerts_confs.xyz"
+        atoms_str = " ".join(str(c) for c in constrained_indices)
+
+        check_call(f"racerts {filename} --reacting_atoms {atoms_str} --output {outname}".split())
+        return outname
+
     # import rdkit functions only if we need them for perforance reasons
     from rdkit.Chem import AddHs, MolFromXYZFile, RWMol, SanitizeMol
     from rdkit.Chem.rdDetermineBonds import DetermineBonds
     from rdkit.Chem.rdDistGeom import EmbedMultipleConfs
 
     embedder.log(
-        f"--> Performing an RDKit ETKDGv3 conformational search on {filename} ({attempts} attempts)"
+        f"--> Performing an RDKit ETKDG conformational search on {filename} ({attempts} attempts)"
     )
 
     rdkit_mol = MolFromXYZFile(filename)
@@ -70,7 +85,7 @@ def rdkit_search_operator(filename: str, embedder: Embedder, attempts: int = 100
     # Generate conformers
     conf_ids = EmbedMultipleConfs(
         rdkit_mol,
-        numConfs=embedder.options.max_confs,
+        numConfs=attempts,
         numThreads=0,  # Use all available threads
         maxAttempts=attempts,
         pruneRmsThresh=0.5,  # Prune conformers that are too similar

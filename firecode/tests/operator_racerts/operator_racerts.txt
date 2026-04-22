@@ -1,0 +1,4 @@
+calc=tblite solvent=ch2cl2
+racerts> taut_TS.xyz
+  B 2 6
+  B 4 6

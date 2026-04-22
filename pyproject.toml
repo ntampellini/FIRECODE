@@ -17,7 +17,7 @@ exclude = ["docs/"]
 [project]
 name = "firecode"
 license = "LGPL-3.0-or-later"
-version = "1.6.0"
+version = "2.0.0"
 readme = "README.md"
 description = "FIRECODE: Filtering Refiner and Embedder for Conformationally Dense Ensembles"
 keywords = []
@@ -36,7 +36,8 @@ dependencies = [
     "inquirerpy",
     "prism_pruner",
     "mlfsm",
-    "Sella==2.3.5",
+    "Sella>=2.4.2",
+    "racerts>=0.1.6",
 ]
 
 [tool.pixi.workspace]
@@ -45,9 +46,8 @@ platforms = ["linux-64", "osx-arm64"]
 
 [tool.pixi.dependencies]
 # Conda packages that aren't in [project.dependencies]
-xtb = ">=6.6.0"
-xtb-python = "*"
-tblite = ">=0.3.0"
+xtb = "*"
+tblite = ">=0.5.0"
 tblite-python = "*"
 crest = "3.*"
 psutil = ">=7.2.2,<8"
@@ -67,6 +67,8 @@ mypy = ">=1.19.1,<2"
 pre-commit = ">=4.2"
 fairchem-core = "*"
 coverage = ">=7.13.4,<8"
+sphinx = ">=9.1.0,<10"
+furo = ">=2025.12.19,<2026"
 
 [tool.pixi.feature.dev.pypi-dependencies]
 aimnet = { version = "*", extras = ["ase"] }
@@ -82,6 +84,9 @@ all = { depends-on = ["fmt", "lint", "types", "test"] }
 
 [tool.ruff]
 line-length = 100
+exclude = [
+    "settings.py",
+]
 
 [tool.ruff.lint]
 select = [
@@ -104,6 +109,7 @@ select = [
     "ICN001", # unconventional-import-alias
 ]
 ignore = [
+    "N802", # Function name should be lowercase
     "N803", # Invalid-argument-name (non-lowercase)
     "N806", # Non-lowercase variable in function
     "N815", # Variable in class scope should not be mixedCase

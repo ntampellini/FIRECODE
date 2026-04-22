@@ -24,8 +24,7 @@ from __future__ import annotations
 
 # import pickle
 import time
-from shutil import which
-from subprocess import CalledProcessError, getoutput
+from subprocess import CalledProcessError
 from typing import TYPE_CHECKING, Callable, cast
 
 import matplotlib.pyplot as plt
@@ -36,12 +35,16 @@ from prism_pruner.utils import align_structures, time_to_string
 
 from firecode.ase_manipulations import fsm_operator
 from firecode.atropisomer_module import dihedral_scan
-from firecode.calculators._xtb import crest_mtd_search
 from firecode.errors import FatalError, InputError
+from firecode.interfaces.crest import crest_mtd_search, get_crest_version
+from firecode.interfaces.goat import goat_operator
+from firecode.md.equilibration import equilibrate_operator
+from firecode.md.packmol import solvate_molecule
 from firecode.optimization_methods import optimize, refine_structures
 from firecode.pka import pka_routine
 from firecode.pt import pt
 from firecode.rdkit_tools import rdkit_search_operator
+from firecode.solvents import solvent_data
 from firecode.typing_ import Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EH_TO_KCAL
 from firecode.utils import (
@@ -87,7 +90,13 @@ def operate(input_string: str, embedder: Embedder) -> str:
     ):
         outname = crest_search_operator(filename, embedder)
 
-    elif "rdkit_search>" in input_string:
+    elif "goat>" in input_string:
+        outname = goat_operator(filename, embedder)
+
+    elif any(
+        string in input_string
+        for string in ("rdkit_search>", "rdkit>", "racerts>", "racerts_search>")
+    ):
         outname = rdkit_search_operator(filename, embedder)
 
     elif "scan>" in input_string:
@@ -96,7 +105,7 @@ def operate(input_string: str, embedder: Embedder) -> str:
     elif "neb>" in input_string:
         outname = neb_operator(filename, embedder)
 
-    elif "fsm>" in input_string:
+    elif any(string in input_string for string in ("fsm>", "mlfsm>")):
         outname = fsm_operator(embedder)
 
     elif "refine>" in input_string:
@@ -110,6 +119,17 @@ def operate(input_string: str, embedder: Embedder) -> str:
 
     elif any(string in input_string for string in ("saddle>", "ts>")):
         outname = saddle_operator(filename, embedder)
+
+    elif any(string in input_string for string in ("freq>", "thermo>")):
+        outname = freq_operator(filename, embedder)
+
+    elif "packmol>" in input_string:
+        outname = packmol_operator(filename, embedder)
+
+    elif "equilibrate>" in input_string:
+        outname = equilibrate_operator(filename, embedder)
+
+    ##### OVERLOAD
 
     else:
         op = input_string.split(">", maxsplit=1)[0]
@@ -150,7 +170,7 @@ def csearch_operator(
             opt_coords,
             charge=embedder.options.charge,
             mult=embedder.options.mult,
-            constrained_indices=_get_internal_constraints(filename, embedder),
+            constrained_indices=embedder._get_internal_constraints(filename),
             keep_hb=keep_hb,
             mode=mode,
             n_out=embedder.options.max_confs // len(data.coords),
@@ -169,7 +189,7 @@ def csearch_operator(
 
     print(f"Writing conformers to file...{' ' * 10}", end="\r")
 
-    confname = filename[:-4] + "_confs.xyz"
+    confname = data.basename + "_confs.xyz"
     with open(confname, "w") as f:
         for i, conformer in enumerate(conformers_array):
             write_xyz(data.atoms, conformer, f, title=f"Generated conformer {i}")
@@ -197,7 +217,7 @@ def opt_operator(
             )
         )
 
-    constrained_indices = _get_internal_constraints(filename, embedder)
+    constrained_indices = embedder._get_internal_constraints(filename)
     constrained_distances = [
         embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
     ]
@@ -225,7 +245,6 @@ def opt_operator(
         mol.coords,
         calculator=embedder.options.calculator,
         method=embedder.options.theory_level,
-        procs=embedder.procs,
         charge=embedder.options.charge,
         mult=embedder.options.mult,
         constrained_indices=constrained_indices,
@@ -288,7 +307,7 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
 
     from firecode.ase_manipulations import ase_neb
 
-    title = filename[:-4] + "_NEB"
+    title = data.basename + "_NEB"
     ci_str = "-CI" if embedder.options.neb.climbing_image else ""
 
     # preopt unless user specifies not to
@@ -311,7 +330,6 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
         maxiter=750 if embedder.options.neb.preopt else 1,
         charge=embedder.options.charge,
         mult=embedder.options.mult,
-        procs=embedder.procs,
         solvent=embedder.options.solvent,
         title="reagents",
         logfunction=embedder.log,
@@ -327,7 +345,6 @@ def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
         maxiter=750 if embedder.options.neb.preopt else 1,
         charge=embedder.options.charge,
         mult=embedder.options.mult,
-        procs=embedder.procs,
         solvent=embedder.options.solvent,
         title="products",
         logfunction=embedder.log,
@@ -431,7 +448,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
             )
 
     logfunction = embedder.log
-    constrained_indices = _get_internal_constraints(filename, embedder)
+    constrained_indices = embedder._get_internal_constraints(filename)
     constrained_distances = [
         embedder.get_pairing_dists_from_constrained_indices(cp) for cp in constrained_indices
     ]
@@ -468,7 +485,6 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 solvent=embedder.options.solvent,
                 charge=embedder.options.charge,
                 mult=embedder.options.mult,
-                procs=embedder.procs,
                 dispatcher=embedder.dispatcher,
                 constrained_indices=constrained_indices,
                 constrained_distances=constrained_distances,
@@ -525,8 +541,8 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
         )
     )
 
-    if embedder.options.crestnci:
-        logfunction("--> CRESTNCI: Running crest in NCI mode (wall potential applied)")
+    if embedder.options.nci:
+        logfunction("--> NCI: Running crest in NCI mode (wall potential applied)")
 
     if len(mol.coords) > 1:
         embedder.log(
@@ -552,7 +568,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 charge=mol.charge,
                 method=crest_method,
                 kcal=embedder.options.kcal_thresh,
-                ncimode=embedder.options.crestnci,
+                ncimode=embedder.options.nci,
                 title=mol.rootname + "_CREST",
                 threads=crest_threads,
             )
@@ -575,7 +591,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 charge=mol.charge,
                 method="GFN2-XTB",  # try with XTB2
                 kcal=embedder.options.kcal_thresh,
-                ncimode=embedder.options.crestnci,
+                ncimode=embedder.options.nci,
                 title=mol.rootname + "_CREST",
                 threads=crest_threads,
             )
@@ -722,7 +738,6 @@ def distance_scan(embedder: Embedder) -> str:
             mol.atoms,
             coords,
             calculator=embedder.options.calculator,
-            ase_calc=embedder.dispatcher.ase_calc,
             constrained_indices=[list(mol.reactive_indices)],
             constrained_distances=(d,),
             solvent=embedder.options.solvent,
@@ -846,17 +861,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     from firecode.ase_manipulations import ase_saddle
     from firecode.thermochemistry import get_free_energies
 
-    constrained_indices = _get_internal_constraints(filename, embedder)
-
-    if constrained_indices:
-        s = "s" if len(constrained_indices) > 1 else ""
-        i_str = ""
-        for i1, i2 in constrained_indices:
-            i_str += f"B({i1}-{i2}) "
-
-        constr_str = f"- biasing v0 with bond vibration{s} [{i_str[:-1]}]"
-    else:
-        constr_str = "(ignoring all constraints)"
+    constrained_indices = embedder._get_internal_constraints(filename)
 
     # The distance_scan> operator returns all
     # structures of the scan, but we want to
@@ -886,7 +891,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
 
     s = "s" if len(mol.coords) > 1 else ""
     embedder.log(
-        f"\n--> Saddle operator: performing {len(mol.coords)} saddle optimization{s} via Sella {constr_str}"
+        f"\n--> Saddle operator: performing {len(mol.coords)} saddle optimization{s} via Sella"
     )
 
     opt_coords_list: list[Array2D_float] = []
@@ -899,20 +904,17 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
         opt_coords, _, success = ase_saddle(
             atoms=mol.atoms,
             coords=coords,
-            ase_calc=embedder.dispatcher.ase_calc,
+            dispatcher=embedder.dispatcher,
             charge=hypmol.charge,
             mult=hypmol.mult,
             calculator=embedder.options.calculator,
             method=embedder.options.theory_level,
-            add_alpb_solvation=embedder.options.calculator in ("UMA", "AIMNET2"),
             solvent=embedder.options.solvent,
             constrained_indices=constrained_indices,
-            conv_thr="vtight",
             assert_convergence=True,
             traj=title + "_traj",
             logfunction=embedder.log,
             title=title,
-            debug=True,
         )
 
         if success:
@@ -952,24 +954,72 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     return outname
 
 
-def get_crest_version() -> int | None:
-    """Returns an integer (2 or 3) representing the version of CREST that is installed."""
-    if which("crest") is None:
-        return None
+def freq_operator(filename: str, embedder: Embedder) -> str:
+    """Run a frequency calculation on the input structure(s)."""
+    from firecode.thermochemistry import get_free_energies
 
-    crest_version = int(getoutput("crest --version | grep Version").split()[1].split(".")[0])
+    mol = read_xyz(filename)
 
-    return crest_version
+    # link corresponding hypermolecule
+    for i, hypmol in enumerate(embedder.objects):
+        if hypmol.filename == filename:
+            break
+
+    s = "s" if len(mol.coords) > 1 else ""
+    embedder.log(
+        f"\n--> Freq operator: performing {len(mol.coords)} frequency calculation{s} via ASE"
+    )
+
+    free_energies = get_free_energies(
+        embedder=embedder,
+        atoms=mol.atoms,
+        structures=mol.coords,
+        charge=hypmol.charge,
+        mult=hypmol.mult,
+        title=f"{hypmol.rootname}",
+        tighten_opt_before_vib=False,
+        logfunction=embedder.log,
+    )
+
+    # sorting structures based on energy
+    sorted_indices = np.argsort(free_energies)
+    free_energies = free_energies[sorted_indices]
+    coords = mol.coords[sorted_indices]
+
+    outname = f"{hypmol.rootname}_freq.xyz"
+
+    with open(outname, "w") as f:
+        for i, (coords, free_energy) in enumerate(zip(align_structures(coords), free_energies)):
+            write_xyz(
+                mol.atoms,
+                coords,
+                f,
+                title=f"Conf. {i} - G = {free_energy / EH_TO_KCAL:.8f} Eh - Rel. G. = {free_energy - free_energies[0]:.2f} kcal/mol",
+            )
+
+    return outname
 
 
-def _get_internal_constraints(filename: str, embedder: Embedder) -> list[tuple[int, int]]:
-    """Returns an array with distance constraints indices."""
-    mol_id = next((i for i, mol in enumerate(embedder.objects) if mol.filename == filename))
-    # get embedder,objects index of molecule to get internal constraints of
+def packmol_operator(filename: str, embedder: Embedder) -> str:
+    """Solvate the input molecule."""
+    if embedder.options.solvent is None:
+        raise Exception("Please specify a solvent for `packmol>`.")
 
-    out = []
-    for _, tgt in embedder.pairings_dict[mol_id].items():
-        if isinstance(tgt, tuple):
-            out.append(tgt)
+    mol = read_xyz(filename)
 
-    return out
+    if len(mol.coords) > 1:
+        raise NotImplementedError
+
+    out_dict = solvate_molecule(
+        solute_atoms=mol.atoms,
+        solute_coords=mol.coords[0],
+        solvent_name=embedder.options.solvent,
+        solvent_data=solvent_data,
+        title=mol.basename,
+        logfunction=embedder.log,
+    )
+
+    # save meaningful attributes to embedder md_data dict
+    embedder.options.md_data = out_dict
+
+    return str(out_dict["output_xyz"])

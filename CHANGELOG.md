@@ -1,20 +1,29 @@
 
-<!-- - Introduced compatibility of SADDLE and NEB keywords for scan> runs with both 2 indices (distance scans) and 4 indices (distance scans) -->
-
-<!-- - ... mep_relax> BETA
-
-<!-- FINALSPLEVEL keyword? -->
- <!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
+<!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
+<!-- add number of active constraints printout for parallel multithread functions -->
 
 
-## FIRECODE 1.7.0 🔥 (WIP)
+## FIRECODE 2.0.0 🔥 (WIP)
 - Restructured and expanded solvent module.
 - Implemented vibrational analysis via ASE including quasi-RRHO thermochemistry to get free energies.
 - Added Sella dependency to perform saddle points optimization with the `saddle>` operator.
-- Added FREQ keyword, that computes free energies at the end of the geometry optimization cycles.
+- Added FREQ keyword, computing free energies at the end of embedding or refine runs.
+- Added `freq>` operator for standalone frequency analysis on any ensemble.
 - Added T (temperature, in K), T_C (temperature, in °C), P (pressure, in atm), and C (concentration, in mol/L) keywords.
 - Updated CREST interface to version 3 of the program (see [paper](https://doi.org/10.1063/5.0197592) and [documentation](https://crest-lab.github.io/crest-docs/))
-<!-- add number of active constraints printout for parallel multithread functions -->
+- Added delta solvation implementation for gas-phase ML models, providing energies _and_ forces via TBLITE in the geometry optimization loop. Activate with environmental variable FIRECODE_SOLV_IMPLEM_FOR_ML="opt"
+- Dropped support for native XTB calculator, and XTB-pyhton interface, since TBLITE is the modern successor.
+- Added basic [racerts](https://github.com/digital-chemistry-laboratory/racerts) interface ("rdkit_search>" operator, alias of "racerts>").
+- Removed PROCS keyword.
+- Removed force field pre-optimization and related keywords (FFCALC, FFLEVEL)
+- Added basic interface to ORCA's [GOAT](https://onlinelibrary.wiley.com/doi/abs/10.1002/anie.202500393) via the `goat>` operator (GFN2-xTB level with GFN-FF uphill steps).
+- Renamed "CRESTNCI" keyword to "NCI" to cater for both CREST and GOAT.
+- Significant restructuring of some core code organization (interfaces, context_manager.py, settings.py)
+- Separated interfaces with external programs in "interfaces".
+- Added the use of environmental variables throughout the codebase. Defaults in settings.py, specific context managers in utils.py.
+- Environment variables in settings.py can now be overridden by a local `.firecoderc` with key=value pairs in the same folder as the input file.
+- Added automated [packmol](https://github.com/m3g/packmol) solvator interface (`packmol>` operator, **preview**!).
+<!-- - Added MD equilibration of solvated boxes (`equilibrate>`) -->
 
 ## FIRECODE 1.6.0 🔥 (March 11 2026)
 - Refreshed constraints handling in operators.

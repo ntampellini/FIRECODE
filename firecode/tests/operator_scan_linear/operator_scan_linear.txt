@@ -1,2 +1,0 @@
-calc=xtb level=gfn2-xtb solvent=ch2cl2
-scan> dimer.xyz 4 6

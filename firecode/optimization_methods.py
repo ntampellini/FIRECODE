@@ -22,185 +22,21 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import numpy as np
-from ase.calculators.calculator import Calculator as ASECalculator
 from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.ase_manipulations import ase_popt, ase_popt_with_alpb
-from firecode.calculators._xtb import xtb_opt
+from firecode.dispatcher import Opt_func_dispatcher
 from firecode.ensemble import Ensemble
-from firecode.settings import CHECKPOINT_EVERY, DEFAULT_LEVELS
-from firecode.solvents import epsilon_dict, to_xtb_solvents
-from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
-from firecode.utils import loadbar, molecule_check, scramble_check, write_xyz
+from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
+from firecode.utils import loadbar, molecule_check, scramble_check, str_to_var, write_xyz
 
 if TYPE_CHECKING:
     from networkx import Graph
-
-
-class Opt_func_dispatcher:
-    """Dispatcher for optimization functions."""
-
-    def __init__(self, calculator: str) -> None:
-        """Init method."""
-        self.opt_func = {
-            "ORCA": ase_popt,
-            "XTB": xtb_opt,
-            "TBLITE": ase_popt,
-            "UMA": ase_popt_with_alpb,
-            "AIMNET2": ase_popt_with_alpb,
-        }[calculator]
-
-        self.calculator = calculator
-        self.ase_calc: ASECalculator | None = None
-
-    def get_ase_calc(
-        self,
-        method: str | None,
-        solvent: str | None = None,
-        force_reload: bool = False,
-        raise_err: bool = True,
-    ) -> ASECalculator | MaybeNone:
-        if self.ase_calc is not None and not force_reload:
-            pass
-
-        elif self.calculator == "ORCA":
-            self.ase_calc = self.load_orca_calc(method, solvent)
-
-        elif self.calculator == "AIMNET2":
-            self.ase_calc = self.load_aimnet2_calc(method)
-
-        elif self.calculator == "TBLITE":
-            self.ase_calc = self.load_tblite_calc(method, solvent)
-
-        elif self.calculator == "XTB":
-            self.ase_calc = self.load_xtb_calc(method, solvent)
-
-        elif self.calculator == "UMA":
-            self.ase_calc = self.load_uma_calc(method)
-
-        elif raise_err:
-            raise NotImplementedError(
-                f"Calculator {self.calculator} not known. Options are AIMNET2, TBLITE, XTB and UMA."
-            )
-
-        return self.ase_calc
-
-    def load_orca_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
-        raise NotImplementedError("Open an issue on GitHub if you would like to use ORCA via ASE.")
-
-    def load_aimnet2_calc(
-        self, theory_level: str | None, logfunction: Callable[[str], None] | None = print
-    ) -> ASECalculator:
-        try:
-            import torch
-            from aimnet.calculators import AIMNet2ASE
-
-        except ImportError:
-            raise Exception(
-                (
-                    "Cannot import AIMNet2 python bindings for FIRECODE. Install them with:\n"
-                    "    >>> uv pip install aimnet[ase]\n"
-                    'or alternatively, install the "aimnet2" version of firecode:\n'
-                    "    >>> uv pip install firecode[aimnet2]\n"
-                )
-            )
-
-        gpu_bool = torch.cuda.is_available()
-        self.aimnet2_calc = cast("ASECalculator", AIMNet2ASE("aimnet2"))
-
-        if logfunction is not None:
-            logfunction(f"--> AIMNet2 calculator loaded on {'GPU' if gpu_bool else 'CPU'}.")
-
-        return self.aimnet2_calc
-
-    def load_tblite_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
-        try:
-            from tblite.ase import TBLite
-            from tblite.exceptions import TBLiteValueError
-
-        except ImportError as e:
-            print(e)
-            raise Exception(
-                (
-                    "Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n"
-                    ">>> conda install -c conda-forge mamba\n"
-                    ">>> mamba install -c conda-forge tblite tblite-python\n"
-                )
-            )
-
-        method = method or DEFAULT_LEVELS["TBLITE"]
-
-        # tblite is picky with names
-        synonyms = {
-            "GFN1-XTB": "GFN1-xTB",
-            "GFN2-XTB": "GFN2-xTB",
-            "G-XTB": "g-xTB",
-        }
-
-        method = synonyms.get(method, method)
-
-        if solvent is None:
-            self.ase_calc = TBLite(method=method)
-            return self.ase_calc
-
-        try:
-            if solvent in epsilon_dict:
-                epsilon = epsilon_dict[solvent]
-
-                # add ALPB solvation via solvent epsilon
-                self.ase_calc = TBLite(method=method, solvation=("alpb", epsilon))
-
-            else:
-                # translate if needed
-                xtb_solvent_name = to_xtb_solvents.get(solvent, solvent)
-
-                # add ALPB solvation via solvent name
-                self.ase_calc = TBLite(method=method, solvation=("alpb", xtb_solvent_name))
-
-        except TBLiteValueError:
-            print(
-                "--> WARNING: TBLITE was not able to set up ALPB solvation correctly. Defaulted to vacuum."
-            )
-            self.ase_calc = TBLite(method=method)
-
-        return self.ase_calc
-
-    def load_xtb_calc(self, method: str | None, solvent: str | None) -> ASECalculator:
-        try:
-            from xtb.ase.calculator import XTB
-        except ImportError:
-            raise Exception(
-                (
-                    "Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n"
-                    ">>> conda install -c conda-forge mamba\n"
-                    ">>> mamba install -c conda-forge xtb xtb-python\n"
-                )
-            )
-
-        synonyms = {
-            "GFN1-XTB": "GFN1-xTB",
-            "GFN2-XTB": "GFN2-xTB",
-            "G-XTB": "g-xTB",
-        }
-        method = method or DEFAULT_LEVELS["XTB"]
-        method = synonyms.get(method.upper(), method)
-        self.ase_calc = XTB(method=method, solvation=solvent)
-
-        return self.ase_calc
-
-    def load_uma_calc(
-        self, method: str | None, logfunction: Callable[[str], None] | None = print
-    ) -> ASECalculator:
-        from firecode.calculators._ase_uma import get_uma_calc
-
-        self.uma_calc = cast("ASECalculator", get_uma_calc(method, logfunction=logfunction))
-        self.ase_calc = self.uma_calc
-        return self.uma_calc
 
 
 def optimize(
@@ -217,7 +53,6 @@ def optimize(
     constrained_angles_indices: Sequence[Sequence[int]] | None = None,
     constrained_angles_values: Sequence[float | None] | None = None,
     mols_graphs: Sequence[Graph] | None = None,
-    procs: int | None = 1,
     solvent: str | None = None,
     charge: int = 0,
     mult: int = 1,
@@ -244,9 +79,7 @@ def optimize(
     :return energy: absolute energy of structure, in kcal/mol
     :return not_scrambled: bool, indicating if the optimization shifted up some bonds (except the constrained ones)
     """
-    if dispatcher is None:
-        dispatcher = Opt_func_dispatcher(calculator)
-
+    dispatcher = dispatcher or Opt_func_dispatcher(calculator)
     ase_calc = dispatcher.get_ase_calc(method, solvent=solvent)
 
     if mols_graphs is not None:
@@ -256,7 +89,7 @@ def optimize(
         )
 
     if method is None:
-        method = DEFAULT_LEVELS[calculator]
+        method = os.environ.get(f"FIRECODE_DEFAULT_LEVEL_{calculator}")
 
     if constrained_distances is not None:
         len_ci = len(constrained_indices) if constrained_indices is not None else 0
@@ -268,7 +101,6 @@ def optimize(
     t_start = perf_counter()
 
     constrained_indices = constrained_indices or []
-    procs = procs or 1
 
     # success checks that calculation had a normal termination
     opt_coords, energy, success = opt_func(  # type: ignore[operator]
@@ -280,8 +112,8 @@ def optimize(
         constrained_dihedrals_values=constrained_dihedrals_values,
         constrained_angles_indices=constrained_angles_indices,
         constrained_angles_values=constrained_angles_values,
+        calculator=calculator,
         method=method,
-        procs=procs,
         solvent=solvent,
         maxiter=maxiter,
         conv_thr=conv_thr,
@@ -350,7 +182,6 @@ def refine_structures(
     structures: Array2D_float,
     calculator: str,
     method: str | None,
-    procs: int | None,
     charge: int = 0,
     mult: int = 1,
     constrained_indices: Sequence[Sequence[int]] | None = None,
@@ -370,6 +201,9 @@ def refine_structures(
     """
     checkpoint_name = None
     old_checkpoint_name = None
+    checkpoint_every = cast(
+        "int", str_to_var(os.environ.get("FIRECODE_CHECKPOINT_EVERY", ""), enforced_type=int) or 50
+    )
 
     # make ensemble
     ens = Ensemble(
@@ -403,7 +237,6 @@ def refine_structures(
             constrained_angles_indices=constrained_angles_indices,
             constrained_angles_values=constrained_angles_values,
             method=method,
-            procs=procs,
             solvent=solvent,
             title=f"Structure_{i + 1}",
             logfunction=logfunction,
@@ -420,7 +253,7 @@ def refine_structures(
 
         # Update checkpoint every 50 optimized structures,
         # and give an estimate of the remaining time
-        if i % CHECKPOINT_EVERY == CHECKPOINT_EVERY - 1:
+        if i % checkpoint_every == checkpoint_every - 1:
             if checkpoint_name is not None:
                 old_checkpoint_name = checkpoint_name[:]
 

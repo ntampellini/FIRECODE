@@ -1,4 +1,4 @@
-calc=xtb level=gfn-ff debug
+calc=tblite debug
 HCOOH.xyz 1 3 4
 HCOOH.xyz 1 3 4
   D 1 0 3 4 0.0

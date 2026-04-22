@@ -32,7 +32,14 @@ from prism_pruner.pruner import prune_by_moment_of_inertia, prune_by_rmsd, prune
 from prism_pruner.utils import time_to_string
 
 from firecode.pt import pt
-from firecode.typing_ import Array1D_bool, Array1D_float, Array1D_int, Array1D_str, Array3D_float
+from firecode.typing_ import (
+    Array1D_bool,
+    Array1D_float,
+    Array1D_int,
+    Array1D_str,
+    Array2D_float,
+    Array3D_float,
+)
 from firecode.units import EH_TO_KCAL
 
 
@@ -43,12 +50,13 @@ class Ensemble:
     atoms: Array1D_str
     coords: Array3D_float
     filename: str = ""
+    basename: str = ""
     atomnos: Array1D_int = field(default_factory=lambda: np.array([], dtype=int))
     energies: Array1D_float = field(default_factory=lambda: np.array([], dtype=float))
     logfunction: Callable[[str], None] | None = print
 
     @classmethod
-    def from_xyz(cls, file: Path | str, read_energies: bool = False) -> Self:
+    def from_xyz(self, file: Path | str, read_energies: bool = False) -> Self:
         """Generate ensemble from a multiple conformer xyz file."""
         coords = []
         atoms = []
@@ -70,7 +78,7 @@ class Ensemble:
                     for _ in range(int(num)):
                         atom, *xyz = next(f).split()
                         conf_atoms.append(atom)
-                        conf_coords.append([float(x) for x in xyz])
+                        conf_coords.append([float(x) for x in xyz[0:3]])
 
                     atoms.append(conf_atoms)
                     coords.append(conf_coords)
@@ -80,10 +88,11 @@ class Ensemble:
 
         atomnos = np.array([pt.number(letter) for letter in atoms[0]])
 
-        return cls(
+        return self(
             atoms=np.array(atoms[0]),
             coords=np.array(coords),
             filename=str(file),
+            basename=Path(str(file)).stem,
             atomnos=atomnos,
             energies=np.array(energies),
         )
@@ -114,7 +123,7 @@ class Ensemble:
         energy_thr = self.dynamic_energy_thr(kcal_thr, verbose=verbose)
         mask = self.rel_energies < energy_thr
 
-        self.apply_mask(("structures", "constrained_indices", "energies", "exit_status"), mask)
+        self.apply_mask(("coords", "energies"), mask)
 
         if False in mask and verbose and self.logfunction is not None:
             self.logfunction(
@@ -271,3 +280,18 @@ class Ensemble:
         sorted_indices = np.argsort(self.energies)
         self.energies = self.energies[sorted_indices]
         self.coords = self.coords[sorted_indices]
+
+    def to_xyz(self, file: Path | str) -> None:
+        """Write ensemble to an xyz file."""
+
+        def to_xyz(coords: Array2D_float) -> str:
+            return (
+                f"{len(coords)}\nExported from FIRECODE Ensemble ({self.basename})\n"
+                + "\n".join(
+                    f"{atom} {x:15.8f} {y:15.8f} {z:15.8f}"
+                    for atom, (x, y, z) in zip(self.atoms, coords, strict=True)
+                )
+            )
+
+        with Path(file).open("w") as f:
+            f.write("\n".join(map(to_xyz, self.coords)))

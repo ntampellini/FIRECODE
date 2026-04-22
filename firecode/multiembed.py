@@ -10,9 +10,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 from prism_pruner.utils import time_to_string
 
+from firecode.context_managers import HiddenPrints, NewFolderContext
 from firecode.errors import InputError, ZeroCandidatesError
 from firecode.typing_ import Array2D_int, Array3D_float
-from firecode.utils import HiddenPrints, NewFolderContext, cartesian_product, timing_decorator
+from firecode.utils import cartesian_product, timing_decorator
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder

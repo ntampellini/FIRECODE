@@ -1,2 +1,2 @@
-calc=xtb solvent=toluene
-neb> scan> SN2.xyz 0 5 charge=-1
+calc=tblite solvent=ch2cl2
+neb> scan> taut.xyz 2 6

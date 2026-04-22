@@ -20,6 +20,8 @@ https://www.gnu.org/licenses/lgpl-3.0.en.html#license-text.
 
 """
 
+from typing import Any
+
 from firecode.units import AVOGADRO_NA, A3_TO_mL
 
 # from any solvent name to the standard FIRECODE name.
@@ -83,17 +85,20 @@ to_xtb_solvents = {
 
 # name: {molarity (M), molecular_volume(Å^3)}
 # see https://organicchemistrydata.org/solvents/
-solvent_data = {
+solvent_data: dict[str, dict[str, Any]] = {
     "none": {
         "MW": 0.0,  # g/mol
         "density": 0.0,  # g/mL
         "molarity": 1.0,  # mol/L
         "molecular_volume": 1.0,  # Å^3
+        "compressibility": 10e-5,  # bar^(-1)
     },
     "h2o": {
+        "smiles": "O",
         "molarity": 55.6,
         "molecular_volume": 27.944,
         "epsilon": 80.1,
+        "compressibility": 4.57e-5,
     },
     "toluene": {
         "molarity": 9.4,
@@ -124,6 +129,7 @@ solvent_data = {
         "MW": 41.052,
         "density": 0.7857,
         "epsilon": 37.5,
+        "compressibility": 10.7e-5,
     },
     "benzene": {
         "MW": 78.11,
@@ -144,11 +150,13 @@ solvent_data = {
         "MW": 78.13,
         "density": 1.092,
         "epsilon": 46.68,
+        "compressibility": 5.2e-5,
     },
     "et2o": {
         "MW": 74.12,
         "density": 0.713,
         "epsilon": 4.27,
+        "compressibility": 18.0e-5,
     },
     "me2o": {
         "MW": 46.07,
@@ -190,6 +198,7 @@ solvent_data = {
         "epsilon": 2.4,
     },
     "ch2cl2": {
+        "smiles": "C(Cl)Cl",
         "MW": 84.93,
         "density": 1.33,
         "epsilon": 8.93,

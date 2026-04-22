@@ -32,19 +32,20 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 import numpy as np
 from ase import Atoms
-from ase.optimize import LBFGS
 from ase.vibrations import Vibrations
 from prettytable import PrettyTable
 from prism_pruner.utils import time_to_string
 
-from firecode.ase_manipulations import set_charge_and_mult_on_ase_atoms
-from firecode.calculators._xtb import xtb_gsolv
+from firecode.ase_manipulations import optimizer_dict, set_charge_and_mult_on_ase_atoms
+from firecode.context_managers import HiddenPrints, NewFolderContext
+from firecode.dispatcher import Opt_func_dispatcher
 from firecode.solvents import solvent_data, solvent_synonyms
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import (
     AVOGADRO_NA,
     EH_TO_EV,
     EH_TO_KCAL,
+    EV_TO_KCAL,
     EV_TO_WAVENUMS,
     KB__J_K,
     A3_TO_mL,
@@ -55,11 +56,9 @@ from firecode.units import (
     PLANCK_h__J_s,
     theta_per_cm1_K,
 )
-from firecode.utils import HiddenPrints, NewFolderContext, clean_directory, loadbar, write_xyz
+from firecode.utils import clean_directory, loadbar, write_xyz
 
 if TYPE_CHECKING:
-    from ase.calculators.calculator import Calculator as ASECalculator
-
     from firecode.embedder import Embedder
 
 
@@ -139,6 +138,7 @@ def rrho_thermo(
     qrrho_ref_cm1: float = 100.0,
     qrrho_alpha: float = 4.0,
     solv: Optional[str] = None,
+    assert_gs_or_ts: bool = False,
 ) -> dict[str, Any]:
     # Remove 3/5/6 zero modes
     I = atoms.get_moments_of_inertia()  # type:ignore[no-untyped-call]
@@ -164,10 +164,11 @@ def rrho_thermo(
         if abs(f) > 1e-3:
             vib_cm_all.append(abs(f))
 
-    assert (len(freqs_cm1) - len(vib_cm_all) - start) <= 1, (
-        f"Frequency mismatch: expected {len(freqs_cm1) - start} (GS) or "
-        f"{len(freqs_cm1) - start - 1} (TS) frequencies, but {len(vib_cm_all)} were read."
-    )
+    if assert_gs_or_ts:
+        assert (len(freqs_cm1) - len(vib_cm_all) - start) <= 1, (
+            f"Frequency mismatch: expected {len(freqs_cm1) - start} (GS) or "
+            f"{len(freqs_cm1) - start - 1} (TS) frequencies, but {len(vib_cm_all)} were read."
+        )
 
     if cutoff_cm1 is None:
         cutoff_cm1 = 1.0 if qrrho else 35.0
@@ -363,17 +364,17 @@ def rrho_thermo(
 def ase_vib(
     atoms: Array1D_str,
     coords: Array2D_float,
-    ase_calc: ASECalculator,
+    dispatcher: Opt_func_dispatcher,
     charge: int,
     mult: int,
+    optimizer: str | None = None,
     T_K: float = 298.15,
     P_atm: float | None = 1.0,
     C_mol_L: float | None = None,
     solvent: str | None = None,
-    add_alpb_solvation: bool = False,
     title: str = "temp",
     return_gcorr: bool = True,
-    tighten_opt_before_vib: bool = True,
+    tighten_opt_before_vib: bool = False,
     write_log: bool = True,
 ) -> tuple[Array1D_float, float]:
     """returns: tuple of Array of frequencies and either G(corr) or Free energy, in kcal/mol.
@@ -383,18 +384,21 @@ def ase_vib(
     ase_atoms = Atoms(atoms, positions=coords)
     ase_atoms = set_charge_and_mult_on_ase_atoms(ase_atoms, charge=charge, mult=mult)
 
-    ase_atoms.calc = ase_calc
+    ase_atoms.calc = dispatcher.ase_calc  # ensures the calc is pre-loaded
+    optimizer = optimizer or dispatcher.get_optimizer_str()
+    ase_optimizer, opt_kwargs = optimizer_dict[optimizer]
 
-    vib = Vibrations(ase_atoms, delta=0.005)  # type: ignore[no-untyped-call]
+    vib_name = title + "_vib"
+    vib = Vibrations(ase_atoms, name=vib_name, delta=0.005)  # type: ignore[no-untyped-call]
 
-    with open(f"{title}.out", "w", encoding="utf-8") as f:
+    with open(f"{title}.out", "w") as f:
         f.write("--> FIRECODE ASE Frequency calculation report\n")
         f.write(
             f"charge={charge}, mult={mult}, C={C_mol_L} mol/L, P={P_atm} atm T={T_K:.2f} K ({T_K - 273.15:.2f} °C)\n"
         )
         f.write(
             f"Concentration {'not ' if C_mol_L is None else ''}provided: reference "
-            f"state used is {'gas ' if C_mol_L is None else 'solution'} phase.\n"
+            f"state used is {'gas' if C_mol_L is None else 'solution'} phase.\n"
         )
 
         f.write(
@@ -405,35 +409,30 @@ def ase_vib(
         if tighten_opt_before_vib:
             t_start = perf_counter()
             f.write("--> Tightening geom. opt. convergence to fmax=1E-2\n")
-            opt = LBFGS(ase_atoms, maxstep=0.01)
+            opt = ase_optimizer(ase_atoms, **opt_kwargs)  # type: ignore[operator]
             with HiddenPrints():
-                opt.run(fmax=1e-2)  # type: ignore[no-untyped-call]
+                opt.run(fmax=1e-2)
             f.write(
                 f"Structure optimized to fmax=1E-2 in {time_to_string(perf_counter() - t_start)}\n\n"
             )
+            coords = ase_atoms.get_positions()  # type: ignore[no-untyped-call]
 
         # save structure in thermo folder
         with open(f"{title}.xyz", "w") as ff:
-            write_xyz(atoms, ase_atoms.get_positions(), ff)  # type: ignore[no-untyped-call]
+            write_xyz(atoms, coords, ff)
 
-        energy = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
+        energy_ev = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
 
-        # add alpb if appropriate
-        if solvent is not None and add_alpb_solvation:
-            gsolv = (
-                xtb_gsolv(
-                    atoms,
-                    coords,
-                    model="alpb",
-                    charge=charge,
-                    mult=mult,
-                    solvent=solvent,
-                    title=title,
-                    assert_convergence=True,
+        # add solvation energy if appropriate
+        if solvent is not None and os.environ.get("FIRECODE_SOLV_IMPLEM_FOR_ML") == "post":
+            solv_energy_ev = (
+                dispatcher.solv_calc.get_solvation_delta(
+                    atoms=atoms,
+                    coords=coords,
                 )
-                / EH_TO_KCAL
+                / EV_TO_KCAL
             )
-            energy += gsolv
+            energy_ev += solv_energy_ev
 
         # remove cache folder
         rmtree(os.path.join(os.getcwd(), "vib"), ignore_errors=True)
@@ -469,7 +468,7 @@ def ase_vib(
             T_K=T_K,
             P_atm=P_atm,
             symmetry_number=1,  # detect_symmetry_number(atoms)?
-            E_el_Eh=energy / EH_TO_EV,
+            E_el_Eh=energy_ev / EH_TO_EV,
             mult=1,
             conc_mol_L=C_mol_L,
             solv=solvent,
@@ -479,7 +478,7 @@ def ase_vib(
         with open(f"{title}_thermo.json", "w") as ff:
             ff.write(json.dumps(thermo_dict, indent=4))
 
-        EE = energy / EH_TO_EV  # was eV, now Eh
+        EE = energy_ev / EH_TO_EV  # was eV, now Eh
         G = thermo_dict["G_total_Eh"]
         Gcorr = thermo_dict["G_minus_Eel_Eh"]
         H = thermo_dict["H_total_Eh"]
@@ -509,8 +508,7 @@ def ase_vib(
         f.write("*** ORCA TERMINATED NORMALLY ***\n")
 
     del vib
-    if os.path.isdir("vib"):
-        rmtree("vib")
+    rmtree(vib_name, ignore_errors=True)
 
     if not write_log:
         os.remove(f"{title}.out")
@@ -631,15 +629,12 @@ def get_free_energies(
             freqs, free_energy = ase_vib(
                 atoms,
                 structure,
-                ase_calc=embedder.dispatcher.get_ase_calc(
-                    embedder.options.theory_level, embedder.options.solvent
-                ),
+                dispatcher=embedder.dispatcher,
                 charge=charge,
                 mult=mult,
                 T_K=embedder.options.T,
                 C_mol_L=embedder.options.C,
                 solvent=embedder.options.solvent,
-                add_alpb_solvation=embedder.options.calculator in ("AIMNET2", "UMA"),
                 title=f"{title}_conf{s + 1}",
                 return_gcorr=False,
                 tighten_opt_before_vib=tighten_opt_before_vib,
