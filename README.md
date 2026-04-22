@@ -90,8 +90,8 @@ Installation exposes the main program working on a plain text file as well as a 
 ```
 
 ```
-🔥 firecode_opt [-h] [-i] [-t TEMPERATURE] [-c CALCULATOR] [-m METHOD] [-s SOLVENT] [-o] [-f] [--ts] [--irc] [--cfile CFILE] [-n] [--debug]
-                    filenames [filenames ...]
+🔥 firecode_opt [-h] [-i] [-t TEMPERATURE] [-c CALCULATOR] [-m METHOD] [-s SOLVENT] [-o] [-f] [--ts]
+                    [--irc] [--cfile CFILE] [-n] [--debug] filenames [filenames ...]
 
 positional arguments:
   filenames             Input filename(s), in .xyz format
