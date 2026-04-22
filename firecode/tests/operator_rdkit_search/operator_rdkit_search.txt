@@ -1,2 +1,2 @@
-calc=tblite ffopt=off freq
+calc=tblite freq
 refine> rdkit_search> opt> butane.xyz

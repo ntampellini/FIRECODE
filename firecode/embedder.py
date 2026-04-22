@@ -312,7 +312,9 @@ class Embedder:
             "ALPB": self.options.solvent is not None,
         }
 
-        references_to_cite = {key: value for key, value in references.items() if cite_if[key]}
+        references_to_cite = {
+            key: value for key, value in references.items() if key != "FIRECODE" and cite_if[key]
+        }
 
         s = ""
         longest = max([len(key) for key in references_to_cite.items()])
