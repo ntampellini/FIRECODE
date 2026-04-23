@@ -86,6 +86,7 @@ all = { depends-on = ["fmt", "lint", "types", "test"] }
 line-length = 100
 exclude = [
     "settings.py",
+    "paper.md",
 ]
 
 [tool.ruff.lint]
