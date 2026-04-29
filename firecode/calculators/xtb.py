@@ -24,20 +24,16 @@ from __future__ import annotations
 
 import os
 from subprocess import STDOUT, CalledProcessError, check_call
-from typing import TYPE_CHECKING, Any, Literal, Sequence
+from typing import Any, Literal, Sequence
 
 import numpy as np
 from prism_pruner.algebra import normalize
 
 from firecode.context_managers import NewFolderContext
-from firecode.graph_manipulations import get_sum_graph
 from firecode.solvents import to_xtb_solvents
 from firecode.typing_ import Array1D_str, Array2D_float
 from firecode.units import EH_TO_KCAL
 from firecode.utils import clean_directory, write_xyz
-
-if TYPE_CHECKING:
-    from networkx import Graph
 
 
 def xtb_opt(
@@ -57,9 +53,8 @@ def xtb_opt(
     title: str = "temp",
     read_output: bool = True,
     procs: int = 4,
-    opt: bool = True,
     conv_thr: str = "tight",
-    assert_convergence: bool = False,
+    assert_convergence: bool = True,
     constrain_string: str | None = None,
     recursive_stepsize: float = 0.3,
     spring_constant: float = 1.0,
@@ -96,8 +91,6 @@ def xtb_opt(
     read_output: Whether to read the output file and return anything.
 
     procs: number of cores to be used for the calculation.
-
-    opt: if false, a single point energy calculation is carried.
 
     conv_thr: tightness of convergence thresholds. See XTB ReadTheDocs.
 
@@ -239,11 +232,11 @@ def xtb_opt(
 
         flags = "--norestart"
 
-        if opt:
+        if maxiter > 0:
             flags += f" --opt {conv_thr}"
             # specify convergence tightness
 
-        if method in ("GFN-FF", "GFNFF"):
+        if method.upper() in ("GFN-FF", "GFNFF"):
             flags += " --gfnff"
             # declaring the use of FF instead of semiempirical
 
@@ -293,7 +286,7 @@ def xtb_opt(
             raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
 
         if read_output:
-            if opt:
+            if maxiter > 0:
                 if trajname in os.listdir():
                     coords, energy = read_from_xtbtraj(trajname)
 
@@ -324,52 +317,6 @@ def xtb_opt(
         return None
 
 
-def xtb_pre_opt(
-    atoms: Array1D_str,
-    coords: Array2D_float,
-    graphs: Sequence[Graph],
-    constrained_indices: Sequence[Sequence[int]] | None = None,
-    constrained_distances: Sequence[float | None] | None = None,
-    **kwargs: Any,
-) -> tuple[Array2D_float, float | None, Literal[True]] | None:
-    """Wrapper for xtb_opt that preserves the distance of every bond present in each subgraph provided
-
-    graphs: list of subgraphs that make up coords, in order
-
-    """
-    sum_graph = get_sum_graph(graphs, extra_edges=constrained_indices)
-
-    # we have to check through a list this way, as I have not found
-    # an analogous way to check through an array for subarrays in a nice way
-    list_of_constr_ids = (
-        [[a, b] for a, b in constrained_indices] if constrained_indices is not None else []
-    )
-
-    constrain_string = "$constrain\n"
-    for constraint in [[a, b] for (a, b) in sum_graph.edges if a != b]:
-        if constrained_distances is None:
-            distance = "auto"
-
-        elif constraint in list_of_constr_ids:
-            distance = str(constrained_distances[list_of_constr_ids.index(constraint)])
-
-        else:
-            distance = "auto"
-
-        indices_string = str([i + 1 for i in constraint]).strip("[").strip("]")
-        constrain_string += f"  distance: {indices_string}, {distance}\n"
-    constrain_string += "\n$end"
-
-    return xtb_opt(
-        atoms,
-        coords,
-        constrained_indices=constrained_indices,
-        constrained_distances=constrained_distances,
-        constrain_string=constrain_string,
-        **kwargs,
-    )
-
-
 def read_from_xtbtraj(filename: str) -> tuple[Array2D_float, float]:
     """Read coordinates from a .xyz trajfile."""
     with open(filename, "r") as f:
@@ -398,118 +345,3 @@ def energy_grepper(filename: str, signal_string: str, position: int) -> float:
                 return float(line.split()[position]) * EH_TO_KCAL
             if not line:
                 raise Exception(f"Could not find '{signal_string}' in file ({filename}).")
-
-
-def xtb_get_free_energy(
-    atoms: Array1D_str,
-    coords: Array2D_float,
-    method: str = "GFN2-xTB",
-    solvent: str | None = None,
-    charge: int = 0,
-    title: str = "temp",
-    sph: bool = False,
-    grep: str = "G",
-    debug: bool = False,
-    **kwargs: Any,
-) -> float:
-    """Calculates free energy with XTB,
-    without optimizing the provided structure.
-    grep: returns either "G" or "Gcorr" in kcal/mol
-    sph: whether to run as single point hessian or not
-
-    """
-    with NewFolderContext(title, delete_after=not debug):
-        with open(f"{title}.xyz", "w") as f:
-            write_xyz(atoms, coords, f, title=title)
-
-        outname = "xtbopt.xyz"
-        trajname = f"{title}_opt_log.xyz"
-        s = f"$opt\n   logfile={trajname}\n   output={outname}\n   maxcycle=1\n"
-
-        if method.upper() in ("GFN-XTB", "GFNXTB"):
-            s += "\n$gfn\n   method=1\n"
-
-        elif method.upper() in ("GFN2-XTB", "GFN2XTB"):
-            s += "\n$gfn\n   method=2\n"
-
-        s += "\n$end"
-
-        s = "".join(s)
-        with open(f"{title}.inp", "w") as f:
-            f.write(s)
-
-        if sph:
-            flags = "--bhess"
-        else:
-            flags = "--ohess"
-
-        if method in ("GFN-FF", "GFNFF"):
-            flags += " --gfnff"
-            # declaring the use of FF instead of semiempirical
-
-        if charge != 0:
-            flags += f" --chrg {charge}"
-
-        if solvent is not None:
-            if solvent == "methanol":
-                flags += " --gbsa methanol"
-
-            else:
-                flags += f" --alpb {to_xtb_solvents.get(solvent, solvent)}"
-
-        try:
-            with open("temp_hess.log", "w") as outfile:
-                xtb_path = os.environ.get("FIRECODE_PATH_TO_XTB") or "xtb"
-                check_call(
-                    f"{xtb_path} --input {title}.inp {title}.xyz {flags}".split(),
-                    stdout=outfile,
-                    stderr=STDOUT,
-                )
-
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt("KeyboardInterrupt requested by user. Quitting.")
-
-        # try:
-        to_grep, index = {
-            "G": ("TOTAL FREE ENERGY", 4),
-            "Gcorr": ("G(RRHO) contrib.", 3),
-        }[grep]
-
-        try:
-            result = energy_grepper("temp_hess.log", to_grep, index)
-        except Exception as e:
-            os.system(f"cat {outfile}")
-            raise e
-
-        clean_directory(
-            to_remove=(
-                "gfnff_topo",
-                "charges",
-                "wbo",
-                "xtbrestart",
-                "xtbtopo.mol",
-                ".xtboptok",
-                "hessian",
-                "g98.out",
-                "vibspectrum",
-                "wbo",
-                "xtbhess.xyz",
-                "charges",
-                "temp_hess.log",
-            ),
-        )
-
-        return result
-
-
-def parse_xtb_out(filename: str) -> Array2D_float:
-    """Read an XTB outfile in Bohrs and return the cooodinates in Å."""
-    with open(filename, "r") as f:
-        lines = f.readlines()
-
-    coords = np.zeros((len(lines) - 3, 3))
-
-    for _l, line in enumerate(lines[1:-2]):
-        coords[_l] = line.split()[:-1]
-
-    return coords * 0.529177249  # Bohrs to Angstroms

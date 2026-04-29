@@ -1,9 +1,11 @@
+## FIRECODE - latest
+- Removed profiler module to profile entire code runs
+- Added various tests covering all supported features, bringing coverage to >75%
+- Various cleanups targeted at easiest and most intuitive external contribution
+- Fixed some multiprocessing I/O stream bugs that prevented parallel runs
+- Added a CONTRIBUTING.md files with contributing guidelines
 
-<!-- add documentation: SCRAMBLECHECK kw, fsm>, neb>, rdkit_search>, standalone optimizer, non-inline constraints-->
-<!-- add number of active constraints printout for parallel multithread functions -->
-
-
-## FIRECODE 2.0.0 🔥 (WIP)
+## FIRECODE 2.0.0 🔥 (April 25 2026)
 - Restructured and expanded solvent module.
 - Implemented vibrational analysis via ASE including quasi-RRHO thermochemistry to get free energies.
 - Added Sella dependency to perform saddle points optimization with the `saddle>` operator.

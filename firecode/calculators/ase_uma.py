@@ -58,10 +58,10 @@ def get_uma_calc(
         logfunction("--> No CUDA devices detected: loading model on CPU")
         logfunction(f"--> Loading UMA/{method.upper()} model from file")
 
-    model_path = os.environ.get("FIRECODE_PATH_TO_UMA_MODEL")
+    model_path = os.environ.get("FIRECODE_PATH_TO_UMA_MODEL") or ""
 
     # make relative path absolute
-    if model_path == ".":
+    if model_path.startswith("."):
         model_path = os.path.join(
             os.path.dirname(os.path.realpath(__file__)), os.path.basename(model_path)
         )

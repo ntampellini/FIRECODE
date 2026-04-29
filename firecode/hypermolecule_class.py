@@ -91,7 +91,7 @@ class Hypermolecule:
 
     def __repr__(self) -> str:
         """String representation."""
-        r = self.rootname
+        r = self.basename
         if hasattr(self, "reactive_atoms_classes_dict"):
             r += f" {[str(atom) for atom in self.reactive_atoms_classes_dict[0].values()]}"
         return r
@@ -112,7 +112,6 @@ class Hypermolecule:
                     (f"Molecule {filename} cannot be read. Please check your syntax.")
                 )
 
-        self.rootname = filename.split(".", maxsplit=1)[0]
         self.filename = filename
         self.charge = charge or self.filename.count("+") - self.filename.count("-")
         self.mult = mult
@@ -131,12 +130,13 @@ class Hypermolecule:
         else:
             self.reactive_indices = np.array(reactive_indices)
 
-        conf_ensemble_object = read_xyz(filename)
+        ensemble_object = read_xyz(filename)
+        self.basename = ensemble_object.basename
 
-        coordinates = conf_ensemble_object.coords
+        coordinates = ensemble_object.coords
 
-        self.atomnos: Array1D_int = conf_ensemble_object.atomnos
-        self.atoms: Array1D_str = conf_ensemble_object.atoms
+        self.atomnos: Array1D_int = ensemble_object.atomnos
+        self.atoms: Array1D_str = ensemble_object.atoms
         self.position: Array1D_float = np.array([0, 0, 0], dtype=float)  # used in Embedder class
         self.rotation: Array1D_float = np.identity(3)  # used in Embedder class - rotation matrix
 
@@ -159,6 +159,9 @@ class Hypermolecule:
         self.all_atoms_coords = np.array(
             [coord for structure in self.coords for coord in structure]
         )  # single list with all atomic positions
+
+        # copy over simple Ensemble.to_xyz method
+        self.to_xyz = ensemble_object.to_xyz
 
     def compute_orbitals(self, override: str | None = None) -> None:
         """Computes orbital positions for atoms in self.reactive_atoms"""
@@ -246,7 +249,7 @@ class Hypermolecule:
     def write_hypermolecule(self) -> None:
         """ """
 
-        hyp_name = self.rootname + "_hypermolecule.xyz"
+        hyp_name = self.basename + "_hypermolecule.xyz"
         with open(hyp_name, "w") as f:
             for c, _ in enumerate(self.coords):
                 f.write(
@@ -261,7 +264,7 @@ class Hypermolecule:
                     )
                 )
                 f.write(
-                    f"\nFIRECODE Hypermolecule {c} for {self.rootname} - reactive indices {self.reactive_indices}\n"
+                    f"\nFIRECODE Hypermolecule {c} for {self.basename} - reactive indices {self.reactive_indices}\n"
                 )
                 orbs_stacked = np.vstack(
                     [atom_type.center for atom_type in self.reactive_atoms_classes_dict[c].values()]

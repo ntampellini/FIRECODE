@@ -47,7 +47,7 @@ from firecode.context_managers import (
     NewFolderContext,
     sella_env,
 )
-from firecode.dispatcher import Opt_func_dispatcher
+from firecode.dispatcher import Dispatcher
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float, MaybeNone
 from firecode.units import EH_TO_KCAL, EV_TO_KCAL
 from firecode.utils import (
@@ -952,7 +952,7 @@ def get_ase_constraints_from_embedder(filename: str, embedder: Embedder) -> list
 def ase_popt(
     atoms: Array1D_str,
     coords: Array2D_float,
-    dispatcher: Opt_func_dispatcher | None = None,
+    dispatcher: Dispatcher | None = None,
     charge: int = 0,
     mult: int = 1,
     calculator: str | None = None,
@@ -981,7 +981,7 @@ def ase_popt(
     # create working folder and cd into it
     with NewFolderContext(title, delete_after=(not debug)):
         calculator = calculator or str(os.environ.get("FIRECODE_CALCULATOR"))
-        dispatcher = dispatcher or Opt_func_dispatcher(calculator)
+        dispatcher = dispatcher or Dispatcher(calculator)
         ase_constraints = ase_constraints or []
         ase_atoms = Atoms(atoms, positions=coords)
         if method is None:
@@ -1163,8 +1163,8 @@ def ase_popt(
 
         energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
 
-        if solvent is not None and os.environ.get("FIRECODE_SOLV_IMPLEM_FOR_ML") == "post":
-            energy += dispatcher.solv_calc.get_solvation_delta(
+        if solvent is not None:
+            energy += dispatcher.get_delta_solvation_energy(
                 atoms=atoms,
                 coords=new_structure,
             )
@@ -1182,7 +1182,7 @@ def ase_popt(
 def ase_saddle(
     atoms: Array1D_str,
     coords: Array2D_float,
-    dispatcher: Opt_func_dispatcher | None = None,
+    dispatcher: Dispatcher | None = None,
     charge: int = 0,
     mult: int = 1,
     calculator: str | None = None,
@@ -1254,7 +1254,7 @@ def ase_irc(
     atoms: Array1D_str,
     coords: Array2D_float,
     method: str | None = None,
-    dispatcher: Opt_func_dispatcher | None = None,
+    dispatcher: Dispatcher | None = None,
     charge: int = 0,
     mult: int = 1,
     calculator: str | None = None,
@@ -1274,7 +1274,7 @@ def ase_irc(
     work_in = work_in or title + "_IRC"
     traj = traj or "temp"
     calculator = calculator or str(os.environ.get("FIRECODE_CALCULATOR"))
-    dispatcher = dispatcher or Opt_func_dispatcher(calculator)
+    dispatcher = dispatcher or Dispatcher(calculator)
 
     with NewFolderContext(work_in, delete_after=False, overwrite_if_exists=False):
         with open("sella_irc.log", "w") as logfile:
@@ -1456,7 +1456,7 @@ def fsm_operator(embedder: Embedder, optimize_endpoints: bool = True) -> str:
     product = Atoms(mol.atoms, product)
     product = set_charge_and_mult_on_ase_atoms(product, charge, mult)
 
-    workdir = f"{mol.rootname}_FSM"
+    workdir = f"{mol.basename}_FSM"
 
     with NewFolderContext(workdir, delete_after=False):
         # Initialize FSM string
@@ -1501,11 +1501,11 @@ def fsm_operator(embedder: Embedder, optimize_endpoints: bool = True) -> str:
 
     embedder.write_structures(tag="final_FSM_string")
 
-    with open(f"{mol.rootname}_FSM_TS_guess.xyz", "w") as f:
+    with open(f"{mol.basename}_FSM_TS_guess.xyz", "w") as f:
         ts_index = np.argwhere(embedder.energies == ts_guess_e)[0][0]
         write_xyz(mol.atoms, embedder.structures[ts_index], output=f, title="FSM TS guess")
 
-    print_fsm_plot(string, title=mol.rootname)
+    print_fsm_plot(string, title=mol.basename)
 
     return outname
 

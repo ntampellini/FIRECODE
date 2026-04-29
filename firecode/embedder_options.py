@@ -122,7 +122,7 @@ def get_keyword_suggestion(unknown_kw: str) -> str | None:
     return None
 
 
-def kw_similarity_score(ref: str, kw: str) -> float:
+def kw_similarity_score(ref: str, kw: str) -> float:  # pragma: no cover
     """Simple scoring for string similarity"""
     score = 0
     letters = []
@@ -181,7 +181,6 @@ class Options:
     crestlevel: str | None = None
     shrink: bool = False
     shrink_multiplier: float = 1.0
-    metadynamics: bool = False
     suprafacial: bool = False
     simpleorbitals: bool = False
     only_refined: bool = False
@@ -232,7 +231,7 @@ class Options:
             "nci",
             "debug",
             "let",
-            "metadynamics",
+            "freq",
             "ts",
             "noembed",
             "keep_hb",
@@ -256,6 +255,7 @@ class Options:
             "kcal_thresh",
             "solvent",
             "pka_ref",
+            "images",
         )
 
         for name in repr_if_not_none:
@@ -277,7 +277,7 @@ class Options:
         )
 
 
-class OptionSetter:
+class Option_setter:
     def __init__(self, embedder: Embedder, *args: Any) -> None:
         embedder.kw_line = embedder.kw_line if hasattr(embedder, "kw_line") else ""
 
@@ -286,12 +286,20 @@ class OptionSetter:
             for word in embedder.kw_line.split()
         ]
 
-        self.keywords_simple = [k.upper() for k in embedder.kw_line.split()]
-        self.keywords_simple_case_sensitive = embedder.kw_line.split()
+        self.kws_raw = [k.upper() for k in embedder.kw_line.split()]
+        self.kw_table = {
+            kw: rawstring for kw, rawstring in zip(self.keywords, self.kws_raw, strict=True)
+        }
+
+        self.kws_raw_case_sensitive = embedder.kw_line.split()
+        self.kw_table_case_sens = {
+            kw: rawstring
+            for kw, rawstring in zip(self.keywords, self.kws_raw_case_sensitive, strict=True)
+        }
+
         self.embedder = embedder
         self.args = args
 
-        # if not all(k in keywords_dict.keys() for k in self.keywords):
         for k in self.keywords:
             if k not in keywords_dict.keys():
                 guess = get_keyword_suggestion(k)
@@ -300,7 +308,7 @@ class OptionSetter:
                     f'Keyword "{k}" was not understood. Please check your syntax.{extra}'
                 )
 
-        if self.keywords_simple:
+        if self.kws_raw:
             embedder.log(
                 "\n--> Parsed keywords, in order of execution:\n    "
                 + " ".join(self.sorted_keywords())
@@ -332,15 +340,15 @@ class OptionSetter:
         options.optimization = False
 
     def charge(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("CHARGE")]
+        kw = self.kw_table["CHARGE"]
         options.charge = int(kw.split("=")[1])
 
     def mult(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("MULT")]
+        kw = self.kw_table["MULT"]
         options.mult = int(kw.split("=")[1])
 
     def confs(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("CONFS")]
+        kw = self.kw_table["CONFS"]
         options.max_confs = int(kw.split("=")[1])
 
     def crestnci(self, options: Options, *args: Any) -> None:
@@ -362,26 +370,26 @@ class OptionSetter:
         options.clash_thresh = 1.4
 
     def rotrange(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("ROTRANGE")]
+        kw = self.kw_table["ROTRANGE"]
         options.rotation_range = int(kw.split("=")[1])
 
     def steps(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("STEPS")]
+        kw = self.kw_table["STEPS"]
         options.custom_rotation_steps = int(kw.split("=")[1])
 
     def rmsd(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("RMSD")]
+        kw = self.kw_table["RMSD"]
         options.rmsd = float(kw.split("=")[1])
 
     def noopt(self, options: Options, *args: Any) -> None:
         options.optimization = False
 
     def images(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("IMAGES")]
+        kw = self.kw_table["IMAGES"]
         options.images = int(kw.split("=")[1])
 
     def dist(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple_case_sensitive[self.keywords.index("DIST")]
+        kw = self.kw_table_case_sens["DIST"]
         orb_string = kw[5:-1].replace(" ", "")
         # orb_string looks like 'a=2.345,b=3.456,c=2.22'
 
@@ -389,7 +397,7 @@ class OptionSetter:
         embedder._set_custom_orbs(orb_string)
 
     def clashes(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("CLASHES")]
+        kw = self.kw_table["CLASHES"]
         clashes_string = kw[8:-1].lower().replace(" ", "")
         # clashes_string now looks like 'num=3,dist=1.2'
 
@@ -408,13 +416,13 @@ class OptionSetter:
                 )
 
     def newbonds(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("NEWBONDS")]
+        kw = self.kw_table["NEWBONDS"]
         options.max_newbonds = int(kw.split("=")[1])
 
     def neb(self, options: Options, *args: Any) -> None:
         options._init_neb_options()
 
-        kw = self.keywords_simple[self.keywords.index("NEB")]
+        kw = self.kw_table["NEB"]
         neb_options_string = kw[4:-1].lower().replace(" ", "")
         # neb_options_string now looks like 'images=8,preopt=true' or ''
 
@@ -437,7 +445,7 @@ class OptionSetter:
         self.embedder.log(f"--> Set NEB options: {options.neb}")
 
     def level(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("LEVEL")]
+        kw = self.kw_table["LEVEL"]
         options.theory_level = kw.split("=")[1].upper().replace("_", " ")
 
         options.theory_level = options.theory_level.replace("[", "(").replace("]", ")")
@@ -461,13 +469,13 @@ class OptionSetter:
         options.simpleorbitals = True
 
     def kcal(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("KCAL")]
+        kw = self.kw_table["KCAL"]
         options.kcal_thresh = float(kw.split("=")[1])
         self.embedder.log(f"--> Set KCAL to {options.kcal_thresh!s}")
 
     def shrink(self, options: Options, *args: Any) -> None:
         options.shrink = True
-        kw = self.keywords_simple[self.keywords.index("SHRINK")]
+        kw = self.kw_table["SHRINK"]
 
         parsed = kw.split("=")
         options.shrink_multiplier = float(parsed[1]) if len(parsed) > 1 else 1.5
@@ -490,20 +498,20 @@ class OptionSetter:
         options.double_bond_protection = True
 
     def calc(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("CALC")]
+        kw = self.kw_table["CALC"]
         options.calculator = kw.split("=")[1]
         self.embedder.log(f"--> Set CALC to {options.calculator}")
 
     def solvent(self, options: Options, *args: Any) -> None:
         from firecode.solvents import solvent_synonyms
 
-        kw = self.keywords_simple[self.keywords.index("SOLVENT")]
+        kw = self.kw_table["SOLVENT"]
         solvent = kw.split("=")[1].lower()
         options.solvent = solvent_synonyms.get(solvent, solvent)
         self.embedder.log(f"--> Set SOLVENT to {options.solvent}")
 
     def pka(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple_case_sensitive[self.keywords.index("PKA")]
+        kw = self.kw_table_case_sens["PKA"]
         pka_string, pka = kw.split("=")
         molname = pka_string[4:-1].replace(" ", "")
 
@@ -519,7 +527,7 @@ class OptionSetter:
         )
 
     def crestlevel(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("CRESTLEVEL")]
+        kw = self.kw_table["CRESTLEVEL"]
         options.crestlevel = kw.split("=")[1]
         self.embedder.log(f"--> Set CREST level to {options.crestlevel}")
 
@@ -527,31 +535,31 @@ class OptionSetter:
         options.scramble_check = True
 
     def t(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("T")]
+        kw = self.kw_table["T"]
         options.T = float(kw.split("=")[1])
         self.embedder.log(f"--> Set temperature to {options.T:.2f} K ({options.T - 273.15:.2f} °C)")
 
     def t_c(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("T_C")]
+        kw = self.kw_table["T_C"]
         options.T = float(kw.split("=")[1]) + 273.15
         self.embedder.log(f"--> Set temperature to {options.T:.2f} K ({options.T - 273.15:.2f} °C)")
 
     def p(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("P")]
+        kw = self.kw_table["P"]
         options.P = float(kw.split("=")[1])
         self.embedder.log(
             f"--> Set pressure to {options.P:.1f} atm and global reference state to gas."
         )
 
     def c(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("C")]
+        kw = self.kw_table["C"]
         options.C = float(kw.split("=")[1])
         self.embedder.log(
             f"--> Set concentration to {options.C:.1f} mol/L and global reference state to solution."
         )
 
     def conc(self, options: Options, *args: Any) -> None:
-        kw = self.keywords_simple[self.keywords.index("CONC")]
+        kw = self.kw_table["CONC"]
         options.C = float(kw.split("=")[1])
         self.embedder.log(
             f"--> Set concentration to {options.C:.1f} mol/L and global reference state to solution."

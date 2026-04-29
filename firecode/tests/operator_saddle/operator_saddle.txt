@@ -1,2 +1,4 @@
 calc=tblite solvent=ch2cl2
-saddle> propane_ts.xyz
+saddle> opt> propane_ts.xyz charge=0
+  B 0 3 1.537
+  D 2 0 3 7 0.0

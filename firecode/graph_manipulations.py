@@ -71,7 +71,7 @@ def is_sigmatropic(mol: Hypermolecule, conf: int) -> bool:
 
                     full_sp2 = True
                     for index in path:
-                        if len(mol.graph.neighbors(index)) - 2 > 1:
+                        if len(list(mol.graph.neighbors(index))) - 2 > 1:
                             full_sp2 = False
                             break
 

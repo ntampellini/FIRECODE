@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from firecode.embedder import Embedder
 
 
-def orca_goat_xtb_search(
+def orca_goat_xtb_search(  # pragma: no cover
     atoms: Array1D_str,
     coords: Array2D_float,
     constrained_indices: Sequence[Sequence[int]] | None = None,
@@ -239,7 +239,7 @@ def orca_goat_xtb_search(
         return new_coords
 
 
-def goat_operator(filename: str, embedder: Embedder) -> str:
+def goat_operator(filename: str, embedder: Embedder) -> str:  # pragma: no cover
     """Run a GOAT conformational search via ORCA and return the output filename."""
     # load molecule to be optimized from embedder
     mol = next((mol for mol in embedder.objects if mol.filename == filename))
@@ -372,7 +372,7 @@ def goat_operator(filename: str, embedder: Embedder) -> str:
             method=goat_level,
             kcal=embedder.options.kcal_thresh,
             ncimode=embedder.options.nci,
-            title=mol.rootname + "_GOAT",
+            title=mol.basename + "_GOAT",
             logfunction=embedder.log,
         )
 
@@ -403,7 +403,7 @@ def goat_operator(filename: str, embedder: Embedder) -> str:
         logfunction(f"All {after} structures passed the similarity pruning.")
 
     ### PRINTOUT
-    with open(f"{mol.rootname}_goat_confs.xyz", "w") as f:
+    with open(f"{mol.basename}_goat_confs.xyz", "w") as f:
         for i, new_s in enumerate(conformers_array):
             write_xyz(
                 mol.atoms, new_s, f, title=f"Conformer {i}/{len(conformers_array)} from CREST MTD"
@@ -412,4 +412,4 @@ def goat_operator(filename: str, embedder: Embedder) -> str:
     # check the structures again and warn if some look compenetrated
     embedder.check_objects_compenetration()
 
-    return f"{mol.rootname}_goat_confs.xyz"
+    return f"{mol.basename}_goat_confs.xyz"

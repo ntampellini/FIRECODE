@@ -596,7 +596,7 @@ def _fast_bimol_rigid_cyclical_embed(
     conf_number = [len(mol.coords) for mol in embedder.objects]
     conf_indices = cartesian_product(*[np.array(range(i)) for i in conf_number])
 
-    poses = []
+    poses, all_poses = [], []
     constrained_indices = []
     for ci, conf_ids in enumerate(conf_indices):
         pivots_indices = cartesian_product(
@@ -711,6 +711,10 @@ def _fast_bimol_rigid_cyclical_embed(
                             # to mean of vec_pair (defining the target position - the side of a triangle for three molecules)
 
                         embedded_structure = get_embed(embedder.objects, conf_ids)
+
+                        if embedder.options.debug:
+                            all_poses.append(embedded_structure)
+
                         if compenetration_check(
                             embedded_structure,
                             ids=embedder.ids,
@@ -727,6 +731,12 @@ def _fast_bimol_rigid_cyclical_embed(
     loadbar(1, 1, prefix="Embedding structures ")
 
     embedder.constrained_indices = np.array(constrained_indices)
+
+    if embedder.options.debug:
+        from firecode.ensemble import Ensemble
+
+        ens = Ensemble(np.concatenate([mol.atoms for mol in embedder.objects]), np.array(all_poses))
+        ens.to_xyz("debug_cyclical_embed_all_poses.xyz")
 
     if not poses:
         s = (
@@ -795,7 +805,7 @@ def _get_monomolecular_reactive_indices(embedder: Embedder) -> Array2D_int:
     return np.array([[] for _ in embedder.structures], dtype=int)
 
 
-def get_embed(mols: Iterable[Hypermolecule], conf_ids: Iterable[int]) -> Array3D_float:
+def get_embed(mols: Iterable[Hypermolecule], conf_ids: Iterable[int]) -> Array2D_float:
     """mols: iterable of Hypermolecule objects
     conf_ids: iterable of conformer indices for each mol
 

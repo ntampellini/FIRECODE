@@ -29,11 +29,12 @@ import random
 import re
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from getpass import getuser
 from importlib.metadata import version
 from itertools import groupby
+from multiprocessing import current_process, get_start_method, set_start_method
 from string import ascii_lowercase
 from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 
@@ -45,11 +46,12 @@ from prism_pruner.pruner import prune_by_moment_of_inertia, prune_by_rmsd, prune
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, time_to_string
 from psutil import virtual_memory
+from rich.traceback import install as install_rich_traceback
 
 from firecode.algebra import count_clashes, point_angle
 from firecode.ase_manipulations import Constraint
-from firecode.dispatcher import Opt_func_dispatcher
-from firecode.embedder_options import Options, OptionSetter, keywords_dict
+from firecode.dispatcher import Dispatcher
+from firecode.embedder_options import Option_setter, Options, keywords_dict
 from firecode.embeds import (
     _get_monomolecular_reactive_indices,
     cyclical_embed,
@@ -75,7 +77,7 @@ from firecode.utils import (
     scramble_check,
     str_to_var,
     timing_decorator,
-    timing_decorator_with_payload,
+    timing_wrapper_with_payload,
     write_xyz,
 )
 
@@ -100,6 +102,21 @@ class Embedder:
 
         """
         self.t_start_run = time.perf_counter()
+
+        # reconfigure stdout in case something changed
+        # it since its setting in __main__.py,
+        # for example a fork subprocess in Linux
+        # when running multiprocessing modules
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+
+        install_rich_traceback(show_locals=True)
+
+        # specify start method for multiprocessing
+        # if this is the main process
+        if current_process().name == "MainProcess":
+            if get_start_method(allow_none=True) is None:
+                set_start_method("spawn")
 
         parent_dir = os.path.dirname(filename)
         if parent_dir != "":
@@ -199,6 +216,11 @@ class Embedder:
         except Exception as e:
             logging.exception(e)
             raise e
+
+    @property
+    def mols(self) -> dict[str, Hypermolecule]:
+        """Dictionary property containing deepcopies of Hypermolecule objects."""
+        return {mol.filename: deepcopy(mol) for mol in self.objects}
 
     def log(self, string: str = "", p: bool = True) -> None:
         if p:
@@ -343,6 +365,13 @@ class Embedder:
             self.log(f"{_l + 1:2}> | " + line.rstrip("\n").ljust(longest) + "   |")
         self.log("    " + "-" * (longest + 6) + "\n")
 
+        # write environment variables
+        self.log("    Environment variables:")
+        self.log("  -------------------------------------------")
+        for key, value in sorted(os.environ.items()):
+            if key.startswith("FIRECODE_"):
+                self.log(f"    {key}={value}")
+
         # Remove comments
         lines = [line.split("#")[0].rstrip() for line in lines]
 
@@ -433,12 +462,12 @@ class Embedder:
                     )
 
     def _set_options(self, filename: str) -> None:
-        """Set the options dataclass parameters through the OptionSetter class,
+        """Set the options dataclass parameters through the Option_setter class,
         from a list of given keywords. These will be used during the run to
         vary the search depth and/or output.
         """
         try:
-            option_setter = OptionSetter(self)
+            option_setter = Option_setter(self)
             option_setter.set_options()
 
         except SyntaxError as e:
@@ -977,7 +1006,7 @@ class Embedder:
 
             # If the run is a refine>/REFINE one, the self.embed
             # attribute is set in advance by the self._set_options
-            # function through the OptionSetter class
+            # function through the Option_setter class
             return
 
         for mol in self.objects:
@@ -1309,7 +1338,7 @@ class Embedder:
                 f"FIRECODE_DEFAULT_LEVEL_{self.options.calculator}"
             )
 
-        self.dispatcher = Opt_func_dispatcher(self.options.calculator)
+        self.dispatcher = Dispatcher(self.options.calculator)
 
         if self.options.calculator == "AIMNET2":
             if self.options.mult != 1:
@@ -1381,7 +1410,7 @@ class Embedder:
                     pass
 
     def similarity_refining(
-        self, tfd: bool = True, moi: bool = True, rmsd: bool = True, verbose: bool = False
+        self, tfd: bool = False, moi: bool = True, rmsd: bool = True, verbose: bool = False
     ) -> None:
         """If possible, removes structures with similar torsional profile (TFD-based).
         Removes structures that are too similar to each other (RMSD-based).
@@ -1496,8 +1525,7 @@ class Embedder:
         # for input_string in self.options.operators:
         for index, operators in self.options.operators_dict.items():
             for operator in operators:
-                input_string = f"{operator}> {self.objects[index].filename}"
-                outname = operate(input_string, self)
+                outname = operate(self.objects[index].filename, operator, self)
 
                 if operator == "refine":
                     self._set_embedder_structures_from_mol()
@@ -1548,18 +1576,6 @@ class Embedder:
         # resetting the attribute
         self.embed = None
 
-    def _extract_filename(self, input_string: str) -> str:
-        """Input: 'refine> firecode_unoptimized_comp_check.xyz 5a 36a 0b 43b 33c 60c'
-        Output: 'firecode_unoptimized_comp_check.xyz'
-        """
-        input_string = input_string.rsplit(">", maxsplit=1)[-1].lstrip()
-        # remove operator and whitespaces after it
-
-        input_string = input_string.split()[0]
-        # remove pairing numbers/letters and newline chars
-
-        return input_string
-
     def scramble(self, array: NDArray[Any], sequence: Sequence[Any]) -> NDArray[Any]:
         return np.array([array[s] for s in sequence])
 
@@ -1585,7 +1601,7 @@ class Embedder:
 
         # Option 3: calculate on-the-fly with orbital dimensions
         d: float = 0.0
-        try:
+        try:  # pragma: no cover
             for mol_index, mol_pairing_dict in self.pairings_dict.items():
                 if r_atom_index := mol_pairing_dict.get(letter):
                     # for refine embeds, one letter corresponds to two indices
@@ -1605,7 +1621,7 @@ class Embedder:
             return d
 
         # If no orbitals were built, raise Error
-        except NoOrbitalError:
+        except NoOrbitalError:  # pragma: no cover
             if allow_none_return:
                 return None
             raise NoOrbitalError(f'The distance associated with letter "{letter}" was not found.')
@@ -1811,7 +1827,10 @@ class RunEmbedding(Embedder):
             if attr[0:2] != "__" and attr != "run":
                 attr_value = getattr(embedder, attr)
                 if not hasattr(attr_value, "__call__"):
-                    setattr(self, attr, attr_value)
+                    try:
+                        setattr(self, attr, attr_value)
+                    except AttributeError:
+                        pass
 
     def zero_candidates_check(self) -> None:
         """Asserts that not all structures are being rejected."""
@@ -1865,7 +1884,9 @@ class RunEmbedding(Embedder):
                 'DEBUG: Dumped emebedder status after generating candidates ("generate_candidates")'
             )
 
-    def dump_status(self, outname: str, only_fixed_constraints: bool = False) -> None:
+    def dump_status(
+        self, outname: str, only_fixed_constraints: bool = False
+    ) -> None:  # pragma: no cover
         """Writes structures and energies to [outname].xyz
         and [outname].dat to help debug the current run.
 
@@ -2080,9 +2101,6 @@ class RunEmbedding(Embedder):
         t_start = time.perf_counter()
         processes = []
         cum_time: float = 0.0
-        timed_opt_func_with_payload: Callable[
-            ..., tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
-        ] = timing_decorator_with_payload()(self.dispatcher.opt_func)  # type: ignore[arg-type]
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             for i, structure in enumerate(deepcopy(self.structures)):
@@ -2116,8 +2134,11 @@ class RunEmbedding(Embedder):
                     constrained_dihedrals_values,
                 ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
-                process = executor.submit(
-                    timed_opt_func_with_payload,
+                process: Future[
+                    tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
+                ] = executor.submit(
+                    timing_wrapper_with_payload,  # type: ignore[arg-type]
+                    self.dispatcher.opt_func,
                     self.atoms,
                     structure,
                     method=self.options.theory_level,
@@ -2557,7 +2578,7 @@ class RunEmbedding(Embedder):
                 "active fixed constraints! The thermochemical data should be interpreted carefully!"
             )
 
-        title = self.objects[0].rootname if len(self.objects) == 1 else "structures"
+        title = self.objects[0].basename if len(self.objects) == 1 else "structures"
 
         self.energies = get_free_energies(
             embedder=self,
@@ -2691,7 +2712,7 @@ class RunEmbedding(Embedder):
                         mol = self.objects[mol_id]
 
                         for a in atom_id:
-                            s += f"       Index {a} ({mol.atoms[a]:2s}) on {mol.rootname}\n"
+                            s += f"       Index {a} ({mol.atoms[a]:2s}) on {mol.basename}\n"
 
                 s += f"       Cumulative indices: {self.pairings_table[letter]}\n"
 
@@ -2879,7 +2900,7 @@ class RunEmbedding(Embedder):
             if mol.pka_data is not None:
                 table.add_row(
                     [
-                        mol.rootname,
+                        mol.basename,
                         f"{mol.reactive_indices[0]}({mol.atoms[mol.reactive_indices[0]]})",
                         mol.pka_data[0],
                         mol.pka_data[1],
@@ -2943,7 +2964,7 @@ class RunEmbedding(Embedder):
 
         for mol in self.objects:
             if mol.scan_data is not None:
-                plt.plot(*mol.scan_data, label=mol.rootname)
+                plt.plot(*mol.scan_data, label=mol.basename)
 
         plt.legend()
         plt.title("Unified scan energetics")

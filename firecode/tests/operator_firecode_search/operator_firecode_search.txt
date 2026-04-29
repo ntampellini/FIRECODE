@@ -1,0 +1,3 @@
+calc=tblite confs=1000
+firecode_search_hb> catalyst.xyz
+firecode_rsearch> catalyst.xyz

@@ -1,0 +1,2 @@
+solvent=ch2cl2
+packmol> C2H4.xyz

@@ -59,81 +59,74 @@ if TYPE_CHECKING:
     from firecode.embedder import Embedder
 
 
-def operate(input_string: str, embedder: Embedder) -> str:
-    """Perform the operations according to the chosen
-    operator and return the outname of the (new) .xyz
-    file to be read instead of the input one.
-    """
-    filename = embedder._extract_filename(input_string)
+def operate(filename: str, operator: str, embedder: Embedder) -> str:
+    """Apply the specified operator.
 
+    Perform the operations according to the chosen
+    operator and return the outname of the processed
+    .xyz file to be read.
+    """
     if not hasattr(embedder, "t_start_run"):
         embedder.t_start_run = time.perf_counter()
 
     if embedder.options.dryrun:
-        embedder.log(f'--> Dry run requested: skipping operator "{input_string}"')
+        embedder.log(f'--> Dry run requested: skipping operator "{operator}"')
         return filename
 
-    elif "firecode_search>" in input_string:
-        outname = csearch_operator(filename, embedder)
+    match operator:
+        case "firecode_search":
+            outname = csearch_operator(filename, embedder)
 
-    elif "opt>" in input_string:
-        outname = opt_operator(filename, embedder, logfunction=embedder.log)
+        case "opt":
+            outname = opt_operator(filename, embedder, logfunction=embedder.log)
 
-    elif "firecode_search_hb>" in input_string:
-        outname = csearch_operator(filename, embedder, keep_hb=True)
+        case "firecode_search_hb":
+            outname = csearch_operator(filename, embedder, keep_hb=True)
 
-    elif "firecode_rsearch>" in input_string:
-        outname = csearch_operator(filename, embedder, mode=2)
+        case "firecode_rsearch":
+            outname = csearch_operator(filename, embedder, mode=2)
 
-    elif any(
-        string in input_string for string in ("mtd_search>", "mtd>", "crest>", "crest_search>")
-    ):
-        outname = crest_search_operator(filename, embedder)
+        case "mtd_search" | "mtd" | "crest" | "crest_search":
+            outname = crest_search_operator(filename, embedder)
 
-    elif "goat>" in input_string:
-        outname = goat_operator(filename, embedder)
+        case "goat":
+            outname = goat_operator(filename, embedder)
 
-    elif any(
-        string in input_string
-        for string in ("rdkit_search>", "rdkit>", "racerts>", "racerts_search>")
-    ):
-        outname = rdkit_search_operator(filename, embedder)
+        case "rdkit_search" | "rdkit" | "racerts" | "racerts_search":
+            outname = rdkit_search_operator(filename, embedder)
 
-    elif "scan>" in input_string:
-        outname = scan_operator(filename, embedder)
+        case "scan":
+            outname = scan_operator(filename, embedder)
 
-    elif "neb>" in input_string:
-        outname = neb_operator(filename, embedder)
+        case "neb":
+            outname = neb_operator(filename, embedder)
 
-    elif any(string in input_string for string in ("fsm>", "mlfsm>")):
-        outname = fsm_operator(embedder)
+        case "fsm" | "mlfsm":
+            outname = fsm_operator(embedder)
 
-    elif "refine>" in input_string:
-        outname = filename
-        # this operator is accounted for in the OptionSetter
-        # class of Options, set when the Embedder calls _set_options
+        case "refine":
+            outname = filename
+            # this operator is accounted for in the Option_setter
+            # class of Options, set when the Embedder calls _set_options
 
-    elif "pka>" in input_string:
-        pka_routine(filename, embedder)
-        outname = filename
+        case "pka":
+            pka_routine(filename, embedder)
+            outname = filename
 
-    elif any(string in input_string for string in ("saddle>", "ts>")):
-        outname = saddle_operator(filename, embedder)
+        case "saddle" | "ts":
+            outname = saddle_operator(filename, embedder)
 
-    elif any(string in input_string for string in ("freq>", "thermo>")):
-        outname = freq_operator(filename, embedder)
+        case "freq" | "thermo":
+            outname = freq_operator(filename, embedder)
 
-    elif "packmol>" in input_string:
-        outname = packmol_operator(filename, embedder)
+        case "packmol":
+            outname = packmol_operator(filename, embedder)
 
-    elif "equilibrate>" in input_string:
-        outname = equilibrate_operator(filename, embedder)
+        case "equilibrate":
+            outname = equilibrate_operator(filename, embedder)
 
-    ##### OVERLOAD
-
-    else:
-        op = input_string.split(">", maxsplit=1)[0]
-        raise Exception(f"Operator {op} not recognized.")
+        case _:
+            raise Exception(f"Operator {operator} not recognized.")
 
     return outname
 
@@ -148,9 +141,7 @@ def csearch_operator(
         s += " (preserving current hydrogen bonds)"
     embedder.log(s)
 
-    # t_start = time.perf_counter()
-
-    data = read_xyz(filename)
+    data = embedder.mols[filename]
 
     if len(data.coords) > 1:
         embedder.log(
@@ -206,8 +197,7 @@ def opt_operator(
 ) -> str:
     """ """
 
-    mol = next((mol for mol in embedder.objects if mol.filename == filename))
-    # load molecule to be optimized from embedder
+    mol = embedder.mols[filename]
 
     if logfunction is not None:
         logfunction(
@@ -280,7 +270,7 @@ def opt_operator(
 def neb_operator(filename: str, embedder: Embedder, attempts: int = 3) -> str:
     """Run a NEB calculation with the ASE module."""
     embedder.t_start_run = time.perf_counter()
-    data = read_xyz(filename)
+    data = embedder.mols[filename]
     n_str = len(data.coords)
 
     if not hasattr(embedder.options, "neb"):
@@ -436,8 +426,8 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
         "CREST (version 2 or 3) does not seem to be installed. Install it with: mamba install -c conda-forge crest=3"
     )
 
-    mol = next((mol for mol in embedder.objects if mol.filename == filename))
     # load molecule to be optimized from embedder
+    mol = embedder.mols[filename]
 
     if not embedder.options.let:
         if len(mol.coords) >= 20:
@@ -569,7 +559,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 method=crest_method,
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.nci,
-                title=mol.rootname + "_CREST",
+                title=mol.basename + "_CREST",
                 threads=crest_threads,
             )
 
@@ -592,7 +582,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 method="GFN2-XTB",  # try with XTB2
                 kcal=embedder.options.kcal_thresh,
                 ncimode=embedder.options.nci,
-                title=mol.rootname + "_CREST",
+                title=mol.basename + "_CREST",
                 threads=crest_threads,
             )
 
@@ -639,7 +629,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
     )
 
     ### PRINTOUT
-    with open(f"{mol.rootname}_crest_confs.xyz", "w") as f:
+    with open(f"{mol.basename}_crest_confs.xyz", "w") as f:
         for i, new_s in enumerate(conformers_array):
             write_xyz(
                 mol.atoms, new_s, f, title=f"Conformer {i}/{len(conformers_array)} from CREST MTD"
@@ -648,7 +638,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
     # check the structures again and warn if some look compenetrated
     embedder.check_objects_compenetration()
 
-    return f"{mol.rootname}_crest_confs.xyz"
+    return f"{mol.basename}_crest_confs.xyz"
 
 
 def scan_operator(filename: str, embedder: Embedder) -> str | MaybeNone:
@@ -657,15 +647,15 @@ def scan_operator(filename: str, embedder: Embedder) -> str | MaybeNone:
     4 indices: dihedral_scan
 
     """
-    mol = next((mol for mol in embedder.objects if mol.filename == filename))
+    mol = embedder.mols[filename]
 
     assert len(mol.coords) == 1, "The scan> operator works on a single .xyz geometry."
 
     if len(mol.reactive_indices) == 2:
-        return distance_scan(embedder)
+        return distance_scan(filename, embedder)
 
     elif len(mol.reactive_indices) == 4:
-        dihedral_scan(embedder)
+        dihedral_scan(filename, embedder)
         return None
 
     else:
@@ -674,13 +664,14 @@ def scan_operator(filename: str, embedder: Embedder) -> str | MaybeNone:
         )
 
 
-def distance_scan(embedder: Embedder) -> str:
-    """Thought to approach or separate two reactive atoms, looking for the energy maximum.
-    Scan direction is inferred by the reactive index distance.
+def distance_scan(filename: str, embedder: Embedder) -> str:
+    """Approach or separate two reactive atoms, looking for the energy maximum.
+
+    Scan direction is inferred by the reactive_indices distance.
     """
-    embedder.t_start_run = time.perf_counter()
-    mol = embedder.objects[0]
     t_start = time.perf_counter()
+
+    mol = embedder.mols[filename]
 
     # shorthands for clearer code
     i1, i2 = mol.reactive_indices
@@ -709,7 +700,7 @@ def distance_scan(embedder: Embedder) -> str:
 
         max_iterations = round(abs(d - target) / abs(step))
         embedder.log(
-            f"--> {mol.rootname}: ({i1}-{i2}) final scan distance set to {target:.2f} A ({max_iterations} iterations)"
+            f"--> {mol.basename}: ({i1}-{i2}) final scan distance set to {target:.2f} A ({max_iterations} iterations)"
         )
 
     # defining the maximum number of iterations
@@ -726,7 +717,7 @@ def distance_scan(embedder: Embedder) -> str:
 
     # logging to file and terminal
     embedder.log(
-        f"--> {mol.rootname} - Performing a distance scan {'approaching' if step < 0 else 'separating'} indices {i1} "
+        f"--> {mol.basename} - Performing a distance scan {'approaching' if step < 0 else 'separating'} indices {i1} "
         + f"and {i2} - step size {round(step, 2)} A\n    Theory level is {embedder.options.theory_level}/{embedder.options.solvent or 'vacuum'} "
         + f"via {embedder.options.calculator}"
     )
@@ -803,7 +794,7 @@ def distance_scan(embedder: Embedder) -> str:
         markersize=3,
     )
 
-    title = mol.rootname + " distance scan"
+    title = mol.basename + " distance scan"
     plt.legend()
     plt.title(title)
     plt.xlabel(f"indices s{i1}-{i2} distance (A)")
@@ -819,7 +810,7 @@ def distance_scan(embedder: Embedder) -> str:
     ### Start structure writing
 
     # print all scan structures
-    with open(f"{mol.rootname}_scan.xyz", "w") as f:
+    with open(f"{mol.basename}_scan.xyz", "w") as f:
         for i, (s, d, e) in enumerate(zip(structures, dists, energies)):
             write_xyz(
                 mol.atoms,
@@ -830,7 +821,7 @@ def distance_scan(embedder: Embedder) -> str:
             )
 
     # print the maximum on another file for convienience
-    with open(f"{mol.rootname}_scan_max.xyz", "w") as f:
+    with open(f"{mol.basename}_scan_max.xyz", "w") as f:
         s = structures[id_max]
         d = dists[id_max]
         write_xyz(
@@ -842,14 +833,14 @@ def distance_scan(embedder: Embedder) -> str:
         )
 
     embedder.log(
-        f"\n--> Written {len(structures)} structures to {mol.rootname}_scan.xyz ({time_to_string(time.perf_counter() - t_start)})"
+        f"\n--> Written {len(structures)} structures to {mol.basename}_scan.xyz ({time_to_string(time.perf_counter() - t_start)})"
     )
-    embedder.log(f"\n--> Written energy maximum to {mol.rootname}_scan_max.xyz\n")
+    embedder.log(f"\n--> Written energy maximum to {mol.basename}_scan_max.xyz\n")
 
     # Log data to the embedder class
     mol.scan_data = (dists, energies)
 
-    return f"{mol.rootname}_scan.xyz"
+    return f"{mol.basename}_scan.xyz"
 
 
 def saddle_operator(filename: str, embedder: Embedder) -> str:
@@ -863,13 +854,14 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
 
     constrained_indices = embedder._get_internal_constraints(filename)
 
-    # The distance_scan> operator returns all
+    # The "distance" scan> operator
+    # (distance_scan function) returns all
     # structures of the scan, but we want to
     # perform a saddle optimization only on
     # the highest energy one
     pick_highest_energy_structure = False
-    for i, hypmol in enumerate(embedder.objects):
-        if hypmol.filename == filename:
+    for i, _ in enumerate(embedder.objects):
+        if _.filename == filename:
             ops = embedder.options.operators_dict[i]
 
             if len(ops) > 1:
@@ -879,7 +871,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
 
             break
 
-    mol = read_xyz(filename)
+    mol = embedder.mols[filename]
 
     if pick_highest_energy_structure:
         energies = cast("list[float]", read_xyz_energies(filename))
@@ -897,7 +889,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     opt_coords_list: list[Array2D_float] = []
 
     for c, coords in enumerate(mol.coords):
-        title = f"{hypmol.rootname}_conf{c}_saddle"
+        title = f"{mol.basename}_conf{c}_saddle"
 
         # will work in new folders and
         # not delete them since debug=True
@@ -905,8 +897,8 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
             atoms=mol.atoms,
             coords=coords,
             dispatcher=embedder.dispatcher,
-            charge=hypmol.charge,
-            mult=hypmol.mult,
+            charge=mol.charge,
+            mult=mol.mult,
             calculator=embedder.options.calculator,
             method=embedder.options.theory_level,
             solvent=embedder.options.solvent,
@@ -926,9 +918,9 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
         embedder=embedder,
         atoms=mol.atoms,
         structures=opt_coords_array,
-        charge=hypmol.charge,
-        mult=hypmol.mult,
-        title=f"{hypmol.rootname}",
+        charge=mol.charge,
+        mult=mol.mult,
+        title=f"{mol.basename}",
         tighten_opt_before_vib=False,
         logfunction=embedder.log,
     )
@@ -938,7 +930,7 @@ def saddle_operator(filename: str, embedder: Embedder) -> str:
     free_energies = free_energies[sorted_indices]
     opt_coords_array = opt_coords_array[sorted_indices]
 
-    outname = f"{hypmol.rootname}_saddles.xyz"
+    outname = f"{mol.basename}_saddles.xyz"
 
     with open(outname, "w") as f:
         for i, (coords, free_energy) in enumerate(
@@ -958,12 +950,7 @@ def freq_operator(filename: str, embedder: Embedder) -> str:
     """Run a frequency calculation on the input structure(s)."""
     from firecode.thermochemistry import get_free_energies
 
-    mol = read_xyz(filename)
-
-    # link corresponding hypermolecule
-    for i, hypmol in enumerate(embedder.objects):
-        if hypmol.filename == filename:
-            break
+    mol = embedder.mols[filename]
 
     s = "s" if len(mol.coords) > 1 else ""
     embedder.log(
@@ -974,9 +961,9 @@ def freq_operator(filename: str, embedder: Embedder) -> str:
         embedder=embedder,
         atoms=mol.atoms,
         structures=mol.coords,
-        charge=hypmol.charge,
-        mult=hypmol.mult,
-        title=f"{hypmol.rootname}",
+        charge=mol.charge,
+        mult=mol.mult,
+        title=f"{mol.basename}",
         tighten_opt_before_vib=False,
         logfunction=embedder.log,
     )
@@ -986,7 +973,7 @@ def freq_operator(filename: str, embedder: Embedder) -> str:
     free_energies = free_energies[sorted_indices]
     coords = mol.coords[sorted_indices]
 
-    outname = f"{hypmol.rootname}_freq.xyz"
+    outname = f"{mol.basename}_freq.xyz"
 
     with open(outname, "w") as f:
         for i, (coords, free_energy) in enumerate(zip(align_structures(coords), free_energies)):
@@ -1005,7 +992,7 @@ def packmol_operator(filename: str, embedder: Embedder) -> str:
     if embedder.options.solvent is None:
         raise Exception("Please specify a solvent for `packmol>`.")
 
-    mol = read_xyz(filename)
+    mol = embedder.mols[filename]
 
     if len(mol.coords) > 1:
         raise NotImplementedError

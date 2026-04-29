@@ -65,7 +65,8 @@ pytest-cov = ">=7.0.0,<8"
 ruff = ">=0.11"
 mypy = ">=1.19.1,<2"
 pre-commit = ">=4.2"
-fairchem-core = "*"
+fairchem-core = ">=2.12.0,<3"
+packmol = ">=21.2.1,<22"
 coverage = ">=7.13.4,<8"
 sphinx = ">=9.1.0,<10"
 furo = ">=2025.12.19,<2026"
@@ -86,6 +87,7 @@ all = { depends-on = ["fmt", "lint", "types", "test"] }
 line-length = 100
 exclude = [
     "settings.py",
+    "paper.md",
 ]
 
 [tool.ruff.lint]
@@ -139,15 +141,6 @@ full = [
     "fairchem-core",
     "aimnet[ase]",
 ]
-
-[tool.coverage.run]
-relative_files = true
-
-[tool.coverage.report]
-relative_files = true
-
-[tool.coverage.xml]
-output = "coverage.xml"
 
 [tool.mypy]
 files = ["firecode"]

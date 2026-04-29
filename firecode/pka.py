@@ -214,11 +214,11 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
         conformers,
         charge=mol.charge,
         mult=mol.mult,
-        title=f"{mol.rootname}_original",
+        title=f"{mol.basename}_original",
     )
     conformers, free_energies = zip(*sorted(zip(conformers, free_energies), key=lambda x: x[1]))  # type: ignore[assignment]
 
-    with open(f"{mol.rootname}_confs_opt.xyz", "w") as f:
+    with open(f"{mol.basename}_confs_opt.xyz", "w") as f:
         solvent_string = (
             f", {embedder.options.solvent}" if embedder.options.solvent is not None else ""
         )
@@ -245,13 +245,13 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
             anions,
             charge=charge,
             mult=mol.mult,
-            title=f"{mol.rootname}{charge_to_str(charge)}_deprotonated",
+            title=f"{mol.basename}{charge_to_str(charge)}_deprotonated",
         )
         anions, anions_free_energies = zip(  # type: ignore[assignment]
             *sorted(zip(anions, anions_free_energies), key=lambda x: x[1])
         )
 
-        with open(f"{mol.rootname}_anions_opt.xyz", "w") as f:
+        with open(f"{mol.basename}_anions_opt.xyz", "w") as f:
             for c, e in zip(anions, anions_free_energies):
                 write_xyz(
                     anions_atoms,
@@ -269,7 +269,7 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
     else:
         # we have a base, form and optimize the cations
         charge = mol.charge + 1
-        h = "H" if mol.rootname[-1].upper() != "H" else "_H"
+        h = "H" if mol.basename[-1].upper() != "H" else "_H"
 
         cations, _, cations_atoms = _get_cations(
             embedder, mol, conformers, mol.reactive_indices[0], logfunction=embedder.log
@@ -281,13 +281,13 @@ def pka_routine(filename: str, embedder: Embedder, search: bool = True) -> None:
             cations,
             charge=charge,
             mult=mol.mult,
-            title=f"{mol.rootname}{h}{charge_to_str(charge)}_protonated",
+            title=f"{mol.basename}{h}{charge_to_str(charge)}_protonated",
         )
         cations, cations_free_energies = zip(  # type: ignore[assignment]
             *sorted(zip(cations, cations_free_energies), key=lambda x: x[1])
         )
 
-        with open(f"{mol.rootname}_cations_opt.xyz", "w") as f:
+        with open(f"{mol.basename}_cations_opt.xyz", "w") as f:
             for c, e in zip(cations, cations_free_energies):
                 write_xyz(
                     cations_atoms,

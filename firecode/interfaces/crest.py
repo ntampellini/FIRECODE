@@ -14,7 +14,7 @@ from firecode.typing_ import Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import clean_directory, read_xyz, write_xyz
 
 
-def crest2_mtd_search(
+def crest2_mtd_search(  # pragma: no cover
     atoms: Array1D_str,
     coords: Array2D_float,
     constrained_indices: Sequence[Sequence[int]] | None = None,

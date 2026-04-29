@@ -18,17 +18,21 @@ Nicolo' Tampellini - ntamp@mit.edu
 
 """
 
-import argparse
 import os
 import sys
+
+# Reconfigure already-open streams and set encoding variables
+sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+os.environ["PYTHONUTF8"] = "1"
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
+import argparse
 from io import TextIOWrapper
-
-from rich.traceback import install
-
-install(show_locals=True)
+from pathlib import Path
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     # Redirect stdout and stderr to handle encoding errors
     sys.stdout = TextIOWrapper(
         sys.stdout.buffer, encoding="utf-8", errors="replace", write_through=True
@@ -48,7 +52,6 @@ def main() -> None:
           -s, --setup             Guided setup of the calculation settings.
           -n, --name NAME         Specify a custom name for the run.
           -cl,--command_line      Read instructions from the command line instead of from an input file.
-          -p, --profile           Profile the run through cProfiler.
 
           """
 
@@ -72,20 +75,13 @@ def main() -> None:
     parser.add_argument(
         "-n", "--name", help="Specify a custom name for the run.", action="store", required=False
     )
-    parser.add_argument(
-        "-p",
-        "--profile",
-        help="Profile the run through cProfiler.",
-        action="store_true",
-        required=False,
-    )
 
     args = parser.parse_args()
 
-    env_variables_handling()
-
     if (not (args.setup or args.command_line)) and args.inputfile is None:
         parser.error("One of the following arguments are required: inputfile, -t, -s.\n")
+
+    env_variables_handling()
 
     if args.setup:
         from firecode.modify_settings import run_setup
@@ -104,12 +100,6 @@ def main() -> None:
 
     from firecode.embedder import Embedder
 
-    if args.profile:
-        from firecode.profiler import profiled_wrapper
-
-        profiled_wrapper(filename, args.name)
-        sys.exit(0)
-
     embedder = Embedder(filename, stamp=args.name)
     # initialize embedder from input file
 
@@ -123,7 +113,6 @@ def env_variables_handling() -> None:
     Priority should be given to handling env vars with locally-scoped
     context managers, if possible (see the env_override function).
     """
-    from pathlib import Path
     from shutil import rmtree
 
     # remove compilation cache for jax: we might be running on different
@@ -139,15 +128,19 @@ def env_variables_handling() -> None:
         os.environ.setdefault(key, value)
 
     # override/add from global .firecoderc
-    if Path("~/.firecoderc").exists():
-        set_env_vars_from_file("~/.firecoderc")
+    global_rc = Path.home() / ".firecoderc"
+    if global_rc.exists():
+        set_env_vars_from_file(global_rc)
 
     # override/add from local .firecoderc
     if ".firecoderc" in os.listdir(os.getcwd()):
         set_env_vars_from_file(".firecoderc")
 
+    # enforce global UTF-8 encoding
+    os.environ["PYTHONUTF8"] = "1"
 
-def set_env_vars_from_file(filename: str) -> None:
+
+def set_env_vars_from_file(filename: str | Path) -> None:
     """Set environment variable from a text file."""
     with open(filename, "r") as f:
         lines = f.readlines()
