@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from firecode.embedder import Embedder
 
 
-def orca_goat_xtb_search(
+def orca_goat_xtb_search(  # pragma: no cover
     atoms: Array1D_str,
     coords: Array2D_float,
     constrained_indices: Sequence[Sequence[int]] | None = None,
@@ -239,7 +239,7 @@ def orca_goat_xtb_search(
         return new_coords
 
 
-def goat_operator(filename: str, embedder: Embedder) -> str:
+def goat_operator(filename: str, embedder: Embedder) -> str:  # pragma: no cover
     """Run a GOAT conformational search via ORCA and return the output filename."""
     # load molecule to be optimized from embedder
     mol = next((mol for mol in embedder.objects if mol.filename == filename))

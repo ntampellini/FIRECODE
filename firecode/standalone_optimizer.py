@@ -29,7 +29,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from io import TextIOWrapper
 from time import perf_counter
-from typing import TYPE_CHECKING, Sequence, cast
+from typing import TYPE_CHECKING, Callable, Sequence, cast
 
 import numpy as np
 from ase.calculators.calculator import Calculator as ASECalculator
@@ -40,7 +40,7 @@ from prism_pruner.algebra import dihedral
 from prism_pruner.utils import time_to_string
 
 from firecode.algebra import point_angle
-from firecode.ase_manipulations import Constraint, Spring, ase_popt, ase_saddle
+from firecode.ase_manipulations import Constraint, Spring, ase_saddle
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.ensemble import Ensemble
 from firecode.rdkit_tools import convert_constraint_with_smarts
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 _defaults = {
     "calculator": "UMA",
     "method": "OMOL",
-    "solvent": "ch2cl2",
+    "solvent": "toluene",
 }
 
 
@@ -80,6 +80,7 @@ class OptimizerOptions:
     irc: bool = False
     smarts_string: str | None = None
     debug: bool = False
+    logfunction: Callable[[str], None] = print
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
@@ -93,19 +94,19 @@ class OptimizerOptions:
             self.freq = True
 
         if not self.opt and not self.saddle and not self.irc:
-            print(
+            self.logfunction(
                 "--> No optimization, saddle point optimization, or IRC requested: will perform single point calculations only."
             )
             self.sp = True
 
         if self.freq:
-            print("--> Performing vibrational analysis")
+            self.logfunction("--> Performing vibrational analysis")
 
         if self.saddle:
-            print("--> Requested saddle optimization")
+            self.logfunction("--> Requested saddle optimization")
 
         if self.newfile:
-            print("--> Writing optimized structures to new files")
+            self.logfunction("--> Writing optimized structures to new files")
 
     def _get_charge_mult_for_file(self, filename: str) -> tuple[int, int]:
         """Get charge and multiplicity for a given file."""
@@ -116,7 +117,7 @@ class OptimizerOptions:
                 mult = 1
             else:
                 mult = 2
-                print(
+                self.logfunction(
                     f'--> Multiplicity of "{filename}" assumed to be 2 based on filename charge and atom types'
                 )
 
@@ -144,7 +145,7 @@ class OptimizerOptions:
             # see if we are pattern matching
             if lines[0].startswith("SMARTS"):
                 self.smarts_string = lines.pop(0).lstrip("SMARTS ")
-                print(
+                self.logfunction(
                     "--> SMARTS line found: will pattern match and translate constrained indices on a per-molecule basis."
                 )
 
@@ -182,9 +183,9 @@ class OptimizerOptions:
                     n_constr += 1
 
                 except Exception as e:
-                    print(e)
+                    self.logfunction(str(e))
 
-            print(f"--> Read {n_constr} constraints from {self.constraint_file}")
+            self.logfunction(f"--> Read {n_constr} constraints from {self.constraint_file}")
 
     @property
     def ase_calc(self) -> ASECalculator:
@@ -479,7 +480,7 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
                 i1, i2 = (int(i) for i in data[0:2])
                 e1, e2 = mol.atoms[i1], mol.atoms[i2]
                 data[-1] = str(get_ts_d_estimate(e1, e2))
-                print(f"--> Estimated TS d({i1}-{i2}) = {data[-1]} Å")
+                optimizer.logfunction(f"--> Estimated TS d({i1}-{i2}) = {data[-1]} Å")
 
             assert len(data) in (2, 3, 4, 5), (
                 "Only 2-4 indices as ints + optional target as a float"
@@ -504,7 +505,7 @@ def inquire_optimizer_options(filenames: Sequence[str]) -> OptimizerOptions:
 
                 optimizer.constraints[filename].append(constraint)
 
-        print(f"Specified {len(optimizer.constraints)} global constraints")
+        optimizer.logfunction(f"Specified {len(optimizer.constraints)} global constraints")
 
     return optimizer
 
@@ -514,14 +515,14 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
     args: OptimizerOptions object, iterable of strings of structure filenames.
 
     """
-    print(optimizer)
+    optimizer.logfunction(str(optimizer))
 
     energies, names_confs = [], []
 
     # start optimizing
     for i, name in enumerate(optimizer.filenames):
         mol = optimizer.mols[name]
-        print()
+        optimizer.logfunction("")
 
         # set charge
         charge, mult = optimizer.charge_and_mult_dict[name]
@@ -540,19 +541,19 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     for constraint in optimizer.constraints[name]:
                         if constraint.type_ == "B":
                             a, b = constraint.indices
-                            print(
+                            optimizer.logfunction(
                                 f"CONSTRAIN -> d({a}-{b}) = {round(np.linalg.norm(coords[a] - coords[b]), 3)} A at start of optimization (target is {round(constraint.value, 3)} A)"
                             )
 
                         elif constraint.type_ == "A":
                             a, b, c = constraint.indices
-                            print(
+                            optimizer.logfunction(
                                 f"CONSTRAIN ANGLE -> Angle({a}-{b}-{c}) = {round(point_angle(coords[a], coords[b], coords[c]), 3)}° at start of optimization, target {round(constraint.value, 3)}°"
                             )
 
                         elif constraint.type_ == "D":
                             a, b, c, d = constraint.indices
-                            print(
+                            optimizer.logfunction(
                                 f"CONSTRAIN DIHEDRAL -> Dih({a}-{b}-{c}-{d}) = {round(dihedral(np.array([coords[a], coords[b], coords[c], coords[d]])), 3)}° at start of optimization, target {round(constraint.value, 3)}°"
                             )
 
@@ -566,12 +567,12 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     else:
                         post = ""
 
-                    print(
+                    optimizer.logfunction(
                         f"{action} {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
                     )
                     t_start = perf_counter()
 
-                    coords, energy, success = ase_popt(
+                    coords, energy, success = optimizer.dispatcher.opt_func(  # type: ignore[operator]
                         mol.atoms,
                         coords,
                         method=optimizer.method,
@@ -595,14 +596,14 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     elapsed = perf_counter() - t_start
 
                     if energy is None:
-                        print(
+                        optimizer.logfunction(
                             f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
                         )
 
                     elif optimizer.opt:
                         with open(outname, write_type) as f:
                             write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
-                        print(
+                        optimizer.logfunction(
                             f"{'Appended' if write_type == 'a' else 'Wrote'} optimized structure at {outname} - {time_to_string(elapsed)}\n"
                         )
 
@@ -612,7 +613,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     else:
                         post = ""
 
-                    print(
+                    optimizer.logfunction(
                         f"Optimizing TS for {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method}/{optimizer.calc}{post}) - CHG={charge} MULT={mult}"
                     )
                     t_start = perf_counter()
@@ -640,21 +641,21 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     elapsed = perf_counter() - t_start
 
                     if not success:
-                        print(
+                        optimizer.logfunction(
                             f"--> ERROR: Optimization of {name} crashed. ({time_to_string(elapsed)})"
                         )
 
                     elif optimizer.opt:
                         with open(outname, write_type) as f:
                             write_xyz(mol.atoms, coords, f, title=f"Energy = {energy} kcal/mol")  # type: ignore[arg-type]
-                        print(
+                        optimizer.logfunction(
                             f"{'Appended' if write_type == 'a' else 'Wrote'} saddle structure at {outname} - {time_to_string(elapsed)}\n"
                         )
 
                 if optimizer.freq:
                     from firecode.thermochemistry import ase_vib
 
-                    print(
+                    optimizer.logfunction(
                         f"Performing vibrational analysis on {name} - {i + 1} of {len(optimizer.filenames)}, conf {c_n + 1} of {len(mol.coords)} ({optimizer.method})"
                     )
                     t_start = perf_counter()
@@ -675,7 +676,7 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     energy += gcorr
                     num_neg = np.count_nonzero(freqs < 0.0)
                     elapsed = perf_counter() - t_start
-                    print(
+                    optimizer.logfunction(
                         f"Calculated vibrational frequencies ({num_neg} negative) in {time_to_string(elapsed)}\n"
                     )
 
@@ -683,11 +684,11 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                 names_confs.append(mol.basename + f"_conf{c_n + 1}")
 
         except Exception as e:
-            print("--> ", name, " - ", e)
+            optimizer.logfunction(f"--> {name} - {e}")
             raise (e)
 
         if optimizer.constraints[name]:
-            print("Constraints: final values")
+            optimizer.logfunction("Constraints: final values")
 
             for constraint in optimizer.constraints[name]:
                 if constraint.type_ == "B":
@@ -706,32 +707,37 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
                     uom = "°"
 
                 indices_string = "-".join([str(i) for i in constraint.indices])
-                print(
+                optimizer.logfunction(
                     f"CONSTRAIN -> {constraint.type_}({indices_string}) = {round(final_value, 3)}{uom}"
                 )
 
-                # revert original indices for the next molecule
-                if optimizer.smarts_string is not None:
-                    constraint.indices = constraint.old_indices  # type: ignore[attr-defined]
-
-            print()
+            optimizer.logfunction("")
 
         if optimizer.irc:
+            from sella.optimize.irc import IRCInnerLoopConvergenceFailure
+
             from firecode.ase_manipulations import ase_irc
 
             for c_n, coords in enumerate(mol.coords):
-                _, _ = ase_irc(
-                    mol.atoms,
-                    coords,
-                    method=optimizer.method,
-                    ase_calc=optimizer.ase_calc,
-                    charge=charge,
-                    mult=mult,
-                    traj=mol.basename + "_traj",
-                    title=f"{mol.basename}_conf{c_n}",
-                    logfunction=print,
-                    solvent=optimizer.solvent,
-                )
+                try:
+                    title = f"{mol.basename}_conf{c_n}"
+                    _, _ = ase_irc(
+                        mol.atoms,
+                        coords,
+                        method=optimizer.method,
+                        ase_calc=optimizer.ase_calc,
+                        charge=charge,
+                        mult=mult,
+                        traj=mol.basename + "_traj",
+                        title=title,
+                        logfunction=print,
+                        solvent=optimizer.solvent,
+                    )
+
+                except IRCInnerLoopConvergenceFailure:
+                    optimizer.logfunction(
+                        f"--> IRC on {title} failed (IRCInnerLoopConvergenceFailure)."
+                    )
 
     if None not in energies:
         if len(names_confs) > 1:
@@ -748,12 +754,12 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
         letter = "G" if optimizer.freq else "E"
         table.field_names = ["#", "Filename", energy_type, f"Rel. {letter} (kcal/mol)"]
 
-        print()
+        optimizer.logfunction("")
 
         for i, (nc, energy) in enumerate(zip(names_confs, energies)):
             table.add_row([i + 1, nc, energy / EH_TO_KCAL, round(energy - min_e, 2)])
 
-        print(table.get_string())
+        optimizer.logfunction(table.get_string())
 
 
 def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1) -> bool:

@@ -1163,8 +1163,8 @@ def ase_popt(
 
         energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
 
-        if solvent is not None and os.environ.get("FIRECODE_SOLV_IMPLEM_FOR_ML") == "post":
-            energy += dispatcher.solv_calc.get_solvation_delta(
+        if solvent is not None:
+            energy += dispatcher.get_delta_solvation_energy(
                 atoms=atoms,
                 coords=new_structure,
             )

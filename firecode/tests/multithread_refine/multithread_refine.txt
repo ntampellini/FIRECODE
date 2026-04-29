@@ -1,0 +1,2 @@
+calc=tblite solvent=mecn
+refine> anti_to_gauche.xyz

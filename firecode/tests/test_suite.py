@@ -1,6 +1,7 @@
 """Tests for FIRECODE."""
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from firecode.context_managers import FolderContext, HiddenPrints, NewFolderContext
 from firecode.dispatcher import Opt_func_dispatcher
 from firecode.embedder import Embedder
+from firecode.standalone_optimizer import OptimizerOptions, standalone_optimize
 from firecode.utils import clean_directory, read_xyz
 
 HERE = Path(__file__).resolve().parent
@@ -26,10 +28,12 @@ def cleanup() -> None:
             "_opt",
             "_thermo",
             "_ts_conf",
+            "_packmol",
             "CREST",
             "NEB",
             "FSM",
         ],
+        not_to_remove_endswith=[".txt", ".inp"],
     )
 
 
@@ -101,11 +105,18 @@ def test_trimolecular() -> None:
     run_firecode_input("embed_trimolecular")
 
 
-# @pytest.mark.embed
-# @pytest.mark.codecov
-# def test_embed_multimolecular() -> None:
-#     """Tests a simple multimolecular embed."""
-#     run_firecode_input("embed_multimolecular")
+@pytest.mark.embed
+@pytest.mark.codecov
+def test_embed_multiembed() -> None:
+    """Tests a simple multiembed."""
+    run_firecode_input("embed_multiembed")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_legacy_csearch() -> None:
+    """Tests the two legacy conf search operators."""
+    run_firecode_input("operator_firecode_search")
 
 
 @pytest.mark.operator
@@ -169,6 +180,19 @@ def test_operator_racerts() -> None:
 def test_operator_saddle() -> None:
     """Tests the saddle operator."""
     run_firecode_input("operator_saddle")
+
+
+@pytest.mark.operator
+@pytest.mark.codecov
+def test_packmol_operator() -> None:
+    """Test the packmol operator."""
+    run_firecode_input("operator_packmol")
+
+
+@pytest.mark.codecov
+def test_multithread_refin() -> None:
+    """Test multithread refining."""
+    run_firecode_input("multithread_refine")
 
 
 @pytest.mark.codecov
@@ -263,6 +287,7 @@ def test_alpb_delta_calc() -> None:
     )
 
 
+@pytest.mark.codecov
 def test_cpcm_delta_calc() -> None:
     """Verifies that the CPCM delta calc does something."""
     from firecode.ase_manipulations import ase_popt
@@ -302,3 +327,85 @@ def test_cpcm_delta_calc() -> None:
     assert abs(vac_energy - solv_energy) > 1e-3, (
         f"solv_energy (CPCM) ~ 0 ({abs(vac_energy - solv_energy):.6f} kcal/mol)"
     )
+
+
+@pytest.mark.codecov
+def test_standalone_xtb() -> None:
+    """Verifies that the standalone optimizer runs with XTB."""
+    filename = str(HERE / "C2H4.xyz")
+
+    options = OptimizerOptions(
+        filenames=[filename],
+        calc="XTB",
+        method="GFN2-xTB",
+        solvent="toluene",
+    )
+
+    standalone_optimize(options)
+
+
+@pytest.mark.codecov
+def test_standalone_tblite() -> None:
+    """Verifies that the standalone optimizer runs with tblite."""
+    source = str(HERE / "C2H4.xyz")
+    target = str(HERE / "test_standalone_tblite" / "C2H4.xyz")
+
+    with NewFolderContext(
+        str(HERE / "test_standalone_tblite"),
+        # delete_after=False
+    ):
+        # copy input structure over
+        shutil.copy(source, target)
+
+        # write a SMARTS-based constraint file
+        with open("c.txt", "w") as f:
+            f.write("SMARTS [#6]([#1])~[#6]([#1])\n0 1 2 3 0.0\n")
+
+        # run writing log to temp.log
+        with open("temp.log", "w") as f:
+            options = OptimizerOptions(
+                filenames=[target],
+                calc="TBLITE",
+                method="GFN2-xTB",
+                solvent="ch2cl2",
+                opt=True,
+                constraint_file="c.txt",
+                logfunction=lambda s: f.write(s + "\n"),  # type: ignore[arg-type]
+            )
+
+            standalone_optimize(options)
+
+
+@pytest.mark.codecov
+def test_standalone_aimnet2() -> None:
+    """Verifies that the standalone optimizer runs with AIMNET2."""
+    filename = str(HERE / "C2H4.xyz")
+
+    options = OptimizerOptions(
+        filenames=[filename],
+        calc="AIMNET2",
+        method="wB97M-D3",
+        solvent="dmf",
+    )
+
+    standalone_optimize(options)
+
+
+@pytest.mark.codecov
+def test_standalone_saddle() -> None:
+    """Verifies that the standalone optimizer can run a saddle optimization."""
+    source = str(HERE / "propane_ts.xyz")
+    target = str(HERE / "test_standalone_saddle" / "propane_ts.xyz")
+
+    with NewFolderContext(str(HERE / "test_standalone_saddle")):
+        shutil.copy(source, target)
+        options = OptimizerOptions(
+            filenames=[target],
+            calc="TBLITE",
+            method="GFN2-xTB",
+            solvent="toluene",
+            saddle=True,
+            irc=True,
+        )
+
+        standalone_optimize(options)

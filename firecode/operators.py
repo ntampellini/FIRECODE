@@ -59,81 +59,74 @@ if TYPE_CHECKING:
     from firecode.embedder import Embedder
 
 
-def operate(input_string: str, embedder: Embedder) -> str:
-    """Perform the operations according to the chosen
-    operator and return the outname of the (new) .xyz
-    file to be read instead of the input one.
-    """
-    filename = embedder._extract_filename(input_string)
+def operate(filename: str, operator: str, embedder: Embedder) -> str:
+    """Apply the specified operator.
 
+    Perform the operations according to the chosen
+    operator and return the outname of the processed
+    .xyz file to be read.
+    """
     if not hasattr(embedder, "t_start_run"):
         embedder.t_start_run = time.perf_counter()
 
     if embedder.options.dryrun:
-        embedder.log(f'--> Dry run requested: skipping operator "{input_string}"')
+        embedder.log(f'--> Dry run requested: skipping operator "{operator}"')
         return filename
 
-    elif "firecode_search>" in input_string:
-        outname = csearch_operator(filename, embedder)
+    match operator:
+        case "firecode_search":
+            outname = csearch_operator(filename, embedder)
 
-    elif "opt>" in input_string:
-        outname = opt_operator(filename, embedder, logfunction=embedder.log)
+        case "opt":
+            outname = opt_operator(filename, embedder, logfunction=embedder.log)
 
-    elif "firecode_search_hb>" in input_string:
-        outname = csearch_operator(filename, embedder, keep_hb=True)
+        case "firecode_search_hb":
+            outname = csearch_operator(filename, embedder, keep_hb=True)
 
-    elif "firecode_rsearch>" in input_string:
-        outname = csearch_operator(filename, embedder, mode=2)
+        case "firecode_rsearch":
+            outname = csearch_operator(filename, embedder, mode=2)
 
-    elif any(
-        string in input_string for string in ("mtd_search>", "mtd>", "crest>", "crest_search>")
-    ):
-        outname = crest_search_operator(filename, embedder)
+        case "mtd_search" | "mtd" | "crest" | "crest_search":
+            outname = crest_search_operator(filename, embedder)
 
-    elif "goat>" in input_string:
-        outname = goat_operator(filename, embedder)
+        case "goat":
+            outname = goat_operator(filename, embedder)
 
-    elif any(
-        string in input_string
-        for string in ("rdkit_search>", "rdkit>", "racerts>", "racerts_search>")
-    ):
-        outname = rdkit_search_operator(filename, embedder)
+        case "rdkit_search" | "rdkit" | "racerts" | "racerts_search":
+            outname = rdkit_search_operator(filename, embedder)
 
-    elif "scan>" in input_string:
-        outname = scan_operator(filename, embedder)
+        case "scan":
+            outname = scan_operator(filename, embedder)
 
-    elif "neb>" in input_string:
-        outname = neb_operator(filename, embedder)
+        case "neb":
+            outname = neb_operator(filename, embedder)
 
-    elif any(string in input_string for string in ("fsm>", "mlfsm>")):
-        outname = fsm_operator(embedder)
+        case "fsm" | "mlfsm":
+            outname = fsm_operator(embedder)
 
-    elif "refine>" in input_string:
-        outname = filename
-        # this operator is accounted for in the OptionSetter
-        # class of Options, set when the Embedder calls _set_options
+        case "refine":
+            outname = filename
+            # this operator is accounted for in the OptionSetter
+            # class of Options, set when the Embedder calls _set_options
 
-    elif "pka>" in input_string:
-        pka_routine(filename, embedder)
-        outname = filename
+        case "pka":
+            pka_routine(filename, embedder)
+            outname = filename
 
-    elif any(string in input_string for string in ("saddle>", "ts>")):
-        outname = saddle_operator(filename, embedder)
+        case "saddle" | "ts":
+            outname = saddle_operator(filename, embedder)
 
-    elif any(string in input_string for string in ("freq>", "thermo>")):
-        outname = freq_operator(filename, embedder)
+        case "freq" | "thermo":
+            outname = freq_operator(filename, embedder)
 
-    elif "packmol>" in input_string:
-        outname = packmol_operator(filename, embedder)
+        case "packmol":
+            outname = packmol_operator(filename, embedder)
 
-    elif "equilibrate>" in input_string:
-        outname = equilibrate_operator(filename, embedder)
+        case "equilibrate":
+            outname = equilibrate_operator(filename, embedder)
 
-    ##### OVERLOAD
-
-    else:
-        op = input_string.split(">", maxsplit=1)[0]
-        raise Exception(f"Operator {op} not recognized.")
+        case _:
+            raise Exception(f"Operator {operator} not recognized.")
 
     return outname
 

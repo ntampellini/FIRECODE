@@ -67,32 +67,39 @@ def clean_directory(
     to_remove_startswith: Iterable[str] | None = None,
     to_remove_endswith: Iterable[str] | None = None,
     to_remove_contains: Iterable[str] | None = None,
+    not_to_remove_startswith: Iterable[str] | None = None,
+    not_to_remove_endswith: Iterable[str] | None = None,
+    not_to_remove_contains: Iterable[str] | None = None,
 ) -> None:
     """Cleans the current directory from temporary files created during a run."""
-    if to_remove is not None:
-        for name in to_remove:
-            try:
-                os.remove(name)
-            except IsADirectoryError:
-                rmtree(os.path.join(os.getcwd(), name))
-            except FileNotFoundError:
-                pass
+    to_remove = to_remove or ()
+    to_remove_startswith = to_remove_startswith or ()
+    to_remove_endswith = to_remove_endswith or ()
+    to_remove_contains = to_remove_contains or ()
+    not_to_remove_startswith = not_to_remove_startswith or ()
+    not_to_remove_endswith = not_to_remove_endswith or ()
+    not_to_remove_contains = not_to_remove_contains or ()
 
-    to_remove_startswith = to_remove_startswith or []
-    to_remove_endswith = to_remove_endswith or []
-    to_remove_contains = to_remove_contains or []
-    for f in os.listdir():
+    for f in os.listdir() + list(to_remove):
         if (
             f.startswith(("temp", *to_remove_startswith))
             or f.endswith(("temp", *to_remove_endswith))
             or any([s in f for s in to_remove_contains])
         ):
-            try:
-                os.remove(f)
-            except IsADirectoryError:
-                rmtree(os.path.join(os.getcwd(), f))
-            except FileNotFoundError:
-                pass
+            if all(
+                (
+                    not not_to_remove_startswith
+                    or not f.startswith(tuple(not_to_remove_startswith)),
+                    not not_to_remove_endswith or not f.endswith(tuple(not_to_remove_endswith)),
+                    not not_to_remove_contains or not any([s in f for s in not_to_remove_contains]),
+                )
+            ):
+                try:
+                    os.remove(f)
+                except IsADirectoryError:
+                    rmtree(os.path.join(os.getcwd(), f))
+                except FileNotFoundError:
+                    pass
 
 
 def write_xyz(
@@ -478,22 +485,6 @@ def timing_decorator() -> Callable[[Callable[P, R]], Callable[P, tuple[R, float]
     def decorator(func: Callable[P, R]) -> Callable[P, tuple[R, float]]:
         def wrapper(*args: Any, **kwargs: Any) -> tuple[R, float]:
             return timing_wrapper(func, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-def timing_decorator_with_payload() -> Callable[
-    [Callable[P, R]], Callable[..., tuple[R, T, float]]
-]:
-    """Generic function decorator that appends a specific payload and the
-    execution time in seconds at the end of return.
-    """
-
-    def decorator(func: Callable[P, R]) -> Callable[..., tuple[R, T, float]]:
-        def wrapper(*args: Any, payload: T, **kwargs: Any) -> tuple[R, T, float]:
-            return timing_wrapper_with_payload(func, *args, payload=payload, **kwargs)
 
         return wrapper
 

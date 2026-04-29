@@ -1813,7 +1813,7 @@ packages:
 - pypi: ./
   name: firecode
   version: 2.0.0
-  sha256: ed27d7f96d674ec651ac02ec175c6a488fde4f3a9ddf8987d21e8f26e8fb95d9
+  sha256: 0d903dea97064f58debe7ce0dc3670a818f753e46e52a4acf90d9ba908f040e7
   requires_dist:
   - rdkit>=2025.9.3
   - numpy

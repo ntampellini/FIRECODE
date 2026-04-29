@@ -29,7 +29,7 @@ import random
 import re
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from getpass import getuser
 from importlib.metadata import version
@@ -45,6 +45,7 @@ from prism_pruner.pruner import prune_by_moment_of_inertia, prune_by_rmsd, prune
 from prism_pruner.rmsd import rmsd_and_max
 from prism_pruner.utils import align_structures, time_to_string
 from psutil import virtual_memory
+from rich.traceback import install as install_rich_traceback
 
 from firecode.algebra import count_clashes, point_angle
 from firecode.ase_manipulations import Constraint
@@ -75,7 +76,7 @@ from firecode.utils import (
     scramble_check,
     str_to_var,
     timing_decorator,
-    timing_decorator_with_payload,
+    timing_wrapper_with_payload,
     write_xyz,
 )
 
@@ -100,6 +101,15 @@ class Embedder:
 
         """
         self.t_start_run = time.perf_counter()
+
+        # reconfigure stdout in case something changed
+        # it since its setting in __main__.py,
+        # for example a fork subprocess in Linux
+        # when running multiprocessing modules
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+
+        install_rich_traceback(show_locals=True)
 
         parent_dir = os.path.dirname(filename)
         if parent_dir != "":
@@ -342,6 +352,13 @@ class Embedder:
         for _l, line in enumerate(lines):
             self.log(f"{_l + 1:2}> | " + line.rstrip("\n").ljust(longest) + "   |")
         self.log("    " + "-" * (longest + 6) + "\n")
+
+        # write environment variables
+        self.log("    Environment variables:")
+        self.log("  -------------------------------------------")
+        for key, value in sorted(os.environ.items()):
+            if key.startswith("FIRECODE_"):
+                self.log(f"    {key}={value}")
 
         # Remove comments
         lines = [line.split("#")[0].rstrip() for line in lines]
@@ -1381,7 +1398,7 @@ class Embedder:
                     pass
 
     def similarity_refining(
-        self, tfd: bool = True, moi: bool = True, rmsd: bool = True, verbose: bool = False
+        self, tfd: bool = False, moi: bool = True, rmsd: bool = True, verbose: bool = False
     ) -> None:
         """If possible, removes structures with similar torsional profile (TFD-based).
         Removes structures that are too similar to each other (RMSD-based).
@@ -1496,8 +1513,7 @@ class Embedder:
         # for input_string in self.options.operators:
         for index, operators in self.options.operators_dict.items():
             for operator in operators:
-                input_string = f"{operator}> {self.objects[index].filename}"
-                outname = operate(input_string, self)
+                outname = operate(self.objects[index].filename, operator, self)
 
                 if operator == "refine":
                     self._set_embedder_structures_from_mol()
@@ -1548,18 +1564,6 @@ class Embedder:
         # resetting the attribute
         self.embed = None
 
-    def _extract_filename(self, input_string: str) -> str:
-        """Input: 'refine> firecode_unoptimized_comp_check.xyz 5a 36a 0b 43b 33c 60c'
-        Output: 'firecode_unoptimized_comp_check.xyz'
-        """
-        input_string = input_string.rsplit(">", maxsplit=1)[-1].lstrip()
-        # remove operator and whitespaces after it
-
-        input_string = input_string.split()[0]
-        # remove pairing numbers/letters and newline chars
-
-        return input_string
-
     def scramble(self, array: NDArray[Any], sequence: Sequence[Any]) -> NDArray[Any]:
         return np.array([array[s] for s in sequence])
 
@@ -1585,7 +1589,7 @@ class Embedder:
 
         # Option 3: calculate on-the-fly with orbital dimensions
         d: float = 0.0
-        try:
+        try:  # pragma: no cover
             for mol_index, mol_pairing_dict in self.pairings_dict.items():
                 if r_atom_index := mol_pairing_dict.get(letter):
                     # for refine embeds, one letter corresponds to two indices
@@ -1605,7 +1609,7 @@ class Embedder:
             return d
 
         # If no orbitals were built, raise Error
-        except NoOrbitalError:
+        except NoOrbitalError:  # pragma: no cover
             if allow_none_return:
                 return None
             raise NoOrbitalError(f'The distance associated with letter "{letter}" was not found.')
@@ -1865,7 +1869,9 @@ class RunEmbedding(Embedder):
                 'DEBUG: Dumped emebedder status after generating candidates ("generate_candidates")'
             )
 
-    def dump_status(self, outname: str, only_fixed_constraints: bool = False) -> None:
+    def dump_status(
+        self, outname: str, only_fixed_constraints: bool = False
+    ) -> None:  # pragma: no cover
         """Writes structures and energies to [outname].xyz
         and [outname].dat to help debug the current run.
 
@@ -2080,9 +2086,6 @@ class RunEmbedding(Embedder):
         t_start = time.perf_counter()
         processes = []
         cum_time: float = 0.0
-        timed_opt_func_with_payload: Callable[
-            ..., tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
-        ] = timing_decorator_with_payload()(self.dispatcher.opt_func)  # type: ignore[arg-type]
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             for i, structure in enumerate(deepcopy(self.structures)):
@@ -2116,8 +2119,11 @@ class RunEmbedding(Embedder):
                     constrained_dihedrals_values,
                 ) = self._get_angle_dih_constraints(only_fixed_constraints=only_fixed_constraints)
 
-                process = executor.submit(
-                    timed_opt_func_with_payload,
+                process: Future[
+                    tuple[tuple[Array2D_float, float, bool], tuple[Sequence[int]], float]
+                ] = executor.submit(
+                    timing_wrapper_with_payload,  # type: ignore[arg-type]
+                    self.dispatcher.opt_func,
                     self.atoms,
                     structure,
                     method=self.options.theory_level,

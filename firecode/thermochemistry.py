@@ -132,6 +132,7 @@ def rrho_thermo(
     conc_mol_L: float | None = None,
     symmetry_number: int = 1,
     E_el_Eh: float = 0.0,
+    charge: int = 0,
     mult: int = 1,
     qrrho: bool = True,
     cutoff_cm1: Optional[float] = None,
@@ -358,6 +359,7 @@ def rrho_thermo(
         conc_mol_L=conc_mol_L,
         solv=(solv or "none"),
         mult=int(mult),
+        charge=int(charge),
     )
 
 
@@ -424,9 +426,9 @@ def ase_vib(
         energy_ev = ase_atoms.get_potential_energy()  # type: ignore[no-untyped-call]
 
         # add solvation energy if appropriate
-        if solvent is not None and os.environ.get("FIRECODE_SOLV_IMPLEM_FOR_ML") == "post":
+        if solvent is not None:
             solv_energy_ev = (
-                dispatcher.solv_calc.get_solvation_delta(
+                dispatcher.get_delta_solvation_energy(
                     atoms=atoms,
                     coords=coords,
                 )
@@ -469,7 +471,8 @@ def ase_vib(
             P_atm=P_atm,
             symmetry_number=1,  # detect_symmetry_number(atoms)?
             E_el_Eh=energy_ev / EH_TO_EV,
-            mult=1,
+            charge=charge,
+            mult=mult,
             conc_mol_L=C_mol_L,
             solv=solvent,
         )

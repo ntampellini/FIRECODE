@@ -277,7 +277,8 @@ def _get_hydrogen_bonds(
     d_min: float = 2.5,
     d_max: float = 3.3,
     max_angle: int = 45,
-    elements: Sequence[Sequence[int]] | None = None,
+    donor_elements: Sequence[str] | None = None,
+    acceptor_elements: Sequence[str] | None = None,
     fragments: Sequence[Sequence[int]] | None = None,
 ) -> list[tuple[int, int]]:
     """Returns a list of tuples with the indices
@@ -296,11 +297,14 @@ def _get_hydrogen_bonds(
     hbs: list[tuple[int, int]] = []
     # initializing output list
 
-    if elements is None:
-        elements = ((7, 8), (7, 8, 9))
+    if donor_elements is None:
+        donor_elements = ("N", "O")
 
-    het_idx_from = np.array([i for i, a in enumerate(atoms) if a in elements[0]], dtype=int)
-    het_idx_to = np.array([i for i, a in enumerate(atoms) if a in elements[1]], dtype=int)
+    if acceptor_elements is None:
+        acceptor_elements = ("N", "O", "F")
+
+    het_idx_from = np.array([i for i, a in enumerate(atoms) if a in donor_elements], dtype=int)
+    het_idx_to = np.array([i for i, a in enumerate(atoms) if a in acceptor_elements], dtype=int)
     # indices where N or O (or user-specified elements) atoms are present.
 
     for i1 in het_idx_from:
@@ -338,9 +342,9 @@ def _get_hydrogen_bonds(
                     if alfa < max_angle:
                         # adding the correct pair of atoms to results
                         if d1 < d2:
-                            hbs.append(tuple(sorted((iH, i2))))
+                            hbs.append(tuple(sorted((int(iH), int(i2)))))  # type: ignore[arg-type]
                         else:
-                            hbs.append(tuple(sorted((iH, i1))))
+                            hbs.append(tuple(sorted((int(iH), int(i1)))))  # type: ignore[arg-type]
 
                         break
 
@@ -459,7 +463,7 @@ def random_csearch(
             logfunction(
                 " {:2s} - {:21s} : {}{}{}{} : {}-fold".format(
                     str(t),
-                    str(torsion.torsion),
+                    str([int(i) for i in torsion.torsion]),
                     atoms[torsion.torsion[0]],
                     atoms[torsion.torsion[1]],
                     atoms[torsion.torsion[2]],
@@ -749,10 +753,16 @@ def clustered_csearch(
     if logfunction is not None:
         logfunction("\n> Torsion list: (indices: n-fold)")
         for t, torsion in enumerate(torsions):
-            logfunction(" {} - {:21s} : {}-fold".format(t, str(torsion.torsion), torsion.n_fold))
+            logfunction(
+                " {:3} - {:21s} : {}-fold".format(
+                    t, str([int(i) for i in torsion.torsion]), torsion.n_fold
+                )
+            )
 
         central_ids = set(flatten([t.torsion[1:3] for t in torsions], int))
-        logfunction(f"\n> Rotable bonds ids: {' '.join([str(i) for i in sorted(central_ids)])}")
+        logfunction(
+            f"\n> Rotable bonds ids: {' '.join([str(int(i)) for i in sorted(central_ids)])}"
+        )
 
     if write_torsions:
         _write_torsion_vmd(atoms, coords, grouped_torsions, constrained_indices, title=title)

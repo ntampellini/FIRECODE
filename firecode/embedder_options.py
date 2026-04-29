@@ -122,7 +122,7 @@ def get_keyword_suggestion(unknown_kw: str) -> str | None:
     return None
 
 
-def kw_similarity_score(ref: str, kw: str) -> float:
+def kw_similarity_score(ref: str, kw: str) -> float:  # pragma: no cover
     """Simple scoring for string similarity"""
     score = 0
     letters = []
@@ -181,7 +181,6 @@ class Options:
     crestlevel: str | None = None
     shrink: bool = False
     shrink_multiplier: float = 1.0
-    metadynamics: bool = False
     suprafacial: bool = False
     simpleorbitals: bool = False
     only_refined: bool = False
@@ -232,7 +231,7 @@ class Options:
             "nci",
             "debug",
             "let",
-            "metadynamics",
+            "freq",
             "ts",
             "noembed",
             "keep_hb",
@@ -256,6 +255,7 @@ class Options:
             "kcal_thresh",
             "solvent",
             "pka_ref",
+            "images",
         )
 
         for name in repr_if_not_none:

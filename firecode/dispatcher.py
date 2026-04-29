@@ -29,7 +29,7 @@ from ase.calculators.calculator import Calculator as ASECalculator
 
 from firecode.calculators.xtb import xtb_opt
 from firecode.solvents import epsilon_dict, to_xtb_solvents
-from firecode.typing_ import MaybeNone
+from firecode.typing_ import Array1D_str, Array2D_float, MaybeNone
 
 if TYPE_CHECKING:
     from firecode.calculators.solvation_delta_calc import SolvationDeltaCalculator
@@ -307,7 +307,7 @@ class Opt_func_dispatcher:
         return self.ase_calc
 
     def _load_solv_calc(self) -> SolvationDeltaCalculator:
-        """Loads the TBLITE delta solvation calculator if not already loaded, and returns it."""
+        """Load the TBLITE delta solvation calculator if not already loaded, and returns it."""
         if self._solv_calc is not None:
             return self._solv_calc
 
@@ -327,5 +327,16 @@ class Opt_func_dispatcher:
 
     @property
     def solv_calc(self) -> SolvationDeltaCalculator:
-        """Returns the TBLITE delta solvation calculator."""
+        """Return the TBLITE delta solvation calculator."""
         return self._load_solv_calc()
+
+    def get_delta_solvation_energy(self, atoms: Array1D_str, coords: Array2D_float) -> float:
+        """Return (E_solv - E_vac), in kcal/mol, if using post-opt delta solvation."""
+        if os.environ.get("FIRECODE_SOLV_IMPLEM_FOR_ML") == "post":
+            if self.calculator in ("UMA", "AIMNET2"):
+                if self.solvent is not None:
+                    return self.solv_calc.get_solvation_delta(
+                        atoms=atoms,
+                        coords=coords,
+                    )
+        return 0.0

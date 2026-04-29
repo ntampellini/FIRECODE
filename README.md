@@ -86,7 +86,6 @@ Installation exposes the main program working on a plain text file as well as a 
       -s, --setup             Guided setup of the calculation settings.
       -n, --name NAME         Specify a custom name for the run.
       -cl,--command_line      Read instructions from the command line instead of from an input file.
-      -p, --profile           Profile the run through cProfiler.
 ```
 
 ```

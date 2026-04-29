@@ -141,15 +141,6 @@ full = [
     "aimnet[ase]",
 ]
 
-[tool.coverage.run]
-relative_files = true
-
-[tool.coverage.report]
-relative_files = true
-
-[tool.coverage.xml]
-output = "coverage.xml"
-
 [tool.mypy]
 files = ["firecode"]
 strict = true

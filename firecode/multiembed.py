@@ -13,7 +13,7 @@ from prism_pruner.utils import time_to_string
 from firecode.context_managers import HiddenPrints, NewFolderContext
 from firecode.errors import InputError, ZeroCandidatesError
 from firecode.typing_ import Array2D_int, Array3D_float
-from firecode.utils import cartesian_product, timing_decorator
+from firecode.utils import cartesian_product, timing_wrapper
 
 if TYPE_CHECKING:
     from firecode.embedder import Embedder
@@ -59,6 +59,7 @@ def multiembed_bifunctional(embedder: Embedder) -> Array3D_float:
         # for each arrangement, perform a dedicated embed
         for i, arrangement in enumerate(arrangements):
             process = executor.submit(
+                timing_wrapper,
                 run_child_embedder,
                 mol1.filename,
                 mol2.filename,
@@ -78,19 +79,25 @@ def multiembed_bifunctional(embedder: Embedder) -> Array3D_float:
             if len(structures) > 0:
                 structures_out.append(structures)
                 constr_ids.append(constrained_indices)
-                embedder.write_structures("embedded", energies=False)
+
+    embedder.structures = np.concatenate(structures_out)
+    embedder.atoms = np.concatenate([mol.atoms for mol in embedder.objects])
+
+    # only get interaction constraints, as the internal will be added later during refinement
+    embedder.constrained_indices = np.concatenate(constr_ids)
+
+    print(
+        f"\n\n\n\n{embedder.structures.shape=} {embedder.constrained_indices.shape=} {embedder.atoms.shape=}\n\n\n"
+    )
+    embedder.write_structures("embedded", energies=False)
 
     embedder.log(
         f"\n--> Multiembed completed: generated {len(structures_out)} candidates in {time_to_string(time.perf_counter() - embedder.t_start_run, verbose=True)}."
     )
 
-    # only get interaction constraints, as the internal will be added later during refinement
-    embedder.constrained_indices = np.concatenate(constr_ids)
-
     return np.concatenate(structures_out)
 
 
-@timing_decorator()
 def run_child_embedder(
     mol1_name: str,
     mol2_name: str,
@@ -98,6 +105,7 @@ def run_child_embedder(
     i: int,
     options: Options,
 ) -> tuple[Array3D_float, Array2D_int]:
+
     from firecode.embedder import Embedder, RunEmbedding
 
     foldername = f"firecode_embed{i + 1}"
@@ -119,7 +127,7 @@ def run_child_embedder(
             extra += " simpleorbitals" if options.simpleorbitals else ""
             extra += f" shrink={options.shrink_multiplier}" if options.shrink else ""
 
-            f.write(f"noopt rigid{extra}\n")
+            f.write(f"noopt {extra}\n")
             f.write(f"{mol1_name} {ix_1}x {iy_1}y\n")
             f.write(f"{mol2_name} {ix_2}x {iy_2}y\n")
 
