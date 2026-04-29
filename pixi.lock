@@ -436,6 +436,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/optree-0.18.0-py312hd9148b4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/orjson-3.11.5-py312h94568fe_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/packmol-21.2.1-h4537401_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-1.0.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pillow-12.1.1-py312h50c33e8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.5.1-pyhcf101f3_0.conda
@@ -718,6 +719,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/optree-0.18.0-py312h84eede6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/orjson-3.11.5-py312h6f167cc_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/packmol-21.2.1-h2760ab1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-1.0.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pillow-12.1.1-py312h4e908a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.2-pyhcf101f3_0.conda
@@ -1813,7 +1815,7 @@ packages:
 - pypi: ./
   name: firecode
   version: 2.0.0
-  sha256: 0d903dea97064f58debe7ce0dc3670a818f753e46e52a4acf90d9ba908f040e7
+  sha256: dc20f4968a3c238fdb524b1c16623402943bb0bc252f0de1321b5ad9ef03ba66
   requires_dist:
   - rdkit>=2025.9.3
   - numpy
@@ -4512,6 +4514,31 @@ packages:
   - pkg:pypi/packaging?source=compressed-mapping
   size: 72010
   timestamp: 1769093650580
+- conda: https://conda.anaconda.org/conda-forge/linux-64/packmol-21.2.1-h4537401_0.conda
+  sha256: 16d7d6a32d639ec9afc94bc7d5663be77c45f3ade7868069e96017df89fad062
+  md5: e134185b57b881ad91461b26c6ab612e
+  depends:
+  - libgcc >=14
+  - libgfortran5 >=14.3.0
+  - libgfortran
+  - __glibc >=2.17,<3.0.a0
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 687416
+  timestamp: 1770939051310
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/packmol-21.2.1-h2760ab1_0.conda
+  sha256: 59f5547b90bd3f9c9be61c2ab940cdf7ad88e78bcc3c78a83ba10eef6b992789
+  md5: 9ef80b059fa7c21ed154153451ad8f5f
+  depends:
+  - libgfortran
+  - libgfortran5 >=14.3.0
+  - __osx >=11.0
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 699393
+  timestamp: 1770939153651
 - pypi: https://files.pythonhosted.org/packages/b6/61/fae042894f4296ec49e3f193aff5d7c18440da9e48102c3315e1bc4519a7/parso-0.8.6-py2.py3-none-any.whl
   name: parso
   version: 0.8.6
