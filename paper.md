@@ -1,5 +1,5 @@
 ---
-title: 'FIRECODE: a computational chemistry workflow driver and modular hub'
+title: 'FIRECODE: A Computational Chemistry Workflow Driver and Modular Hub'
 tags:
   - Python
   - chemistry
@@ -31,16 +31,16 @@ Computational chemistry, the branch of this science dedicated to the modeling of
 
 `FIRECODE` is a modular workflow driver for computational chemistry written in Python. The code interfaces with a series of fast modern calculators (xTB [@xtb], tblite [@tblite], AIMNET2 [@aimnet2], UMA [@uma], usually via ASE [@ase]) and exposes a series of workflows and utilities for geometry optimization, frequency analysis, one- and two-ended transition state search, and conformational search. When possible, these routines are implemented in a calculator-independent way, and almost all of these can be arbitrarily chained to one another to define a complex workflow.
 
-The software was born out of necessity over the last five years of research in asymmetric catalysis: `FIRECODE` was designed to streamline the necessary use of multiple software and multiple routines in the computational modeling of small molecules, in a single centralized hub. The program can be called via command line with a minimal plain text input file defining the workflow, or used as a Python library in jupyter notebooks. The modular nature of the software enables rapid addition of new features while retaining a small installation footprint for the core library. The concise input syntax also offers a streamlined definition of workflows and software orchestration with no coding experience required.
+The software was born out of necessity over the last five years of research in asymmetric catalysis: `FIRECODE` was designed to streamline the necessary use of multiple software and routines in the computational modeling of small molecules, in a single centralized hub. The program can be called via command line with a minimal plain text input file defining the workflow, or used as a Python library in jupyter notebooks. The modular nature of the software enables rapid addition of new features, facilitating external contributions, while also retaining a small installation footprint for the core library. The concise input syntax also offers a streamlined definition of workflows and software orchestration with no coding experience required.
 
 
 # State of the field
 
 While a manifold of computational chemistry software exists, workflow utilities are less common, particularly in the free and open source community. Recently, version 6.0 of `ORCA` [@orca1; @orca2] (free for academic use) started offering compound job functionality, which enables the chained execution of some core ORCA modules. The code is however not open source and functionality is limited to what is included in the ORCA program (*i.e.* no MLIPs, no similarity pruning, no ensemble processing...). While ORCA workflows are more extensively implemented in `WEASEL` [@weasel], this is commercial, closed-source software.
 
-The excellent AQME software [@aqme] features the most similar design philosophy to the one of this work. Key differences with `FIRECODE`, besides code architecture, lie in: 1) the main interaction platform of `AQME` happening via jupyter notebooks, while the software of this work favors the use of plain text input files, keeping the inputs as minimal as possible. 2) The present software having a reactivity-centered set of features, chiefly via fast semiempirical and ML calculators, over the generation of ensemble properties like spectra and molecular descriptors with DFT of `AQME`.
+The excellent AQME software [@aqme] features the most similar design philosophy to the one of this work. Key differences with `FIRECODE`, besides code architecture, lie in: 1) the main interaction platform of `AQME` happening via jupyter notebooks, while the software of this work favors the use of plain text input files, keeping the inputs as minimal as possible. 2) The present software having a reactivity-centered set of features, chiefly via fast semiempirical and ML calculators, over `AQME`'s focus on DFT and on the generation of ensemble properties like spectra and molecular descriptors.
 
-Other examples of similar workflow software, focusing more on exposing high-level primitives, include `Cuby` [@cuby; @cubygithub] (MD and high-level DFT) written in Ruby, and the popular `ASE` [@ase], which is extensively used as a high-level Python interface for the calculators implemented in `FIRECODE`.
+Other examples of related software, targeting the exposure of high-level primitives over structured workflows, include `Cuby` [@cuby; @cubygithub] (MD and high-level DFT) written in Ruby, and the popular `ASE` [@ase], which is extensively used as a lower level interface for interacting with calculators in `FIRECODE`.
 
 The development of this software from scratch was motivated by multiple reasons. First, a modern and flexible hub for running computational chemistry workflows, particularly tailored to modeling chemical reactivity and MLIPs, was lacking. While the benefit of developing standalone applications for specific tasks remains, their integration in a single hub permits automation and lowers the barrier of entry for adoption of both individual tools and workflows alike. Second, modern machine-learned interatomic potentials (MLIPs) are more conveniently ran via Python libraries like `torch` [@torch], benefitting greatly from a Python-based workflow manager. Additional features like implicit delta solvation for gas phase-trained MLIPs [^deltasolv] and numerical quasi-RRHO thermochemistry [@qrrho] are additional core library functionalities that were not available in other actively maintained modules at the time of development.
 
@@ -48,7 +48,7 @@ The development of this software from scratch was motivated by multiple reasons.
 
 # Software design
 
-The software is developed with the philosophy of maintaining the greatest amount of functionality and module interoperability with the minimal list of dependencies, which should ideally be as modern and lean as possible. All core dependencies are distributed via `pypi`, keeping the installation of the minimal version of the program down to a single command (`pip install firecode`).
+The software is developed with the philosophy of maintaining the greatest amount of functionality and module interoperability with the minimal list of dependencies, which should ideally be as modern and lean as possible. All core dependencies are distributed via `pypi`, keeping the installation of the minimal version of the program down to a single command (`uv pip install firecode`).
 
 Non-essential dependencies can be installed based on the desired calculator and interfaces to be used, all via conda/mamba.
 
@@ -74,12 +74,13 @@ Contributions by way of adding new routines (or interfaces) to the codebase is m
 def center_operator(filename: str, embedder: Embedder) -> str:
     """Example operator centering the molecule."""
 
-    # read input file
-    mol = read_xyz(filename) # Ensemble(filename)
-
     # the Embedder class stores global information
+    embedder.avail_gpus # 1
     embedder.options.solvent # "ch2cl2"
     embedder.options.T # 298.15
+
+    # get a copy of the molecule of interest
+    mol = embedder.mols[filename]
 
     # center coordinates
     mol.coords[0] -= np.mean(mol.coords[0], axis=0)
@@ -87,6 +88,9 @@ def center_operator(filename: str, embedder: Embedder) -> str:
     # save any data you might need later
     embedder.options.centered = True
     embedder.options.last_operator = "center"
+
+    # write to global log
+    embedder.log(f"--> Center operator: centered molecule {mol.basename}")
 
     # write outfile and return its name
     outfile = f"{mol.basename}_centered.xyz"
@@ -97,7 +101,7 @@ def center_operator(filename: str, embedder: Embedder) -> str:
 
 # Research impact statement
 
-Since the earliest versions in 2022, this software proved essential in orchestrating asymmetric catalysis workflows with ensembles up to thousands of structures [@imidation; @s_oxidation; @rings; @amination; @lineage; @halle_bpy]. Adoption is slowly starting to grow with `pypi` reporting ~150 downloads per month at the present time. Part of the core code was exported to the `prism_pruner` library [@prism_pruner] to facilitate its adoption by the computational chemistry startup Rowan [@rowan] (not affiliated with the author).
+Since its earliest versions in 2021 (formerly [TSCoDe](https://github.com/ntampellini/TSCoDe)), this software proved essential in orchestrating asymmetric catalysis workflows with ensembles up to thousands of structures [@imidation; @s_oxidation; @rings; @amination; @lineage; @halle_bpy]. Adoption is slowly starting to grow with `pypi` reporting ~150 downloads per month at the present time. Part of the core code was exported to the `prism_pruner` library [@prism_pruner] to facilitate its adoption by the computational chemistry startup Rowan [@rowan] (not affiliated with the author).
 
 # AI usage disclosure
 

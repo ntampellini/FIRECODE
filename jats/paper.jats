@@ -18,8 +18,8 @@
 <article-id pub-id-type="publisher-id">0</article-id>
 <article-id pub-id-type="doi">N/A</article-id>
 <title-group>
-<article-title>FIRECODE: a computational chemistry workflow driver and
-modular hub</article-title>
+<article-title>FIRECODE: A Computational Chemistry Workflow Driver and
+Modular Hub</article-title>
 </title-group>
 <contrib-group>
 <contrib contrib-type="author" corresp="yes">
@@ -110,14 +110,15 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <p>The software was born out of necessity over the last five years of
   research in asymmetric catalysis: <monospace>FIRECODE</monospace> was
   designed to streamline the necessary use of multiple software and
-  multiple routines in the computational modeling of small molecules, in
-  a single centralized hub. The program can be called via command line
-  with a minimal plain text input file defining the workflow, or used as
-  a Python library in jupyter notebooks. The modular nature of the
-  software enables rapid addition of new features while retaining a
-  small installation footprint for the core library. The concise input
-  syntax also offers a streamlined definition of workflows and software
-  orchestration with no coding experience required.</p>
+  routines in the computational modeling of small molecules, in a single
+  centralized hub. The program can be called via command line with a
+  minimal plain text input file defining the workflow, or used as a
+  Python library in jupyter notebooks. The modular nature of the
+  software enables rapid addition of new features, facilitating external
+  contributions, while also retaining a small installation footprint for
+  the core library. The concise input syntax also offers a streamlined
+  definition of workflows and software orchestration with no coding
+  experience required.</p>
 </sec>
 <sec id="state-of-the-field">
   <title>State of the field</title>
@@ -145,11 +146,12 @@ a Creative Commons Attribution 4.0 International License (CC BY
   via jupyter notebooks, while the software of this work favors the use
   of plain text input files, keeping the inputs as minimal as possible.
   2) The present software having a reactivity-centered set of features,
-  chiefly via fast semiempirical and ML calculators, over the generation
-  of ensemble properties like spectra and molecular descriptors with DFT
-  of <monospace>AQME</monospace>.</p>
-  <p>Other examples of similar workflow software, focusing more on
-  exposing high-level primitives, include <monospace>Cuby</monospace>
+  chiefly via fast semiempirical and ML calculators, over
+  <monospace>AQME</monospace>’s focus on DFT and on the generation of
+  ensemble properties like spectra and molecular descriptors.</p>
+  <p>Other examples of related software, targeting the exposure of
+  high-level primitives over structured workflows, include
+  <monospace>Cuby</monospace>
   (<xref alt="GitHub - Berquist/Cuby" rid="ref-cubygithub" ref-type="bibr"><italic>GitHub
   - Berquist/Cuby</italic></xref>;
   <xref alt="Řezáč, 2016" rid="ref-cuby" ref-type="bibr">Řezáč,
@@ -157,8 +159,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <monospace>ASE</monospace>
   (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
   / Ase · GitLab — Gitlab.com</italic></xref>), which is extensively
-  used as a high-level Python interface for the calculators implemented
-  in <monospace>FIRECODE</monospace>.</p>
+  used as a lower level interface for interacting with calculators in
+  <monospace>FIRECODE</monospace>.</p>
   <p>The development of this software from scratch was motivated by
   multiple reasons. First, a modern and flexible hub for running
   computational chemistry workflows, particularly tailored to modeling
@@ -188,7 +190,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   lean as possible. All core dependencies are distributed via
   <monospace>pypi</monospace>, keeping the installation of the minimal
   version of the program down to a single command
-  (<monospace>pip install firecode</monospace>).</p>
+  (<monospace>uv pip install firecode</monospace>).</p>
   <p>Non-essential dependencies can be installed based on the desired
   calculator and interfaces to be used, all via conda/mamba.</p>
   <p>The software implements various calculators (xTB
@@ -258,12 +260,13 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <code language="python">def center_operator(filename: str, embedder: Embedder) -&gt; str:
     &quot;&quot;&quot;Example operator centering the molecule.&quot;&quot;&quot;
 
-    # read input file
-    mol = read_xyz(filename) # Ensemble(filename)
-
     # the Embedder class stores global information
+    embedder.avail_gpus # 1
     embedder.options.solvent # &quot;ch2cl2&quot;
     embedder.options.T # 298.15
+
+    # get a copy of the molecule of interest
+    mol = embedder.mols[filename]
 
     # center coordinates
     mol.coords[0] -= np.mean(mol.coords[0], axis=0)
@@ -271,6 +274,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
     # save any data you might need later
     embedder.options.centered = True
     embedder.options.last_operator = &quot;center&quot;
+
+    # write to global log
+    embedder.log(f&quot;--&gt; Center operator: centered molecule {mol.basename}&quot;)
 
     # write outfile and return its name
     outfile = f&quot;{mol.basename}_centered.xyz&quot;
@@ -280,9 +286,10 @@ a Creative Commons Attribution 4.0 International License (CC BY
 </sec>
 <sec id="research-impact-statement">
   <title>Research impact statement</title>
-  <p>Since the earliest versions in 2022, this software proved essential
-  in orchestrating asymmetric catalysis workflows with ensembles up to
-  thousands of structures
+  <p>Since its earliest versions in 2021 (formerly
+  <ext-link ext-link-type="uri" xlink:href="https://github.com/ntampellini/TSCoDe">TSCoDe</ext-link>),
+  this software proved essential in orchestrating asymmetric catalysis
+  workflows with ensembles up to thousands of structures
   (<xref alt="Huth et al., 2024" rid="ref-s_oxidation" ref-type="bibr">Huth
   et al., 2024</xref>;
   <xref alt="Marvich et al., 2026" rid="ref-halle_bpy" ref-type="bibr">Marvich
