@@ -41,7 +41,7 @@ from prism_pruner.utils import time_to_string
 
 from firecode.algebra import point_angle
 from firecode.ase_manipulations import Constraint, Spring, ase_saddle
-from firecode.dispatcher import Opt_func_dispatcher
+from firecode.dispatcher import Dispatcher
 from firecode.ensemble import Ensemble
 from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.solvents import epsilon_dict, solvent_synonyms
@@ -84,7 +84,7 @@ class OptimizerOptions:
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
-        self.dispatcher = Opt_func_dispatcher(self.calc)
+        self.dispatcher = Dispatcher(self.calc)
         self.constraints: dict[str, list[Constraint]] = {f: [] for f in self.filenames}
         self.mols: dict[str, Ensemble] = {f: read_xyz(f) for f in self.filenames}
         self.charge_and_mult_dict = {f: self._get_charge_mult_for_file(f) for f in self.filenames}

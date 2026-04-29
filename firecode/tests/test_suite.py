@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from firecode.context_managers import FolderContext, HiddenPrints, NewFolderContext
-from firecode.dispatcher import Opt_func_dispatcher
+from firecode.dispatcher import Dispatcher
 from firecode.embedder import Embedder
 from firecode.standalone_optimizer import OptimizerOptions, standalone_optimize
 from firecode.utils import clean_directory, read_xyz
@@ -40,7 +40,7 @@ def cleanup() -> None:
 def run_calculator_test(calculator: str) -> None:
     """Tests a generic calculator."""
     mol = read_xyz(str(HERE / "C2H4.xyz"))
-    dispatcher = Opt_func_dispatcher(calculator)
+    dispatcher = Dispatcher(calculator)
     _, _, success = dispatcher.opt_func(  # type: ignore[operator]
         atoms=mol.atoms,
         coords=mol.coords[0],
@@ -190,7 +190,7 @@ def test_packmol_operator() -> None:
 
 
 @pytest.mark.codecov
-def test_multithread_refin() -> None:
+def test_multithread_refine() -> None:
     """Test multithread refining."""
     run_firecode_input("multithread_refine")
 
@@ -225,7 +225,7 @@ def test_vib_analysis() -> None:
 
     mol = read_xyz(str(HERE / "C2H4.xyz"))
     solvent = "toluene"
-    dispatcher = Opt_func_dispatcher("TBLITE")
+    dispatcher = Dispatcher("TBLITE")
     dispatcher.get_ase_calc(solvent=solvent)
     with NewFolderContext(str(HERE / "temp_C2H4_vib")):
         _ = ase_vib(
@@ -258,7 +258,7 @@ def test_alpb_delta_calc() -> None:
         FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
         FIRECODE_SOLV_METHOD_FOR_ML="alpb",
     ):
-        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher = Dispatcher("AIMNET2")
         dispatcher.get_ase_calc(solvent=None, force_reload=True)
 
     _, vac_energy, _ = ase_popt(
@@ -272,7 +272,7 @@ def test_alpb_delta_calc() -> None:
         FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
         FIRECODE_SOLV_METHOD_FOR_ML="alpb",
     ):
-        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher = Dispatcher("AIMNET2")
         dispatcher.get_ase_calc(solvent=solvent, force_reload=True)
 
     _, solv_energy, _ = ase_popt(
@@ -300,7 +300,7 @@ def test_cpcm_delta_calc() -> None:
         FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
         FIRECODE_SOLV_METHOD_FOR_ML="cpcm",
     ):
-        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher = Dispatcher("AIMNET2")
         dispatcher.get_ase_calc(solvent=None, force_reload=True)
 
     _, vac_energy, _ = ase_popt(
@@ -314,7 +314,7 @@ def test_cpcm_delta_calc() -> None:
         FIRECODE_SOLV_IMPLEM_FOR_ML="opt",
         FIRECODE_SOLV_METHOD_FOR_ML="cpcm",
     ):
-        dispatcher = Opt_func_dispatcher("AIMNET2")
+        dispatcher = Dispatcher("AIMNET2")
         dispatcher.get_ase_calc(solvent=solvent, force_reload=True)
 
     _, solv_energy, _ = ase_popt(

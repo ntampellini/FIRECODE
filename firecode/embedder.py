@@ -34,6 +34,7 @@ from copy import deepcopy
 from getpass import getuser
 from importlib.metadata import version
 from itertools import groupby
+from multiprocessing import current_process, get_start_method, set_start_method
 from string import ascii_lowercase
 from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 
@@ -49,8 +50,8 @@ from rich.traceback import install as install_rich_traceback
 
 from firecode.algebra import count_clashes, point_angle
 from firecode.ase_manipulations import Constraint
-from firecode.dispatcher import Opt_func_dispatcher
-from firecode.embedder_options import Options, OptionSetter, keywords_dict
+from firecode.dispatcher import Dispatcher
+from firecode.embedder_options import Option_setter, Options, keywords_dict
 from firecode.embeds import (
     _get_monomolecular_reactive_indices,
     cyclical_embed,
@@ -110,6 +111,12 @@ class Embedder:
         sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
         install_rich_traceback(show_locals=True)
+
+        # specify start method for multiprocessing
+        # if this is the main process
+        if current_process().name == "MainProcess":
+            if get_start_method(allow_none=True) is None:
+                set_start_method("spawn")
 
         parent_dir = os.path.dirname(filename)
         if parent_dir != "":
@@ -209,6 +216,11 @@ class Embedder:
         except Exception as e:
             logging.exception(e)
             raise e
+
+    @property
+    def mols(self) -> dict[str, Hypermolecule]:
+        """Dictionary property containing deepcopies of Hypermolecule objects."""
+        return {mol.filename: deepcopy(mol) for mol in self.objects}
 
     def log(self, string: str = "", p: bool = True) -> None:
         if p:
@@ -450,12 +462,12 @@ class Embedder:
                     )
 
     def _set_options(self, filename: str) -> None:
-        """Set the options dataclass parameters through the OptionSetter class,
+        """Set the options dataclass parameters through the Option_setter class,
         from a list of given keywords. These will be used during the run to
         vary the search depth and/or output.
         """
         try:
-            option_setter = OptionSetter(self)
+            option_setter = Option_setter(self)
             option_setter.set_options()
 
         except SyntaxError as e:
@@ -994,7 +1006,7 @@ class Embedder:
 
             # If the run is a refine>/REFINE one, the self.embed
             # attribute is set in advance by the self._set_options
-            # function through the OptionSetter class
+            # function through the Option_setter class
             return
 
         for mol in self.objects:
@@ -1326,7 +1338,7 @@ class Embedder:
                 f"FIRECODE_DEFAULT_LEVEL_{self.options.calculator}"
             )
 
-        self.dispatcher = Opt_func_dispatcher(self.options.calculator)
+        self.dispatcher = Dispatcher(self.options.calculator)
 
         if self.options.calculator == "AIMNET2":
             if self.options.mult != 1:
@@ -1815,7 +1827,10 @@ class RunEmbedding(Embedder):
             if attr[0:2] != "__" and attr != "run":
                 attr_value = getattr(embedder, attr)
                 if not hasattr(attr_value, "__call__"):
-                    setattr(self, attr, attr_value)
+                    try:
+                        setattr(self, attr, attr_value)
+                    except AttributeError:
+                        pass
 
     def zero_candidates_check(self) -> None:
         """Asserts that not all structures are being rejected."""
@@ -2563,7 +2578,7 @@ class RunEmbedding(Embedder):
                 "active fixed constraints! The thermochemical data should be interpreted carefully!"
             )
 
-        title = self.objects[0].rootname if len(self.objects) == 1 else "structures"
+        title = self.objects[0].basename if len(self.objects) == 1 else "structures"
 
         self.energies = get_free_energies(
             embedder=self,
@@ -2697,7 +2712,7 @@ class RunEmbedding(Embedder):
                         mol = self.objects[mol_id]
 
                         for a in atom_id:
-                            s += f"       Index {a} ({mol.atoms[a]:2s}) on {mol.rootname}\n"
+                            s += f"       Index {a} ({mol.atoms[a]:2s}) on {mol.basename}\n"
 
                 s += f"       Cumulative indices: {self.pairings_table[letter]}\n"
 
@@ -2885,7 +2900,7 @@ class RunEmbedding(Embedder):
             if mol.pka_data is not None:
                 table.add_row(
                     [
-                        mol.rootname,
+                        mol.basename,
                         f"{mol.reactive_indices[0]}({mol.atoms[mol.reactive_indices[0]]})",
                         mol.pka_data[0],
                         mol.pka_data[1],
@@ -2949,7 +2964,7 @@ class RunEmbedding(Embedder):
 
         for mol in self.objects:
             if mol.scan_data is not None:
-                plt.plot(*mol.scan_data, label=mol.rootname)
+                plt.plot(*mol.scan_data, label=mol.basename)
 
         plt.legend()
         plt.title("Unified scan energetics")

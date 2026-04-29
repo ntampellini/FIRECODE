@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from firecode.calculators.solvation_delta_calc import SolvationDeltaCalculator
 
 
-class Opt_func_dispatcher:
+class Dispatcher:
     """Dispatcher for optimization functions."""
 
     solvent: str | None = None

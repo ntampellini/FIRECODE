@@ -34,24 +34,29 @@ For example:
 
 .. code:: python
 
+
    def center_operator(filename: str, embedder: Embedder) -> str:
-       """Example operator centering the molecule."""
+      """Example operator centering the molecule."""
 
-       # read input file
-       mol = read_xyz(filename)
+      # read input file
+      mol = read_xyz(filename) # Ensemble(filename)
 
-       # embedder stores global run information
-       embedder.options.solvent # "ch2cl2"
-       embedder.options.T # 298.15
+      # the Embedder class stores global information
+      embedder.options.solvent # "ch2cl2"
+      embedder.options.T # 298.15
 
-       # center coordinates
-       mol.coords[0] -= np.mean(mol.coords[0], axis=0)
+      # center coordinates
+      mol.coords[0] -= np.mean(mol.coords[0], axis=0)
 
-       # write outfile and return its name
-       outfile = f"{mol.basename}_centered.xyz"
-       mol.to_xyz(outfile)
+      # save any data you might need later
+      embedder.options.centered = True
+      embedder.options.last_operator = "center"
 
-       return outfile
+      # write outfile and return its name
+      outfile = f"{mol.basename}_centered.xyz"
+      mol.to_xyz(outfile)
+
+      return outfile
 
 
 .. What it does

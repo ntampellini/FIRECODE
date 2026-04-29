@@ -64,7 +64,7 @@ from firecode.utils import cartesian_product, write_xyz
 if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator as ASECalculator
 
-    from firecode.dispatcher import Opt_func_dispatcher
+    from firecode.dispatcher import Dispatcher
 
 
 class Torsion:
@@ -600,7 +600,7 @@ def csearch(
     method: str | None = None,
     title: str = "test",
     logfunction: Callable[[str], None] | None = print,
-    dispatcher: Opt_func_dispatcher | None = None,
+    dispatcher: Dispatcher | None = None,
     debug: bool = False,
     interactive_print: bool = True,
     write_torsions: bool = False,

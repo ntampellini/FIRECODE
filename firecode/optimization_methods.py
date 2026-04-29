@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 import numpy as np
 from prism_pruner.utils import align_structures, time_to_string
 
-from firecode.dispatcher import Opt_func_dispatcher
+from firecode.dispatcher import Dispatcher
 from firecode.ensemble import Ensemble
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.utils import loadbar, molecule_check, scramble_check, str_to_var, write_xyz
@@ -61,7 +61,7 @@ def optimize(
     check: bool = True,
     logfunction: Callable[[str], None] | None = None,
     debug: bool = False,
-    dispatcher: Opt_func_dispatcher | None = None,
+    dispatcher: Dispatcher | None = None,
     **kwargs: Any,
 ) -> tuple[Array2D_float, float, bool]:
     """Performs a geometry [partial] optimization (OPT/POPT) with MOPAC, ORCA or XTB at $method level,
@@ -79,7 +79,7 @@ def optimize(
     :return energy: absolute energy of structure, in kcal/mol
     :return not_scrambled: bool, indicating if the optimization shifted up some bonds (except the constrained ones)
     """
-    dispatcher = dispatcher or Opt_func_dispatcher(calculator)
+    dispatcher = dispatcher or Dispatcher(calculator)
     ase_calc = dispatcher.get_ase_calc(method, solvent=solvent)
 
     if mols_graphs is not None:
@@ -193,7 +193,7 @@ def refine_structures(
     solvent: str | None = None,
     loadstring: str = "",
     logfunction: Callable[[str], None] | None = None,
-    dispatcher: Opt_func_dispatcher | None = None,
+    dispatcher: Dispatcher | None = None,
     debug: bool = False,
 ) -> tuple[Array3D_float, Array1D_float]:
     """Refine a set of structures - optimize them and remove similar

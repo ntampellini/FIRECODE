@@ -17,7 +17,8 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/firecode)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v1.json)](https://github.com/charliermarsh/ruff)
 
-![Twitter](https://img.shields.io/twitter/url?url=https%3A%2F%2Ftwitter.com%2Fntampellini_&label=%40ntampellini_&link=https%3A%2F%2Ftwitter.com%2Fntampellini_)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-%40ntampellini-black?style=social&labelColor=blue&color=blue&link=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fntampellini%2F)](https://www.linkedin.com/in/ntampellini/)
+
 
 </div>
 
@@ -60,7 +61,7 @@ As a legacy feature from [TSCoDe](https://github.com/ntampellini/TSCoDe), FIRECO
 
 ## Installation
 
-The package is distributed via `pip`, and the use of [`uv`](https://docs.astral.sh/uv/) is highly recommended. The default installation is minimalistic, and torch/GPU support requires dedicated installs:
+The package is distributed via `pip`, and the use of `uv` is [highly recommended](https://docs.astral.sh/uv/). The default installation is minimalistic, and torch/GPU support requires dedicated installs:
 
 ```python
 uv pip install firecode           # XTB, TBLITE, ORCA

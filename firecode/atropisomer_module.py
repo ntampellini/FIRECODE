@@ -431,7 +431,7 @@ def get_plot_segments(
     return zip(x_slices, y_slices)
 
 
-def dihedral_scan(embedder: Embedder) -> None:
+def dihedral_scan(filename: str, embedder: Embedder) -> None:
     """Automated dihedral scan. Runs two preliminary scans
     (clockwise, anticlockwise) in 10 degrees increments,
     then peaks above 'kcal_thresh' are re-scanned accurately
@@ -442,7 +442,7 @@ def dihedral_scan(embedder: Embedder) -> None:
         # set to 5 if user did not specify a value
         embedder.options.kcal_thresh = 5
 
-    mol = embedder.objects[0]
+    mol = embedder.mols[filename]
     cum_structures, cum_energies = [], []
 
     embedder.log(
@@ -476,7 +476,7 @@ def dihedral_scan(embedder: Embedder) -> None:
             new_coords,
             mol.reactive_indices,
             threshold_kcal=embedder.options.kcal_thresh,
-            title=mol.rootname + f"_conf_{c + 1}",
+            title=mol.basename + f"_conf_{c + 1}",
             optimization=embedder.options.optimization,
             logfile=embedder.logfile,
             plot=True,

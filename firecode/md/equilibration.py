@@ -22,7 +22,7 @@ from firecode.ase_manipulations import (
     set_charge_and_mult_on_ase_atoms,
 )
 from firecode.context_managers import NewFolderContext
-from firecode.dispatcher import Opt_func_dispatcher
+from firecode.dispatcher import Dispatcher
 from firecode.errors import FatalError
 from firecode.solvents import solvent_data
 from firecode.utils import read_xyz
@@ -104,7 +104,7 @@ def run_md_equilibration(
     with NewFolderContext(title + "_md_equilibration", delete_after=False):
         # 1. Initialize Atoms object
         atoms = Atoms(symbols=symbols, positions=positions)
-        dispatcher = Opt_func_dispatcher(calculator=embedder.options.calculator)
+        dispatcher = Dispatcher(calculator=embedder.options.calculator)
         ase_calc = dispatcher.get_ase_calc(
             embedder.options.theory_level, solvent=None, force_reload=True, logfunction=embedder.log
         )

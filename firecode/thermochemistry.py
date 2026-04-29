@@ -38,7 +38,7 @@ from prism_pruner.utils import time_to_string
 
 from firecode.ase_manipulations import optimizer_dict, set_charge_and_mult_on_ase_atoms
 from firecode.context_managers import HiddenPrints, NewFolderContext
-from firecode.dispatcher import Opt_func_dispatcher
+from firecode.dispatcher import Dispatcher
 from firecode.solvents import solvent_data, solvent_synonyms
 from firecode.typing_ import Array1D_float, Array1D_str, Array2D_float, Array3D_float
 from firecode.units import (
@@ -366,7 +366,7 @@ def rrho_thermo(
 def ase_vib(
     atoms: Array1D_str,
     coords: Array2D_float,
-    dispatcher: Opt_func_dispatcher,
+    dispatcher: Dispatcher,
     charge: int,
     mult: int,
     optimizer: str | None = None,
