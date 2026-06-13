@@ -4,6 +4,7 @@ Installation
 ++++++++++++
 
 This program is written in Python (currently >=3.12). The recommended way to install it is through conda/mamba and uv.
+Contributors are encouraged to install the program via `pixi <https://pixi.prefix.dev/latest/>`__ for easier development.
 
 ::
 
@@ -32,10 +33,7 @@ Currently both CREST versions 2.12 and 3.0+ are supported.
 
 ::
 
-    # install mamba if you don't have it already
-    conda install -c conda-forge mamba
-
-    mamba install -c conda-forge crest
+    conda install -c conda-forge crest
 
 
 AIMNET2 models
@@ -66,14 +64,11 @@ XTB
 This is free software. See the `GitHub
 repository <https://github.com/grimme-lab/xtb>`__ and the
 `documentation <https://xtb-docs.readthedocs.io/en/latest/contents.html>`__
-for how to install it on your machine. The calcaulator is available through conda as well.
+for how to install it on your machine. The calculator is available through conda as well.
 
 ::
 
-    # install mamba if you don't have it already
-    conda install -c conda-forge mamba
-
-    mamba install -c conda-forge xtb
+    conda install -c conda-forge xtb
 
 TBLITE (prefer over xTB)
 ------------------------
@@ -82,10 +77,7 @@ Light-weight version of the xTB, free for academic use. See the `GitHub reposito
 
 ::
 
-    # install mamba if you don't have it already
-    conda install -c conda-forge mamba
-
-    mamba install -c conda-forge "tblite>=0.5.0" tblite-python
+    conda install -c conda-forge "tblite>=0.5.0" tblite-python
 
 
 
@@ -98,3 +90,24 @@ Detailed instructions on how to install and set up ORCA can be found on
 website <https://sites.google.com/site/orcainputlibrary/setting-up-orca>`__.
 Make sure to install and set up OpenMPI along with ORCA if you wish to
 exploit multiple cores on your machine (the command ``mpirun`` should be available).
+
+
+Running tests
+-------------
+
+After installing all the required dependencies for your tasks, you can confirm that the software runs smoothly
+by running the tests shipped with the code.
+
+- Installations via `pip`: you can find where the installation folder is by running:
+
+::
+
+    pip show firecode
+
+The input files for the tests are located in ``[your installation directory]/firecode/tests``.
+
+- Installation via pixi: you can run all the CI tests in one command. In the installation root, run:
+
+::
+
+    pixi run -e dev test_cov

@@ -85,7 +85,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
   reduced computational cost will only translate into faster and more
   robust modeling with the help of automation frameworks, where trivial
   human intervention does not become the new bottleneck of computational
-  pipelines.</p>
+  pipelines. FIRECODE aims at filling this need by providing a modular
+  framework for generating and processing molecular ensembles.</p>
 </sec>
 <sec id="statement-of-need">
   <title>Statement of need</title>
@@ -96,8 +97,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
   et al., 2019</xref>), tblite
   (<xref alt="GitHub - Tblite/Tblite" rid="ref-tblite" ref-type="bibr"><italic>GitHub
   - Tblite/Tblite</italic></xref>), AIMNET2
-  (<xref alt="Anstine, 2024" rid="ref-aimnet2" ref-type="bibr">Anstine,
-  2024</xref>), UMA
+  (<xref alt="Anstine et al., 2024" rid="ref-aimnet2" ref-type="bibr">Anstine
+  et al., 2024</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>), usually via ASE
   (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
@@ -198,8 +199,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
   et al., 2019</xref>), tblite
   (<xref alt="GitHub - Tblite/Tblite" rid="ref-tblite" ref-type="bibr"><italic>GitHub
   - Tblite/Tblite</italic></xref>), AIMNET2
-  (<xref alt="Anstine, 2024" rid="ref-aimnet2" ref-type="bibr">Anstine,
-  2024</xref>), UMA
+  (<xref alt="Anstine et al., 2024" rid="ref-aimnet2" ref-type="bibr">Anstine
+  et al., 2024</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>)) via
   ASE(<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
@@ -425,7 +426,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <ref id="ref-aimnet2">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
-        <name><surname>Anstine</surname><given-names>Roman; Isayev</given-names><suffix>Dylan; Zubatyuk</suffix></name>
+        <name><surname>Anstine</surname><given-names>Dylan</given-names></name>
+        <name><surname>Zubatyuk</surname><given-names>Roman</given-names></name>
+        <name><surname>Isayev</surname><given-names>Olexandr</given-names></name>
       </person-group>
       <article-title>AIMNet2: A neural network potential to meet your neutral, charged, organic, and elemental-organic needs. This content is a preprint and has not been peer-reviewed.</article-title>
       <source>ChemRXiv</source>
@@ -556,7 +559,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <ref id="ref-mlfsm">
     <element-citation>
       <article-title>GitHub - thegomeslab/ML-FSM: Public FSM implementation with support for ML-based potential energy surfaces — github.com</article-title>
-      <publisher-name>https://github.com/thegomeslab/{M}{L}-{F}{S}{M}</publisher-name>
+      <publisher-name>https://github.com/thegomeslab/ML-FSM</publisher-name>
     </element-citation>
   </ref>
   <ref id="ref-mlfsm_paper">
@@ -794,14 +797,21 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <ref id="ref-halle_bpy">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
-        <name><surname>Marvich</surname><given-names>Halle</given-names></name>
+        <name><surname>Marvich</surname><given-names>Halle M.</given-names></name>
         <name><surname>Langner</surname><given-names>Olivia C.</given-names></name>
         <name><surname>Tampellini</surname><given-names>Nicolò</given-names></name>
         <name><surname>Miller</surname><given-names>Scott J.</given-names></name>
       </person-group>
       <article-title>A bifunctional aminoxyl–bipyridine peptide catalyst for the atroposelective copper-catalyzed aerobic oxidation of biaryl diols</article-title>
-      <source>Submitted</source>
+      <source>Journal of the American Chemical Society</source>
       <year iso-8601-date="2026">2026</year>
+      <volume>148</volume>
+      <issue>22</issue>
+      <issn>0002-7863</issn>
+      <uri>https://doi.org/10.1021/jacs.6c04560</uri>
+      <pub-id pub-id-type="doi">10.1021/jacs.6c04560</pub-id>
+      <fpage>23032</fpage>
+      <lpage>23041</lpage>
     </element-citation>
   </ref>
   <ref id="ref-rowan">

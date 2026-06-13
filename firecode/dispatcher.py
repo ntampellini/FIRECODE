@@ -193,9 +193,8 @@ class Dispatcher:
             print(e)
             raise Exception(
                 (
-                    "Cannot import tblite python bindings for FIRECODE. Install them with conda, (or better yet, mamba):\n"
-                    ">>> conda install -c conda-forge mamba\n"
-                    ">>> mamba install -c conda-forge tblite tblite-python\n"
+                    "Cannot import tblite python bindings for FIRECODE. Install them with conda:\n"
+                    ">>> conda install -c conda-forge tblite tblite-python\n"
                 )
             )
 

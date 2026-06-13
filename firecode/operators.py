@@ -423,7 +423,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
     """Run a CREST metadynamic conformational search and return the output filename."""
     crest_version = get_crest_version()
     assert crest_version is not None, (
-        "CREST (version 2 or 3) does not seem to be installed. Install it with: mamba install -c conda-forge crest=3"
+        "CREST (version 2 or 3) does not seem to be installed. Install it with: conda install -c conda-forge crest=3"
     )
 
     # load molecule to be optimized from embedder

@@ -453,5 +453,5 @@ def crest_mtd_search(*args: Any, **kwargs: Any) -> Any:
         case _:
             raise AssertionError(
                 "CREST (version 2 or 3) does not seem to be installed. "
-                "Install it with: mamba install -c conda-forge crest=3"
+                "Install it with: conda install -c conda-forge crest=3"
             )
