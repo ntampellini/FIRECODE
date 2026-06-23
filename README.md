@@ -18,6 +18,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v1.json)](https://github.com/charliermarsh/ruff)
 
 [![status](https://joss.theoj.org/papers/fd6d790007f0510a941fa9d9e7641240/status.svg)](https://joss.theoj.org/papers/fd6d790007f0510a941fa9d9e7641240)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20816806.svg)](https://doi.org/10.5281/zenodo.20816806)cite
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-%40ntampellini-black?style=social&labelColor=blue&color=blue&link=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fntampellini%2F)](https://www.linkedin.com/in/ntampellini/)
 

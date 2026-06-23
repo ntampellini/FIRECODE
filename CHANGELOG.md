@@ -1,9 +1,13 @@
-## FIRECODE - latest
+## FIRECODE - 2.0.3 🔥 - JOSS publication version (June 23 2026)
+- Release version accompanying JOSS publication.
+
+## FIRECODE - 2.0.2 🔥 (June 13 2026)
 - Removed profiler module to profile entire code runs
 - Added various tests covering all supported features, bringing coverage to >75%
 - Various cleanups targeted at easiest and most intuitive external contribution
 - Fixed some multiprocessing I/O stream bugs that prevented parallel runs
 - Added a CONTRIBUTING.md files with contributing guidelines
+- Bumped max python version to 3.13.
 
 ## FIRECODE 2.0.0 🔥 (April 25 2026)
 - Restructured and expanded solvent module.

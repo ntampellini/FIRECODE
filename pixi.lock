@@ -1814,8 +1814,8 @@ packages:
   timestamp: 1771219337187
 - pypi: ./
   name: firecode
-  version: 2.0.2
-  sha256: cfe789293092fbb8b600627bcad8b32c6ff7606b3286dc04a92b5188dd3b4d9a
+  version: 2.0.3
+  sha256: d42b35340d76762fc1d25e567912bc125ca41feda7c85d6e1137d6f453a8bc93
   requires_dist:
   - rdkit>=2025.9.3
   - numpy
@@ -1835,7 +1835,7 @@ packages:
   - aimnet[ase] ; extra == 'aimnet2'
   - fairchem-core ; extra == 'full'
   - aimnet[ase] ; extra == 'full'
-  requires_python: '>=3.12'
+  requires_python: '>=3.12,<3.14'
 - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
   sha256: 8a97eba37e0723720706d4636cc89c6b07eea1b7cc66fd8994fa8983a81ed988
   md5: ba67a9febeda36948fee26a3dec3d914
