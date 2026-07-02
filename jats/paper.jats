@@ -96,7 +96,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   (<xref alt="Bannwarth et al., 2019" rid="ref-xtb" ref-type="bibr">Bannwarth
   et al., 2019</xref>), tblite
   (<xref alt="GitHub - Tblite/Tblite" rid="ref-tblite" ref-type="bibr"><italic>GitHub
-  - Tblite/Tblite</italic></xref>), AIMNET2
+  - Tblite/Tblite</italic></xref>;
+  <xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
+  et al., 2025</xref>), AIMNET2
   (<xref alt="Anstine et al., 2024" rid="ref-aimnet2" ref-type="bibr">Anstine
   et al., 2024</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
@@ -129,9 +131,11 @@ a Creative Commons Attribution 4.0 International License (CC BY
   (<xref alt="Neese et al., 2020" rid="ref-orca1" ref-type="bibr">Neese
   et al., 2020</xref>;
   <xref alt="Neese, 2022" rid="ref-orca2" ref-type="bibr">Neese,
-  2022</xref>) (free for academic use) started offering compound job
-  functionality, which enables the chained execution of some core ORCA
-  modules. The code is however not open source and functionality is
+  2022</xref>;
+  <xref alt="Tetenberg et al., 2026" rid="ref-opi" ref-type="bibr">Tetenberg
+  et al., 2026</xref>) (free for academic use) started offering compound
+  job functionality, which enables the chained execution of some core
+  ORCA modules. The code is however not open source and functionality is
   limited to what is included in the ORCA program (<italic>i.e.</italic>
   no MLIPs, no similarity pruning, no ensemble processing…). While ORCA
   workflows are more extensively implemented in
@@ -198,7 +202,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   (<xref alt="Bannwarth et al., 2019" rid="ref-xtb" ref-type="bibr">Bannwarth
   et al., 2019</xref>), tblite
   (<xref alt="GitHub - Tblite/Tblite" rid="ref-tblite" ref-type="bibr"><italic>GitHub
-  - Tblite/Tblite</italic></xref>), AIMNET2
+  - Tblite/Tblite</italic></xref>;
+  <xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
+  et al., 2025</xref>), AIMNET2
   (<xref alt="Anstine et al., 2024" rid="ref-aimnet2" ref-type="bibr">Anstine
   et al., 2024</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
@@ -217,8 +223,12 @@ a Creative Commons Attribution 4.0 International License (CC BY
   - Ntampellini/Prism_pruner</italic></xref>) for the removal of
   duplicates. <monospace>Sella</monospace>
   (<xref alt="GitHub - Zadorlab/Sella" rid="ref-sella" ref-type="bibr"><italic>GitHub
-  - Zadorlab/Sella</italic></xref>) provides a saddle point optimizer,
-  and <monospace>rdkit</monospace>
+  - Zadorlab/Sella</italic></xref>;
+  <xref alt="Hermes et al., 2019" rid="ref-sella_paper1" ref-type="bibr">Hermes
+  et al., 2019</xref>,
+  <xref alt="2021" rid="ref-sella_paper2" ref-type="bibr">2021</xref>,
+  <xref alt="2022" rid="ref-sella_paper3" ref-type="bibr">2022</xref>)
+  provides a saddle point optimizer, and <monospace>rdkit</monospace>
   (<xref alt="GitHub - Rdkit/Rdkit" rid="ref-rdkit" ref-type="bibr"><italic>GitHub
   - Rdkit/Rdkit</italic></xref>) is used for
   <monospace>ETKDG</monospace>
@@ -442,6 +452,30 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <publisher-name>https://github.com/tblite/tblite</publisher-name>
     </element-citation>
   </ref>
+  <ref id="ref-tblite_paper">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Katbashev</surname><given-names>Abylay</given-names></name>
+        <name><surname>Stahn</surname><given-names>Marcel</given-names></name>
+        <name><surname>Rose</surname><given-names>Thomas</given-names></name>
+        <name><surname>Alizadeh</surname><given-names>Vahideh</given-names></name>
+        <name><surname>Friede</surname><given-names>Marvin</given-names></name>
+        <name><surname>Plett</surname><given-names>Christoph</given-names></name>
+        <name><surname>Steinbach</surname><given-names>Pit</given-names></name>
+        <name><surname>Ehlert</surname><given-names>Sebastian</given-names></name>
+      </person-group>
+      <article-title>Overview on building blocks and applications of efficient and robust extended tight binding</article-title>
+      <source>The Journal of Physical Chemistry A</source>
+      <year iso-8601-date="2025">2025</year>
+      <volume>129</volume>
+      <issue>10</issue>
+      <issn>1089-5639</issn>
+      <uri>https://doi.org/10.1021/acs.jpca.4c08263</uri>
+      <pub-id pub-id-type="doi">10.1021/acs.jpca.4c08263</pub-id>
+      <fpage>2667</fpage>
+      <lpage>2682</lpage>
+    </element-citation>
+  </ref>
   <ref id="ref-qrrho">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
@@ -502,6 +536,28 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage></lpage>
     </element-citation>
   </ref>
+  <ref id="ref-opi">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Tetenberg</surname><given-names>Tim</given-names></name>
+        <name><surname>Neugebauer</surname><given-names>Hagen</given-names></name>
+        <name><surname>Plett</surname><given-names>Christoph</given-names></name>
+        <name><surname>Santhosh</surname><given-names>Nakul</given-names></name>
+        <name><surname>Bursch</surname><given-names>Markus</given-names></name>
+        <name><surname>Riplinger</surname><given-names>Christoph</given-names></name>
+      </person-group>
+      <article-title>ORCA meets python─the ORCA python interface OPI</article-title>
+      <source>Journal of Chemical Theory and Computation</source>
+      <year iso-8601-date="2026">2026</year>
+      <volume>22</volume>
+      <issue>10</issue>
+      <issn>1549-9618</issn>
+      <uri>https://doi.org/10.1021/acs.jctc.5c02141</uri>
+      <pub-id pub-id-type="doi">10.1021/acs.jctc.5c02141</pub-id>
+      <fpage>4951</fpage>
+      <lpage>4967</lpage>
+    </element-citation>
+  </ref>
   <ref id="ref-torch">
     <element-citation>
       <article-title>GitHub - pytorch/pytorch: Tensors and Dynamic neural networks in Python with strong GPU acceleration — github.com</article-title>
@@ -530,6 +586,64 @@ a Creative Commons Attribution 4.0 International License (CC BY
     <element-citation>
       <article-title>GitHub - zadorlab/sella: A Python software package for saddle point optimization and minimization of atomic systems. — github.com</article-title>
       <publisher-name>https://github.com/zadorlab/sella</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-sella_paper1">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Hermes</surname><given-names>Eric D.</given-names></name>
+        <name><surname>Sargsyan</surname><given-names>Khachik</given-names></name>
+        <name><surname>Najm</surname><given-names>Habib N.</given-names></name>
+        <name><surname>Zádor</surname><given-names>Judit</given-names></name>
+      </person-group>
+      <article-title>Accelerated saddle point refinement through full exploitation of partial hessian diagonalization</article-title>
+      <source>Journal of Chemical Theory and Computation</source>
+      <year iso-8601-date="2019">2019</year>
+      <volume>15</volume>
+      <issue>11</issue>
+      <issn>1549-9618</issn>
+      <uri>https://doi.org/10.1021/acs.jctc.9b00869</uri>
+      <pub-id pub-id-type="doi">10.1021/acs.jctc.9b00869</pub-id>
+      <fpage>6536</fpage>
+      <lpage>6549</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-sella_paper2">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Hermes</surname><given-names>Eric D.</given-names></name>
+        <name><surname>Sargsyan</surname><given-names>Khachik</given-names></name>
+        <name><surname>Najm</surname><given-names>Habib N.</given-names></name>
+        <name><surname>Zádor</surname><given-names>Judit</given-names></name>
+      </person-group>
+      <article-title>Geometry optimization speedup through a geodesic approach to internal coordinates</article-title>
+      <source>The Journal of Chemical Physics</source>
+      <year iso-8601-date="2021">2021</year>
+      <volume>155</volume>
+      <issue>9</issue>
+      <issn>0021-9606</issn>
+      <uri>https://doi.org/10.1063/5.0060146</uri>
+      <pub-id pub-id-type="doi">10.1063/5.0060146</pub-id>
+    </element-citation>
+  </ref>
+  <ref id="ref-sella_paper3">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Hermes</surname><given-names>Eric D.</given-names></name>
+        <name><surname>Sargsyan</surname><given-names>Khachik</given-names></name>
+        <name><surname>Najm</surname><given-names>Habib N.</given-names></name>
+        <name><surname>Zádor</surname><given-names>Judit</given-names></name>
+      </person-group>
+      <article-title>Sella, an open-source automation-friendly molecular saddle point optimizer</article-title>
+      <source>Journal of Chemical Theory and Computation</source>
+      <year iso-8601-date="2022">2022</year>
+      <volume>18</volume>
+      <issue>11</issue>
+      <issn>1549-9618</issn>
+      <uri>https://doi.org/10.1021/acs.jctc.2c00395</uri>
+      <pub-id pub-id-type="doi">10.1021/acs.jctc.2c00395</pub-id>
+      <fpage>6974</fpage>
+      <lpage>6988</lpage>
     </element-citation>
   </ref>
   <ref id="ref-rdkit">
