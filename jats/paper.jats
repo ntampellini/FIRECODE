@@ -104,12 +104,16 @@ a Creative Commons Attribution 4.0 International License (CC BY
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>), usually via ASE
   (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
-  / Ase · GitLab — Gitlab.com</italic></xref>)) and exposes a series of
-  workflows and utilities for geometry optimization, frequency analysis,
-  one- and two-ended transition state search, and conformational search.
-  When possible, these routines are implemented in a
-  calculator-independent way, and almost all of these can be arbitrarily
-  chained to one another to define a complex workflow.</p>
+  / Ase · GitLab — Gitlab.com</italic></xref>;
+  <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
+  &amp; Jacobsen, 2002</xref>;
+  <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
+  et al., 2017</xref>)) and exposes a series of workflows and utilities
+  for geometry optimization, frequency analysis, one- and two-ended
+  transition state search, and conformational search. When possible,
+  these routines are implemented in a calculator-independent way, and
+  almost all of these can be arbitrarily chained to one another to
+  define a complex workflow.</p>
   <p>The software was born out of necessity over the last five years of
   research in asymmetric catalysis: <monospace>FIRECODE</monospace> was
   designed to streamline the necessary use of multiple software and
@@ -163,8 +167,12 @@ a Creative Commons Attribution 4.0 International License (CC BY
   2016</xref>) (MD and high-level DFT) written in Ruby, and the popular
   <monospace>ASE</monospace>
   (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
-  / Ase · GitLab — Gitlab.com</italic></xref>), which is extensively
-  used as a lower level interface for interacting with calculators in
+  / Ase · GitLab — Gitlab.com</italic></xref>;
+  <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
+  &amp; Jacobsen, 2002</xref>;
+  <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
+  et al., 2017</xref>), which is extensively used as a lower level
+  interface for interacting with calculators in
   <monospace>FIRECODE</monospace>.</p>
   <p>The development of this software from scratch was motivated by
   multiple reasons. First, a modern and flexible hub for running
@@ -197,7 +205,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   version of the program down to a single command
   (<monospace>uv pip install firecode</monospace>).</p>
   <p>Non-essential dependencies can be installed based on the desired
-  calculator and interfaces to be used, all via conda/mamba.</p>
+  calculator and interfaces to be used, all via conda.</p>
   <p>The software implements various calculators (xTB
   (<xref alt="Bannwarth et al., 2019" rid="ref-xtb" ref-type="bibr">Bannwarth
   et al., 2019</xref>), tblite
@@ -210,14 +218,22 @@ a Creative Commons Attribution 4.0 International License (CC BY
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>)) via
   ASE(<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
-  / Ase · GitLab — Gitlab.com</italic></xref>), which can be used
-  interchangeably in various ensemble routines. Other core libraries
-  leveraged throughout the codebase are <monospace>numpy</monospace>
+  / Ase · GitLab — Gitlab.com</italic></xref>;
+  <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
+  &amp; Jacobsen, 2002</xref>;
+  <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
+  et al., 2017</xref>), which can be used interchangeably in various
+  ensemble routines. Other core libraries leveraged throughout the
+  codebase are <monospace>numpy</monospace>
   (<xref alt="GitHub - Numpy/Numpy" rid="ref-numpy" ref-type="bibr"><italic>GitHub
   - Numpy/Numpy</italic></xref>) for algebraic manipulations,
   <monospace>networkx</monospace>
   (<xref alt="GitHub - Networkx/Networkx" rid="ref-networkx" ref-type="bibr"><italic>GitHub
-  - Networkx/Networkx</italic></xref>) for graph utilities and
+  - Networkx/Networkx</italic></xref>;
+  <xref alt="Hagberg, Schult, et al., 2008" rid="ref-networkx_proc" ref-type="bibr">Hagberg,
+  Schult, et al., 2008</xref>;
+  <xref alt="Hagberg, Swart, et al., 2008" rid="ref-networkx_tech" ref-type="bibr">Hagberg,
+  Swart, et al., 2008</xref>) for graph utilities and
   <monospace>prism_pruner</monospace>
   (<xref alt="GitHub - Ntampellini/Prism_pruner" rid="ref-prism_pruner" ref-type="bibr"><italic>GitHub
   - Ntampellini/Prism_pruner</italic></xref>) for the removal of
@@ -230,8 +246,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <xref alt="2022" rid="ref-sella_paper3" ref-type="bibr">2022</xref>)
   provides a saddle point optimizer, and <monospace>rdkit</monospace>
   (<xref alt="GitHub - Rdkit/Rdkit" rid="ref-rdkit" ref-type="bibr"><italic>GitHub
-  - Rdkit/Rdkit</italic></xref>) is used for
-  <monospace>ETKDG</monospace>
+  - Rdkit/Rdkit</italic></xref>;
+  <xref alt="Greg Landrum, 2026" rid="ref-rdkit_zenodo" ref-type="bibr">Greg
+  Landrum, 2026</xref>) is used for <monospace>ETKDG</monospace>
   (<xref alt="Riniker &amp; Landrum, 2015" rid="ref-etkdg" ref-type="bibr">Riniker
   &amp; Landrum, 2015</xref>) conformational searches and SMARTS
   substructure matching. The <monospace>ML-FSM</monospace> library
@@ -431,6 +448,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <source>arXiv preprint</source>
       <year iso-8601-date="2025">2025</year>
       <uri>https://arxiv.org/abs/2506.23971</uri>
+      <pub-id pub-id-type="doi">10.48550/arXiv.2506.23971</pub-id>
     </element-citation>
   </ref>
   <ref id="ref-aimnet2">
@@ -482,7 +500,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
         <name><surname>Grimme</surname><given-names>Stefan</given-names></name>
       </person-group>
       <article-title>Supramolecular binding thermodynamics by dispersion-corrected density functional theory</article-title>
-      <source>Chemistry – A European Journal</source>
+      <source>Chemistry - A European Journal</source>
       <year iso-8601-date="2012">2012</year>
       <volume>18</volume>
       <issue>32</issue>
@@ -497,6 +515,73 @@ a Creative Commons Attribution 4.0 International License (CC BY
     <element-citation>
       <article-title>Ase / ase · GitLab — gitlab.com</article-title>
       <publisher-name>https://gitlab.com/ase/ase</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-ase_paper1">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Larsen</surname><given-names>Ask Hjorth</given-names></name>
+        <name><surname>Mortensen</surname><given-names>Jens Jørgen</given-names></name>
+        <name><surname>Blomqvist</surname><given-names>Jakob</given-names></name>
+        <name><surname>Castelli</surname><given-names>Ivano E</given-names></name>
+        <name><surname>Christensen</surname><given-names>Rune</given-names></name>
+        <name><surname>Dułak</surname><given-names>Marcin</given-names></name>
+        <name><surname>Friis</surname><given-names>Jesper</given-names></name>
+        <name><surname>Groves</surname><given-names>Michael N</given-names></name>
+        <name><surname>Hammer</surname><given-names>Bjørk</given-names></name>
+        <name><surname>Hargus</surname><given-names>Cory</given-names></name>
+        <name><surname>Hermes</surname><given-names>Eric D</given-names></name>
+        <name><surname>Jennings</surname><given-names>Paul C</given-names></name>
+        <name><surname>Jensen</surname><given-names>Peter Bjerre</given-names></name>
+        <name><surname>Kermode</surname><given-names>James</given-names></name>
+        <name><surname>Kitchin</surname><given-names>John R</given-names></name>
+        <name><surname>Kolsbjerg</surname><given-names>Esben Leonhard</given-names></name>
+        <name><surname>Kubal</surname><given-names>Joseph</given-names></name>
+        <name><surname>Kaasbjerg</surname><given-names>Kristen</given-names></name>
+        <name><surname>Lysgaard</surname><given-names>Steen</given-names></name>
+        <name><surname>Maronsson</surname><given-names>Jón Bergmann</given-names></name>
+        <name><surname>Maxson</surname><given-names>Tristan</given-names></name>
+        <name><surname>Olsen</surname><given-names>Thomas</given-names></name>
+        <name><surname>Pastewka</surname><given-names>Lars</given-names></name>
+        <name><surname>Peterson</surname><given-names>Andrew</given-names></name>
+        <name><surname>Rostgaard</surname><given-names>Carsten</given-names></name>
+        <name><surname>Schiøtz</surname><given-names>Jakob</given-names></name>
+        <name><surname>Schütt</surname><given-names>Ole</given-names></name>
+        <name><surname>Strange</surname><given-names>Mikkel</given-names></name>
+        <name><surname>Thygesen</surname><given-names>Kristian S</given-names></name>
+        <name><surname>Vegge</surname><given-names>Tejs</given-names></name>
+        <name><surname>Vilhelmsen</surname><given-names>Lasse</given-names></name>
+        <name><surname>Walter</surname><given-names>Michael</given-names></name>
+        <name><surname>Zeng</surname><given-names>Zhenhua</given-names></name>
+        <name><surname>Jacobsen</surname><given-names>Karsten W</given-names></name>
+      </person-group>
+      <article-title>The atomic simulation environment—a python library for working with atoms</article-title>
+      <source>Journal of Physics: Condensed Matter</source>
+      <year iso-8601-date="2017">2017</year>
+      <volume>29</volume>
+      <issue>27</issue>
+      <uri>http://stacks.iop.org/0953-8984/29/i=27/a=273002</uri>
+      <fpage>273002</fpage>
+      <lpage></lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-ase_paper2">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Bahn</surname><given-names>S. R.</given-names></name>
+        <name><surname>Jacobsen</surname><given-names>K. W.</given-names></name>
+      </person-group>
+      <article-title>An object-oriented scripting interface to a legacy electronic structure code</article-title>
+      <source>Comput. Sci. Eng.</source>
+      <publisher-name>IEEE COMPUTER SOC</publisher-name>
+      <publisher-loc>10662 LOS VAQUEROS CIRCLE, PO BOX 3014, LOS ALAMITOS, CA 90720-1314 USA</publisher-loc>
+      <year iso-8601-date="2002">2002</year>
+      <volume>4</volume>
+      <issue>3</issue>
+      <issn>1521-9615</issn>
+      <pub-id pub-id-type="doi">10.1109/5992.998641</pub-id>
+      <fpage>56</fpage>
+      <lpage>66</lpage>
     </element-citation>
   </ref>
   <ref id="ref-orca1">
@@ -546,7 +631,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
         <name><surname>Bursch</surname><given-names>Markus</given-names></name>
         <name><surname>Riplinger</surname><given-names>Christoph</given-names></name>
       </person-group>
-      <article-title>ORCA meets python─the ORCA python interface OPI</article-title>
+      <article-title>ORCA meets python - the ORCA python interface OPI</article-title>
       <source>Journal of Chemical Theory and Computation</source>
       <year iso-8601-date="2026">2026</year>
       <volume>22</volume>
@@ -916,7 +1001,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
         <name><surname>Tampellini</surname><given-names>Nicolò</given-names></name>
         <name><surname>Miller</surname><given-names>Scott J.</given-names></name>
       </person-group>
-      <article-title>A bifunctional aminoxyl–bipyridine peptide catalyst for the atroposelective copper-catalyzed aerobic oxidation of biaryl diols</article-title>
+      <article-title>A bifunctional aminoxyl-bipyridine peptide catalyst for the atroposelective copper-catalyzed aerobic oxidation of biaryl diols</article-title>
       <source>Journal of the American Chemical Society</source>
       <year iso-8601-date="2026">2026</year>
       <volume>148</volume>
@@ -932,6 +1017,45 @@ a Creative Commons Attribution 4.0 International License (CC BY
     <element-citation>
       <article-title>Rowan | ML-Powered Molecular Design and Simulation — rowansci.com</article-title>
       <publisher-name>https://rowansci.com/</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-networkx_proc">
+    <element-citation publication-type="paper-conference">
+      <person-group person-group-type="author">
+        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
+        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
+        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
+      </person-group>
+      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
+      <source>Proceedings of the 7th python in science conference</source>
+      <publisher-loc>Pasadena, CA USA</publisher-loc>
+      <year iso-8601-date="2008">2008</year>
+      <fpage>11 </fpage>
+      <lpage> 15</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-networkx_tech">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
+        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
+        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
+      </person-group>
+      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
+      <publisher-name>Los Alamos National Laboratory (LANL)</publisher-name>
+      <year iso-8601-date="2008-01">2008</year><month>01</month>
+      <uri>https://www.osti.gov/biblio/960616</uri>
+    </element-citation>
+  </ref>
+  <ref id="ref-rdkit_zenodo">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Greg Landrum</surname><given-names>Brian Kelley</given-names><suffix>Paolo Tosco</suffix></name>
+      </person-group>
+      <article-title>Rdkit/rdkit: 2026_03_3 (Q1 2026)</article-title>
+      <year iso-8601-date="2026">2026</year>
+      <uri>https://doi.org/10.5281/zenodo.20446949</uri>
+      <pub-id pub-id-type="doi">10.5281/zenodo.20446949</pub-id>
     </element-citation>
   </ref>
 </ref-list>
