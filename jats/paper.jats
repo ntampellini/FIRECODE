@@ -661,6 +661,36 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <publisher-name>https://github.com/networkx/networkx</publisher-name>
     </element-citation>
   </ref>
+  <ref id="ref-networkx_proc">
+    <element-citation publication-type="paper-conference">
+      <person-group person-group-type="author">
+        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
+        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
+        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
+      </person-group>
+      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
+      <source>Proceedings of the 7th python in science conference</source>
+      <publisher-loc>Pasadena, CA USA</publisher-loc>
+      <year iso-8601-date="2008">2008</year>
+      <uri>https://doi.org/10.25080/TCWV9851</uri>
+      <pub-id pub-id-type="doi">10.25080/TCWV9851</pub-id>
+      <fpage>11 </fpage>
+      <lpage> 15</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-networkx_tech">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
+        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
+        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
+      </person-group>
+      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
+      <publisher-name>Los Alamos National Laboratory (LANL)</publisher-name>
+      <year iso-8601-date="2008-01">2008</year><month>01</month>
+      <uri>https://www.osti.gov/biblio/960616</uri>
+    </element-citation>
+  </ref>
   <ref id="ref-prism_pruner">
     <element-citation>
       <article-title>GitHub - ntampellini/prism_pruner: Similarity pruning engine for conformational ensembles — github.com</article-title>
@@ -1017,34 +1047,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
     <element-citation>
       <article-title>Rowan | ML-Powered Molecular Design and Simulation — rowansci.com</article-title>
       <publisher-name>https://rowansci.com/</publisher-name>
-    </element-citation>
-  </ref>
-  <ref id="ref-networkx_proc">
-    <element-citation publication-type="paper-conference">
-      <person-group person-group-type="author">
-        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
-        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
-        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
-      </person-group>
-      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
-      <source>Proceedings of the 7th python in science conference</source>
-      <publisher-loc>Pasadena, CA USA</publisher-loc>
-      <year iso-8601-date="2008">2008</year>
-      <fpage>11 </fpage>
-      <lpage> 15</lpage>
-    </element-citation>
-  </ref>
-  <ref id="ref-networkx_tech">
-    <element-citation>
-      <person-group person-group-type="author">
-        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
-        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
-        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
-      </person-group>
-      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
-      <publisher-name>Los Alamos National Laboratory (LANL)</publisher-name>
-      <year iso-8601-date="2008-01">2008</year><month>01</month>
-      <uri>https://www.osti.gov/biblio/960616</uri>
     </element-citation>
   </ref>
   <ref id="ref-rdkit_zenodo">
