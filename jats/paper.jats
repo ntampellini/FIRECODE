@@ -76,13 +76,13 @@ a Creative Commons Attribution 4.0 International License (CC BY
 <body>
 <sec id="summary">
   <title>Summary</title>
-  <p>Computational chemistry, the branch of this science dedicated to
-  the modeling of molecular systems for the extraction of properties of
-  interest, is experiencing a recent renaissance thanks to impressive
-  advances in theoretical models enabling ever-faster simulations of
-  complex processes via density functional theory (DFT), semiempirical,
-  and machine-learned interatomic potentials (MLIPs). However, the
-  reduced computational cost will only translate into faster and more
+  <p>Computational chemistry, which seeks to model molecular systems for
+  the extraction of properties of interest, is experiencing a
+  significant renaissance thanks to impressive advances in theoretical
+  models enabling ever-faster simulations of complex processes via
+  density functional theory (DFT), semiempirical, and machine-learned
+  interatomic potentials (MLIPs). However, the reduced computational
+  cost of these workflows will only translate into faster and more
   robust modeling with the help of automation frameworks, where trivial
   human intervention does not become the new bottleneck of computational
   pipelines. FIRECODE aims at filling this need by providing a modular
@@ -120,18 +120,20 @@ a Creative Commons Attribution 4.0 International License (CC BY
   routines in the computational modeling of small molecules, in a single
   centralized hub. The program can be called via command line with a
   minimal plain text input file defining the workflow, or used as a
-  Python library in jupyter notebooks. The modular nature of the
+  Python library in Jupyter notebooks. The modular nature of the
   software enables rapid addition of new features, facilitating external
   contributions, while also retaining a small installation footprint for
-  the core library. The concise input syntax also offers a streamlined
-  definition of workflows and software orchestration with no coding
-  experience required.</p>
+  the core library. External programs are easily interfaced via API
+  calls or file-based I/O. The concise input syntax also offers a
+  streamlined definition of workflows and software orchestration with no
+  coding experience required.</p>
 </sec>
 <sec id="state-of-the-field">
   <title>State of the field</title>
-  <p>While a manifold of computational chemistry software exists,
-  workflow utilities are less common, particularly in the free and open
-  source community. Recently, version 6.0 of <monospace>ORCA</monospace>
+  <p>On top of computational chemistry software, workflow utilities
+  orchestrating sequential calculation steps are increasingly recognized
+  as an essential asset in the streamlining of modeling efforts.
+  Recently, version 6.0 of <monospace>ORCA</monospace>
   (<xref alt="Neese et al., 2020" rid="ref-orca1" ref-type="bibr">Neese
   et al., 2020</xref>;
   <xref alt="Neese, 2022" rid="ref-orca2" ref-type="bibr">Neese,
@@ -146,20 +148,49 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <monospace>WEASEL</monospace>
   (<xref alt="Faccts" rid="ref-weasel" ref-type="bibr">Faccts</xref>),
   this is commercial, closed-source software.</p>
-  <p>The excellent AQME software
+  <p>Related software to the one presented here include AQME,
   (<xref alt="Alegre-Requena et al., 2023" rid="ref-aqme" ref-type="bibr">Alegre-Requena
-  et al., 2023</xref>) features the most similar design philosophy to
-  the one of this work. Key differences with
-  <monospace>FIRECODE</monospace>, besides code architecture, lie in: 1)
-  the main interaction platform of <monospace>AQME</monospace> happening
-  via jupyter notebooks, while the software of this work favors the use
-  of plain text input files, keeping the inputs as minimal as possible.
-  2) The present software having a reactivity-centered set of features,
-  chiefly via fast semiempirical and ML calculators, over
-  <monospace>AQME</monospace>’s focus on DFT and on the generation of
-  ensemble properties like spectra and molecular descriptors.</p>
-  <p>Other examples of related software, targeting the exposure of
-  high-level primitives over structured workflows, include
+  et al., 2023</xref>) which has what is perhaps the most similar design
+  philosophy. Key differences with <monospace>FIRECODE</monospace>,
+  besides code architecture, lie in: 1) the main interaction platform of
+  <monospace>AQME</monospace> happening via Jupyter notebooks, while the
+  software of this work favors the use of plain text input files,
+  keeping the inputs as minimal as possible. 2) The present software
+  having a reactivity-centered set of features, chiefly via fast
+  semiempirical and ML calculators, over <monospace>AQME</monospace>’s
+  focus on DFT and on the generation of ensemble properties like spectra
+  and molecular descriptors.</p>
+  <p>Other workflow software emerging from the material chemistry
+  community includes <monospace>atomate2</monospace>
+  (<xref alt="A. Ganose et al., 2025" rid="ref-atomate2_zenodo" ref-type="bibr">A.
+  Ganose et al., 2025</xref>;
+  <xref alt="A. M. Ganose et al., 2025" rid="ref-atomate2_paper" ref-type="bibr">A.
+  M. Ganose et al., 2025</xref>), <monospace>AiiDA</monospace>
+  (<xref alt="AiiDA — Computational Science Workflow Manager — Aiida.net" rid="ref-aiida_website" ref-type="bibr"><italic>AiiDA
+  — Computational Science Workflow Manager — Aiida.net</italic></xref>;
+  <xref alt="Huber et al., 2020" rid="ref-aaida_paper1" ref-type="bibr">Huber
+  et al., 2020</xref>;
+  <xref alt="Pizzi et al., 2016" rid="ref-aiida_arxiv" ref-type="bibr">Pizzi
+  et al., 2016</xref>;
+  <xref alt="Uhrin et al., 2021" rid="ref-aaida_paper2" ref-type="bibr">Uhrin
+  et al., 2021</xref>) and <monospace>QuAcc</monospace>
+  (<xref alt="GitHub - Quantum-Accelerators/Quacc" rid="ref-quacc_github" ref-type="bibr"><italic>GitHub
+  - Quantum-Accelerators/Quacc</italic></xref>).</p>
+  <p>Reactivity-centered software, primarily for the automated location
+  of transition states, is also gaining popularity. Examples include
+  autodE
+  (<xref alt="GitHub - Duartegroup/AutodE" rid="ref-autode_github" ref-type="bibr"><italic>GitHub
+  - Duartegroup/AutodE</italic></xref>;
+  <xref alt="Young et al., 2021" rid="ref-autode_paper" ref-type="bibr">Young
+  et al., 2021</xref>) and ML-FSM
+  (<xref alt="GitHub - Thegomeslab/ML-FSM" rid="ref-mlfsm" ref-type="bibr"><italic>GitHub
+  - Thegomeslab/ML-FSM</italic></xref>;
+  <xref alt="Marks &amp; Gomes, 2025" rid="ref-mlfsm_paper" ref-type="bibr">Marks
+  &amp; Gomes, 2025</xref>). The latter is indeed interfaced as a
+  utility in FIRECODE, given its light weight and flexibility in working
+  with different ASE calculators.</p>
+  <p>Other examples of related software, specifically targeting the
+  exposure of high-level primitives over structured workflows, include
   <monospace>Cuby</monospace>
   (<xref alt="GitHub - Berquist/Cuby" rid="ref-cubygithub" ref-type="bibr"><italic>GitHub
   - Berquist/Cuby</italic></xref>;
@@ -177,23 +208,31 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <p>The development of this software from scratch was motivated by
   multiple reasons. First, a modern and flexible hub for running
   computational chemistry workflows, particularly tailored to modeling
-  chemical reactivity and MLIPs, was lacking. While the benefit of
-  developing standalone applications for specific tasks remains, their
-  integration in a single hub permits automation and lowers the barrier
-  of entry for adoption of both individual tools and workflows alike.
-  Second, modern machine-learned interatomic potentials (MLIPs) are more
-  conveniently ran via Python libraries like
+  chemical reactivity and MLIPs, was lacking. In this context, we refer
+  to “reactivity workflows” as the sequence of sequential steps from a
+  three-dimensional molecular representation to a conformationally
+  comprehensive characterization of bond breaking and forming events.
+  This requires the access to conformational search modules, efficient
+  multistage ensemble optimization routines, similarity pruning, the
+  ability to use arbitrary geometrical constraints throughout, the
+  ability to optimize to local minima and saddle points alike, and the
+  ability to carry out vibrational analysis and calculate related
+  thermochemical corrections to access enthalpy/entropy/free energy
+  values.</p>
+  <p>While the benefit of developing standalone applications for
+  specific tasks remains, their integration in a single hub is uniquely
+  enabling for automation, and contributes to the popularization of
+  robust atomistic modeling. Second, modern machine-learned interatomic
+  potentials (MLIPs) are often centered around Python libraries like
   <monospace>torch</monospace>
   (<xref alt="GitHub - Pytorch/Pytorch" rid="ref-torch" ref-type="bibr"><italic>GitHub
   - Pytorch/Pytorch</italic></xref>), benefitting greatly from a
-  Python-based workflow manager. Additional features like implicit delta
-  solvation for gas phase-trained MLIPs
-  <xref ref-type="fn" rid="fn1">1</xref> and numerical quasi-RRHO
-  thermochemistry
+  Python-based workflow manager. Additional features of note of this
+  software also include an implicit delta solvation scheme for gas
+  phase-trained MLIPs <xref ref-type="fn" rid="fn1">1</xref>, and
+  numerical quasi-RRHO thermochemistry
   (<xref alt="Grimme, 2012" rid="ref-qrrho" ref-type="bibr">Grimme,
-  2012</xref>) are additional core library functionalities that were not
-  available in other actively maintained modules at the time of
-  development.</p>
+  2012</xref>).</p>
 </sec>
 <sec id="software-design">
   <title>Software design</title>
@@ -328,9 +367,19 @@ a Creative Commons Attribution 4.0 International License (CC BY
   et al., 2024</xref>,
   <xref alt="2025" rid="ref-rings" ref-type="bibr">2025</xref>;
   <xref alt="Tampellini, Choi, et al., 2025" rid="ref-amination" ref-type="bibr">Tampellini,
-  Choi, et al., 2025</xref>). Adoption is slowly starting to grow with
-  <monospace>pypi</monospace> reporting ~150 downloads per month at the
-  present time. Part of the core code was exported to the
+  Choi, et al., 2025</xref>). These included the generation of large
+  conformational ensembles for flexible catalysts and their non-covalent
+  aggregates (often including specific constraints) and the multilevel
+  optimization and pruning of these ensembles to a smaller number of
+  non-redundant structures. These refined ensembles were then directed
+  to higher-level DFT optimization to achieve quantitative insight into
+  stereoselectivity (<italic>i.e.</italic> a predicted ΔΔG‡ value) and
+  obtain other conformationally-comprehensive properties
+  (<italic>i.e.</italic> flexibility, relative populations, number of
+  interaction topologies).</p>
+  <p>Adoption of <monospace>FIRECODE</monospace> is starting to grow,
+  with <monospace>pypi</monospace> reporting ~250 downloads per month at
+  the present time. Part of the core code was exported to the
   <monospace>prism_pruner</monospace> library
   (<xref alt="GitHub - Ntampellini/Prism_pruner" rid="ref-prism_pruner" ref-type="bibr"><italic>GitHub
   - Ntampellini/Prism_pruner</italic></xref>) to facilitate its adoption
@@ -1060,12 +1109,242 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <pub-id pub-id-type="doi">10.5281/zenodo.20446949</pub-id>
     </element-citation>
   </ref>
+  <ref id="ref-autode_paper">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Young</surname><given-names>Tom A.</given-names></name>
+        <name><surname>Silcock</surname><given-names>Joseph J.</given-names></name>
+        <name><surname>Sterling</surname><given-names>Alistair J.</given-names></name>
+        <name><surname>Duarte</surname><given-names>Fernanda</given-names></name>
+      </person-group>
+      <article-title>autodE: Automated calculation of reaction energy profiles – application to organic and organometallic reactions</article-title>
+      <source>Angewandte Chemie International Edition</source>
+      <publisher-name>Wiley</publisher-name>
+      <year iso-8601-date="2021">2021</year>
+      <volume>60</volume>
+      <issue>8</issue>
+      <uri>https://doi.org/10.1002/anie.202011941</uri>
+      <pub-id pub-id-type="doi">10.1002/anie.202011941</pub-id>
+      <fpage>4266</fpage>
+      <lpage>4274</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-autode_github">
+    <element-citation>
+      <article-title>GitHub - duartegroup/autodE: Automated reaction profile generation — github.com</article-title>
+      <publisher-name>https://github.com/duartegroup/autod{E}</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-atomate2_zenodo">
+    <element-citation publication-type="software">
+      <person-group person-group-type="author">
+        <name><surname>Ganose</surname><given-names>Alex</given-names></name>
+        <name><surname>Riebesell</surname><given-names>Janosh</given-names></name>
+        <name><surname>George</surname><given-names>J.</given-names></name>
+        <name><surname>Shen</surname><given-names>Jimmy</given-names></name>
+        <name><surname>Rosen</surname><given-names>Andrew S.</given-names></name>
+        <name><surname>Naik</surname><given-names>Aakash Ashok</given-names></name>
+        <name><surname>nwinner</surname></name>
+        <name><surname>Wen</surname><given-names>Mingjian</given-names></name>
+        <name><surname>rdguha1995</surname></name>
+        <name><surname>Kuner</surname><given-names>Matthew</given-names></name>
+        <name><surname>Kaplan</surname><given-names>Aaron</given-names></name>
+        <name><surname>Petretto</surname><given-names>Guido</given-names></name>
+        <name><surname>Ertural</surname><given-names>Christina</given-names></name>
+        <name><surname>Horton</surname><given-names>Matt</given-names></name>
+        <name><surname>Zhu</surname><given-names>Zhuoying</given-names></name>
+        <name><surname>Sahasrabuddhe</surname><given-names>Hrushikesh</given-names></name>
+        <name><surname>Schmidt</surname><given-names>Jonathan</given-names></name>
+        <name><surname>Kingsbury</surname><given-names>Ryan</given-names></name>
+        <name><surname>Purcell</surname><given-names>Thomas</given-names></name>
+        <name><surname>Cohen</surname><given-names>Orion</given-names></name>
+        <name><surname>McDermott</surname><given-names>Matt</given-names></name>
+        <name><surname>Goodall</surname><given-names>Rhys</given-names></name>
+        <name><surname>Bonkowski</surname><given-names>Alexander</given-names></name>
+        <name><surname>Parmar</surname><given-names>Shehan</given-names></name>
+        <name><surname>lory-w</surname></name>
+        <name><surname>hongyi-zhao</surname></name>
+        <name><surname>Wang</surname><given-names>Shawn</given-names></name>
+      </person-group>
+      <article-title>Materialsproject/atomate2: v0.0.21</article-title>
+      <publisher-name>Zenodo</publisher-name>
+      <year iso-8601-date="2025-06">2025</year><month>06</month>
+      <uri>https://doi.org/10.5281/zenodo.15603088</uri>
+      <pub-id pub-id-type="doi">10.5281/zenodo.15603088</pub-id>
+    </element-citation>
+  </ref>
+  <ref id="ref-atomate2_paper">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Ganose</surname><given-names>Alex M.</given-names></name>
+        <name><surname>Sahasrabuddhe</surname><given-names>Hrushikesh</given-names></name>
+        <name><surname>Asta</surname><given-names>Mark</given-names></name>
+        <name><surname>Beck</surname><given-names>Kevin</given-names></name>
+        <name><surname>Biswas</surname><given-names>Tathagata</given-names></name>
+        <name><surname>Bonkowski</surname><given-names>Alexander</given-names></name>
+        <name><surname>Bustamante</surname><given-names>Joana</given-names></name>
+        <name><surname>Chen</surname><given-names>Xin</given-names></name>
+        <name><surname>Chiang</surname><given-names>Yuan</given-names></name>
+        <name><surname>Chrzan</surname><given-names>Daryl C.</given-names></name>
+        <name><surname>Clary</surname><given-names>Jacob</given-names></name>
+        <name><surname>Cohen</surname><given-names>Orion A.</given-names></name>
+        <name><surname>Ertural</surname><given-names>Christina</given-names></name>
+        <name><surname>Gallant</surname><given-names>Max C.</given-names></name>
+        <name><surname>George</surname><given-names>Janine</given-names></name>
+        <name><surname>Gerits</surname><given-names>Sophie</given-names></name>
+        <name><surname>Goodall</surname><given-names>Rhys E. A.</given-names></name>
+        <name><surname>Guha</surname><given-names>Rishabh D.</given-names></name>
+        <name><surname>Hautier</surname><given-names>Geoffroy</given-names></name>
+        <name><surname>Horton</surname><given-names>Matthew</given-names></name>
+        <name><surname>Inizan</surname><given-names>T. J.</given-names></name>
+        <name><surname>Kaplan</surname><given-names>Aaron D.</given-names></name>
+        <name><surname>Kingsbury</surname><given-names>Ryan S.</given-names></name>
+        <name><surname>Kuner</surname><given-names>Matthew C.</given-names></name>
+        <name><surname>Li</surname><given-names>Bryant</given-names></name>
+        <name><surname>Linn</surname><given-names>Xavier</given-names></name>
+        <name><surname>McDermott</surname><given-names>Matthew J.</given-names></name>
+        <name><surname>Mohanakrishnan</surname><given-names>Rohith Srinivaas</given-names></name>
+        <name><surname>Naik</surname><given-names>Aakash N.</given-names></name>
+        <name><surname>Neaton</surname><given-names>Jeffrey B.</given-names></name>
+        <name><surname>Parmar</surname><given-names>Shehan M.</given-names></name>
+        <name><surname>Persson</surname><given-names>Kristin A.</given-names></name>
+        <name><surname>Petretto</surname><given-names>Guido</given-names></name>
+        <name><surname>Purcell</surname><given-names>Thomas A. R.</given-names></name>
+        <name><surname>Ricci</surname><given-names>Francesco</given-names></name>
+        <name><surname>Rich</surname><given-names>Benjamin</given-names></name>
+        <name><surname>Riebesell</surname><given-names>Janosh</given-names></name>
+        <name><surname>Rignanese</surname><given-names>Gian-Marco</given-names></name>
+        <name><surname>Rosen</surname><given-names>Andrew S.</given-names></name>
+        <name><surname>Scheffler</surname><given-names>Matthias</given-names></name>
+        <name><surname>Schmidt</surname><given-names>Jonathan</given-names></name>
+        <name><surname>Shen</surname><given-names>Jimmy-Xuan</given-names></name>
+        <name><surname>Sobolev</surname><given-names>Andrei</given-names></name>
+        <name><surname>Sundararaman</surname><given-names>Ravishankar</given-names></name>
+        <name><surname>Tezak</surname><given-names>Cooper</given-names></name>
+        <name><surname>Trinquet</surname><given-names>Victor</given-names></name>
+        <name><surname>Varley</surname><given-names>Joel B.</given-names></name>
+        <name><surname>Vigil-Fowler</surname><given-names>Derek</given-names></name>
+        <name><surname>Wang</surname><given-names>Duo</given-names></name>
+        <name><surname>Waroquiers</surname><given-names>David</given-names></name>
+        <name><surname>Wen</surname><given-names>Mingjian</given-names></name>
+        <name><surname>Yang</surname><given-names>Han</given-names></name>
+        <name><surname>Zheng</surname><given-names>Hui</given-names></name>
+        <name><surname>Zheng</surname><given-names>Jiongzhi</given-names></name>
+        <name><surname>Zhu</surname><given-names>Zhuoying</given-names></name>
+        <name><surname>Jain</surname><given-names>Anubhav</given-names></name>
+      </person-group>
+      <article-title>Atomate2: Modular workflows for materials science</article-title>
+      <source>Digital Discovery</source>
+      <year iso-8601-date="2025-07">2025</year><month>07</month>
+      <volume>4</volume>
+      <issue>7</issue>
+      <issn>2635-098X</issn>
+      <uri>https://doi.org/10.1039/d5dd00019j</uri>
+      <pub-id pub-id-type="doi">10.1039/d5dd00019j</pub-id>
+      <fpage>1944</fpage>
+      <lpage>1973</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-aiida_arxiv">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Pizzi</surname><given-names>Giovanni</given-names></name>
+        <name><surname>Cepellotti</surname><given-names>Andrea</given-names></name>
+        <name><surname>Sabatini</surname><given-names>Riccardo</given-names></name>
+        <name><surname>Marzari</surname><given-names>Nicola</given-names></name>
+        <name><surname>Kozinsky</surname><given-names>Boris</given-names></name>
+      </person-group>
+      <article-title>AiiDA: Automated interactive infrastructure and database for computational science</article-title>
+      <source>Computational Materials Science</source>
+      <publisher-name>Elsevier BV</publisher-name>
+      <year iso-8601-date="2016-01">2016</year><month>01</month>
+      <volume>111</volume>
+      <issn>0927-0256</issn>
+      <uri>http://dx.doi.org/10.1016/j.commatsci.2015.09.013</uri>
+      <pub-id pub-id-type="doi">10.1016/j.commatsci.2015.09.013</pub-id>
+      <fpage>218</fpage>
+      <lpage>230</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-aaida_paper1">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Huber</surname><given-names>Sebastiaan P.</given-names></name>
+        <name><surname>Zoupanos</surname><given-names>Spyros</given-names></name>
+        <name><surname>Uhrin</surname><given-names>Martin</given-names></name>
+        <name><surname>Talirz</surname><given-names>Leopold</given-names></name>
+        <name><surname>Kahle</surname><given-names>Leonid</given-names></name>
+        <name><surname>Häuselmann</surname><given-names>Rico</given-names></name>
+        <name><surname>Gresch</surname><given-names>Dominik</given-names></name>
+        <name><surname>Müller</surname><given-names>Tiziano</given-names></name>
+        <name><surname>Yakutovich</surname><given-names>Aliaksandr V.</given-names></name>
+        <name><surname>Andersen</surname><given-names>Casper W.</given-names></name>
+        <name><surname>Ramirez</surname><given-names>Francisco F.</given-names></name>
+        <name><surname>Adorf</surname><given-names>Carl S.</given-names></name>
+        <name><surname>Gargiulo</surname><given-names>Fernando</given-names></name>
+        <name><surname>Kumbhar</surname><given-names>Snehal</given-names></name>
+        <name><surname>Passaro</surname><given-names>Elsa</given-names></name>
+        <name><surname>Johnston</surname><given-names>Conrad</given-names></name>
+        <name><surname>Merkys</surname><given-names>Andrius</given-names></name>
+        <name><surname>Cepellotti</surname><given-names>Andrea</given-names></name>
+        <name><surname>Mounet</surname><given-names>Nicolas</given-names></name>
+        <name><surname>Marzari</surname><given-names>Nicola</given-names></name>
+        <name><surname>Kozinsky</surname><given-names>Boris</given-names></name>
+        <name><surname>Pizzi</surname><given-names>Giovanni</given-names></name>
+      </person-group>
+      <article-title>AiiDA 1.0, a scalable computational infrastructure for automated reproducible workflows and data provenance</article-title>
+      <source>Scientific Data</source>
+      <year iso-8601-date="2020">2020</year>
+      <volume>7</volume>
+      <issue>1</issue>
+      <issn>2052-4463</issn>
+      <uri>https://doi.org/10.1038/s41597-020-00638-4</uri>
+      <pub-id pub-id-type="doi">10.1038/s41597-020-00638-4</pub-id>
+      <fpage>300</fpage>
+      <lpage></lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-aaida_paper2">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Uhrin</surname><given-names>Martin</given-names></name>
+        <name><surname>Huber</surname><given-names>Sebastiaan P.</given-names></name>
+        <name><surname>Yu</surname><given-names>Jusong</given-names></name>
+        <name><surname>Marzari</surname><given-names>Nicola</given-names></name>
+        <name><surname>Pizzi</surname><given-names>Giovanni</given-names></name>
+      </person-group>
+      <article-title>Workflows in AiiDA: Engineering a high-throughput, event-based engine for robust and modular computational workflows</article-title>
+      <source>Computational Materials Science</source>
+      <year iso-8601-date="2021">2021</year>
+      <volume>187</volume>
+      <issn>0927-0256</issn>
+      <uri>https://www.sciencedirect.com/science/article/pii/S0927025620305772</uri>
+      <pub-id pub-id-type="doi">https://doi.org/10.1016/j.commatsci.2020.110086</pub-id>
+      <fpage>110086</fpage>
+      <lpage></lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-aiida_website">
+    <element-citation>
+      <article-title>AiiDA — Computational Science Workflow Manager — aiida.net</article-title>
+      <publisher-name>https://aiida.net/</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-quacc_github">
+    <element-citation>
+      <article-title>GitHub - Quantum-Accelerators/quacc: Quacc is a flexible platform for computational materials science and quantum chemistry that is built for the big data era. — github.com</article-title>
+      <publisher-name>https://github.com/{Q}uantum-{A}ccelerators/quacc/</publisher-name>
+    </element-citation>
+  </ref>
 </ref-list>
 <fn-group>
   <fn id="fn1">
     <label>1</label><p>That is, a calculator providing the energy and
     gradient differences between an atomic structure in an implicit
-    solvent and the same structure in vacuum.</p>
+    solvent and the same structure in vacuum. These differential
+    contributions are then added to the energy and gradient components
+    of calculations that have no native implementation of solvation
+    models (i.e. gas phase-trained MLIPs).</p>
   </fn>
 </fn-group>
 </back>
