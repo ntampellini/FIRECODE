@@ -721,8 +721,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <source>Proceedings of the 7th python in science conference</source>
       <publisher-loc>Pasadena, CA USA</publisher-loc>
       <year iso-8601-date="2008">2008</year>
-      <uri>https://doi.org/10.25080/TCWV9851</uri>
-      <pub-id pub-id-type="doi">10.25080/TCWV9851</pub-id>
+      <uri>https://doi.org/10.25080/tcwv9851</uri>
+      <pub-id pub-id-type="doi">10.25080/tcwv9851</pub-id>
       <fpage>11 </fpage>
       <lpage> 15</lpage>
     </element-citation>
@@ -1319,7 +1319,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <volume>187</volume>
       <issn>0927-0256</issn>
       <uri>https://www.sciencedirect.com/science/article/pii/S0927025620305772</uri>
-      <pub-id pub-id-type="doi">https://doi.org/10.1016/j.commatsci.2020.110086</pub-id>
+      <pub-id pub-id-type="doi">10.1016/j.commatsci.2020.110086</pub-id>
       <fpage>110086</fpage>
       <lpage></lpage>
     </element-citation>
