@@ -33,7 +33,8 @@ Modular Hub</article-title>
 </contrib>
 <aff id="aff-1">
 <institution-wrap>
-<institution>Massachusetts Institute of Technology, USA</institution>
+<institution>Massachusetts Institute of Technology, United States of
+America</institution>
 </institution-wrap>
 </aff>
 </contrib-group>
@@ -80,13 +81,14 @@ a Creative Commons Attribution 4.0 International License (CC BY
   the extraction of properties of interest, is experiencing a
   significant renaissance thanks to impressive advances in theoretical
   models enabling ever-faster simulations of complex processes via
-  density functional theory (DFT), semiempirical, and machine-learned
-  interatomic potentials (MLIPs). However, the reduced computational
-  cost of these workflows will only translate into faster and more
-  robust modeling with the help of automation frameworks, where trivial
-  human intervention does not become the new bottleneck of computational
-  pipelines. FIRECODE aims at filling this need by providing a modular
-  framework for generating and processing molecular ensembles.</p>
+  density functional theory (DFT), semiempirical methods, and
+  machine-learned interatomic potentials (MLIPs). However, the reduced
+  computational cost of these workflows will only translate into faster
+  and more robust modeling with the help of automation frameworks, where
+  trivial human intervention does not become the new bottleneck of
+  computational pipelines. FIRECODE aims at filling this need by
+  providing a modular framework for generating and processing molecular
+  ensembles.</p>
 </sec>
 <sec id="statement-of-need">
   <title>Statement of need</title>
@@ -99,8 +101,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
   - Tblite/Tblite</italic></xref>;
   <xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
   et al., 2025</xref>), AIMNET2
-  (<xref alt="Anstine et al., 2024" rid="ref-aimnet2" ref-type="bibr">Anstine
-  et al., 2024</xref>), UMA
+  (<xref alt="Anstine et al., 2025" rid="ref-aimnet2" ref-type="bibr">Anstine
+  et al., 2025</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>), usually via ASE
   (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
@@ -119,7 +121,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   designed to streamline the necessary use of multiple software and
   routines in the computational modeling of small molecules, in a single
   centralized hub. The program can be called via command line with a
-  minimal plain text input file defining the workflow, or used as a
+  minimal plain-text input file defining the workflow, or used as a
   Python library in Jupyter notebooks. The modular nature of the
   software enables rapid addition of new features, facilitating external
   contributions, while also retaining a small installation footprint for
@@ -141,10 +143,10 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <xref alt="Tetenberg et al., 2026" rid="ref-opi" ref-type="bibr">Tetenberg
   et al., 2026</xref>) (free for academic use) started offering compound
   job functionality, which enables the chained execution of some core
-  ORCA modules. The code is however not open source and functionality is
-  limited to what is included in the ORCA program (<italic>i.e.</italic>
-  no MLIPs, no similarity pruning, no ensemble processing…). While ORCA
-  workflows are more extensively implemented in
+  ORCA modules. However, the code is not open-source and functionality
+  is limited to what is included in the ORCA program
+  (<italic>i.e.</italic> no MLIPs, no similarity pruning, no ensemble
+  processing…). While ORCA workflows are more extensively implemented in
   <monospace>WEASEL</monospace>
   (<xref alt="Faccts" rid="ref-weasel" ref-type="bibr">Faccts</xref>),
   this is commercial, closed-source software.</p>
@@ -154,7 +156,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   philosophy. Key differences with <monospace>FIRECODE</monospace>,
   besides code architecture, lie in: 1) the main interaction platform of
   <monospace>AQME</monospace> happening via Jupyter notebooks, while the
-  software of this work favors the use of plain text input files,
+  software of this work favors the use of plain-text input files,
   keeping the inputs as minimal as possible. 2) The present software
   having a reactivity-centered set of features, chiefly via fast
   semiempirical and ML calculators, over <monospace>AQME</monospace>’s
@@ -175,7 +177,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <xref alt="Uhrin et al., 2021" rid="ref-aaida_paper2" ref-type="bibr">Uhrin
   et al., 2021</xref>) and <monospace>QuAcc</monospace>
   (<xref alt="GitHub - Quantum-Accelerators/Quacc" rid="ref-quacc_github" ref-type="bibr"><italic>GitHub
-  - Quantum-Accelerators/Quacc</italic></xref>).</p>
+  - Quantum-Accelerators/Quacc</italic></xref>;
+  <xref alt="Rosen, 2026" rid="ref-quacc_zenodo" ref-type="bibr">Rosen,
+  2026</xref>).</p>
   <p>Reactivity-centered software, primarily for the automated location
   of transition states, is also gaining popularity. Examples include
   autodE
@@ -202,17 +206,17 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
   &amp; Jacobsen, 2002</xref>;
   <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
-  et al., 2017</xref>), which is extensively used as a lower level
+  et al., 2017</xref>), which is extensively used as a lower-level
   interface for interacting with calculators in
   <monospace>FIRECODE</monospace>.</p>
   <p>The development of this software from scratch was motivated by
-  multiple reasons. First, a modern and flexible hub for running
+  several factors. First, a modern and flexible hub for running
   computational chemistry workflows, particularly tailored to modeling
   chemical reactivity and MLIPs, was lacking. In this context, we refer
   to “reactivity workflows” as the sequence of sequential steps from a
   three-dimensional molecular representation to a conformationally
   comprehensive characterization of bond breaking and forming events.
-  This requires the access to conformational search modules, efficient
+  This requires access to conformational search modules, efficient
   multistage ensemble optimization routines, similarity pruning, the
   ability to use arbitrary geometrical constraints throughout, the
   ability to optimize to local minima and saddle points alike, and the
@@ -225,7 +229,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   robust atomistic modeling. Second, modern machine-learned interatomic
   potentials (MLIPs) are often centered around Python libraries like
   <monospace>torch</monospace>
-  (<xref alt="GitHub - Pytorch/Pytorch" rid="ref-torch" ref-type="bibr"><italic>GitHub
+  (<xref alt="Ansel et al., 2024" rid="ref-torch_paper" ref-type="bibr">Ansel
+  et al., 2024</xref>;
+  <xref alt="GitHub - Pytorch/Pytorch" rid="ref-torch" ref-type="bibr"><italic>GitHub
   - Pytorch/Pytorch</italic></xref>), benefitting greatly from a
   Python-based workflow manager. Additional features of note of this
   software also include an implicit delta solvation scheme for gas
@@ -242,9 +248,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   lean as possible. All core dependencies are distributed via
   <monospace>pypi</monospace>, keeping the installation of the minimal
   version of the program down to a single command
-  (<monospace>uv pip install firecode</monospace>).</p>
-  <p>Non-essential dependencies can be installed based on the desired
-  calculator and interfaces to be used, all via conda.</p>
+  (<monospace>uv pip install firecode</monospace>). Non-essential
+  dependencies can be installed based on the desired calculator and
+  interfaces to be used, all via conda.</p>
   <p>The software implements various calculators (xTB
   (<xref alt="Bannwarth et al., 2019" rid="ref-xtb" ref-type="bibr">Bannwarth
   et al., 2019</xref>), tblite
@@ -252,11 +258,11 @@ a Creative Commons Attribution 4.0 International License (CC BY
   - Tblite/Tblite</italic></xref>;
   <xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
   et al., 2025</xref>), AIMNET2
-  (<xref alt="Anstine et al., 2024" rid="ref-aimnet2" ref-type="bibr">Anstine
-  et al., 2024</xref>), UMA
+  (<xref alt="Anstine et al., 2025" rid="ref-aimnet2" ref-type="bibr">Anstine
+  et al., 2025</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
-  al., 2025</xref>)) via
-  ASE(<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
+  al., 2025</xref>)) via ASE
+  (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
   / Ase · GitLab — Gitlab.com</italic></xref>;
   <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
   &amp; Jacobsen, 2002</xref>;
@@ -265,14 +271,14 @@ a Creative Commons Attribution 4.0 International License (CC BY
   ensemble routines. Other core libraries leveraged throughout the
   codebase are <monospace>numpy</monospace>
   (<xref alt="GitHub - Numpy/Numpy" rid="ref-numpy" ref-type="bibr"><italic>GitHub
-  - Numpy/Numpy</italic></xref>) for algebraic manipulations,
+  - Numpy/Numpy</italic></xref>;
+  <xref alt="Harris et al., 2020" rid="ref-numpy_paper" ref-type="bibr">Harris
+  et al., 2020</xref>) for algebraic manipulations,
   <monospace>networkx</monospace>
   (<xref alt="GitHub - Networkx/Networkx" rid="ref-networkx" ref-type="bibr"><italic>GitHub
   - Networkx/Networkx</italic></xref>;
-  <xref alt="Hagberg, Schult, et al., 2008" rid="ref-networkx_proc" ref-type="bibr">Hagberg,
-  Schult, et al., 2008</xref>;
-  <xref alt="Hagberg, Swart, et al., 2008" rid="ref-networkx_tech" ref-type="bibr">Hagberg,
-  Swart, et al., 2008</xref>) for graph utilities and
+  <xref alt="Hagberg et al., 2008" rid="ref-networkx_proc" ref-type="bibr">Hagberg
+  et al., 2008</xref>) for graph utilities and
   <monospace>prism_pruner</monospace>
   (<xref alt="GitHub - Ntampellini/Prism_pruner" rid="ref-prism_pruner" ref-type="bibr"><italic>GitHub
   - Ntampellini/Prism_pruner</italic></xref>) for the removal of
@@ -283,7 +289,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   et al., 2019</xref>,
   <xref alt="2021" rid="ref-sella_paper2" ref-type="bibr">2021</xref>,
   <xref alt="2022" rid="ref-sella_paper3" ref-type="bibr">2022</xref>)
-  provides a saddle point optimizer, and <monospace>rdkit</monospace>
+  provides a saddle-point optimizer, and <monospace>rdkit</monospace>
   (<xref alt="GitHub - Rdkit/Rdkit" rid="ref-rdkit" ref-type="bibr"><italic>GitHub
   - Rdkit/Rdkit</italic></xref>;
   <xref alt="Greg Landrum, 2026" rid="ref-rdkit_zenodo" ref-type="bibr">Greg
@@ -313,7 +319,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <xref alt="Schmid et al., 2026" rid="ref-racerts_paper" ref-type="bibr">Schmid
   et al., 2026</xref>).</p>
   <p>The modular nature of the calculators and interfaces allows the
-  definition of complex workflows in plain text files (input.txt):</p>
+  definition of complex workflows in plain-text files (input.txt):</p>
   <code language="bash">    firecode input.txt -n test_run</code>
   <p>A second standalone executable exposes the core optimizer routines
   acting directly on structure files:</p>
@@ -503,14 +509,20 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <ref id="ref-aimnet2">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
-        <name><surname>Anstine</surname><given-names>Dylan</given-names></name>
+        <name><surname>Anstine</surname><given-names>Dylan M.</given-names></name>
         <name><surname>Zubatyuk</surname><given-names>Roman</given-names></name>
         <name><surname>Isayev</surname><given-names>Olexandr</given-names></name>
       </person-group>
-      <article-title>AIMNet2: A neural network potential to meet your neutral, charged, organic, and elemental-organic needs. This content is a preprint and has not been peer-reviewed.</article-title>
-      <source>ChemRXiv</source>
-      <year iso-8601-date="2024">2024</year>
-      <pub-id pub-id-type="doi">10.26434/chemrxiv-2023-296ch-v2</pub-id>
+      <article-title>AIMNet2: A neural network potential to meet your neutral, charged, organic, and elemental-organic needs</article-title>
+      <source>Chemical Science</source>
+      <year iso-8601-date="2025-06">2025</year><month>06</month>
+      <volume>16</volume>
+      <issue>23</issue>
+      <issn>2041-6520</issn>
+      <uri>https://doi.org/10.1039/d4sc08572h</uri>
+      <pub-id pub-id-type="doi">10.1039/d4sc08572h</pub-id>
+      <fpage>10228</fpage>
+      <lpage>10244</lpage>
     </element-citation>
   </ref>
   <ref id="ref-tblite">
@@ -604,7 +616,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
         <name><surname>Zeng</surname><given-names>Zhenhua</given-names></name>
         <name><surname>Jacobsen</surname><given-names>Karsten W</given-names></name>
       </person-group>
-      <article-title>The atomic simulation environment—a python library for working with atoms</article-title>
+      <article-title>The atomic simulation environment—a Python library for working with atoms</article-title>
       <source>Journal of Physics: Condensed Matter</source>
       <year iso-8601-date="2017">2017</year>
       <volume>29</volume>
@@ -698,10 +710,115 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <publisher-name>https://github.com/pytorch/pytorch</publisher-name>
     </element-citation>
   </ref>
+  <ref id="ref-torch_paper">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Ansel</surname><given-names>Jason</given-names></name>
+        <name><surname>Yang</surname><given-names>Edward</given-names></name>
+        <name><surname>He</surname><given-names>Horace</given-names></name>
+        <name><surname>Gimelshein</surname><given-names>Natalia</given-names></name>
+        <name><surname>Jain</surname><given-names>Animesh</given-names></name>
+        <name><surname>Voznesensky</surname><given-names>Michael</given-names></name>
+        <name><surname>Bao</surname><given-names>Bin</given-names></name>
+        <name><surname>Bell</surname><given-names>Peter</given-names></name>
+        <name><surname>Berard</surname><given-names>David</given-names></name>
+        <name><surname>Burovski</surname><given-names>Evgeni</given-names></name>
+        <name><surname>Chauhan</surname><given-names>Geeta</given-names></name>
+        <name><surname>Chourdia</surname><given-names>Anjali</given-names></name>
+        <name><surname>Constable</surname><given-names>Will</given-names></name>
+        <name><surname>Desmaison</surname><given-names>Alban</given-names></name>
+        <name><surname>DeVito</surname><given-names>Zachary</given-names></name>
+        <name><surname>Ellison</surname><given-names>Elias</given-names></name>
+        <name><surname>Feng</surname><given-names>Will</given-names></name>
+        <name><surname>Gong</surname><given-names>Jiong</given-names></name>
+        <name><surname>Gschwind</surname><given-names>Michael</given-names></name>
+        <name><surname>Hirsh</surname><given-names>Brian</given-names></name>
+        <name><surname>Huang</surname><given-names>Sherlock</given-names></name>
+        <name><surname>Kalambarkar</surname><given-names>Kshiteej</given-names></name>
+        <name><surname>Kirsch</surname><given-names>Laurent</given-names></name>
+        <name><surname>Lazos</surname><given-names>Michael</given-names></name>
+        <name><surname>Lezcano</surname><given-names>Mario</given-names></name>
+        <name><surname>Liang</surname><given-names>Yanbo</given-names></name>
+        <name><surname>Liang</surname><given-names>Jason</given-names></name>
+        <name><surname>Lu</surname><given-names>Yinghai</given-names></name>
+        <name><surname>Luk</surname><given-names>C. K.</given-names></name>
+        <name><surname>Maher</surname><given-names>Bert</given-names></name>
+        <name><surname>Pan</surname><given-names>Yunjie</given-names></name>
+        <name><surname>Puhrsch</surname><given-names>Christian</given-names></name>
+        <name><surname>Reso</surname><given-names>Matthias</given-names></name>
+        <name><surname>Saroufim</surname><given-names>Mark</given-names></name>
+        <name><surname>Siraichi</surname><given-names>Marcos Yukio</given-names></name>
+        <name><surname>Suk</surname><given-names>Helen</given-names></name>
+        <name><surname>Zhang</surname><given-names>Shunting</given-names></name>
+        <name><surname>Suo</surname><given-names>Michael</given-names></name>
+        <name><surname>Tillet</surname><given-names>Phil</given-names></name>
+        <name><surname>Zhao</surname><given-names>Xu</given-names></name>
+        <name><surname>Wang</surname><given-names>Eikan</given-names></name>
+        <name><surname>Zhou</surname><given-names>Keren</given-names></name>
+        <name><surname>Zou</surname><given-names>Richard</given-names></name>
+        <name><surname>Wang</surname><given-names>Xiaodong</given-names></name>
+        <name><surname>Mathews</surname><given-names>Ajit</given-names></name>
+        <name><surname>Wen</surname><given-names>William</given-names></name>
+        <name><surname>Chanan</surname><given-names>Gregory</given-names></name>
+        <name><surname>Wu</surname><given-names>Peng</given-names></name>
+        <name><surname>Chintala</surname><given-names>Soumith</given-names></name>
+      </person-group>
+      <article-title>PyTorch 2: Faster machine learning through dynamic python bytecode transformation and graph compilation</article-title>
+      <source>Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 2</source>
+      <publisher-name>ACM</publisher-name>
+      <year iso-8601-date="2024-04">2024</year><month>04</month>
+      <uri>http://dx.doi.org/10.1145/3620665.3640366</uri>
+      <pub-id pub-id-type="doi">10.1145/3620665.3640366</pub-id>
+      <fpage>929</fpage>
+      <lpage>947</lpage>
+    </element-citation>
+  </ref>
   <ref id="ref-numpy">
     <element-citation>
       <article-title>GitHub - numpy/numpy: The fundamental package for scientific computing with Python. — github.com</article-title>
       <publisher-name>https://github.com/numpy/numpy</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-numpy_paper">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Harris</surname><given-names>Charles R.</given-names></name>
+        <name><surname>Millman</surname><given-names>K. Jarrod</given-names></name>
+        <name><surname>Walt</surname><given-names>Stéfan J. van der</given-names></name>
+        <name><surname>Gommers</surname><given-names>Ralf</given-names></name>
+        <name><surname>Virtanen</surname><given-names>Pauli</given-names></name>
+        <name><surname>Cournapeau</surname><given-names>David</given-names></name>
+        <name><surname>Wieser</surname><given-names>Eric</given-names></name>
+        <name><surname>Taylor</surname><given-names>Julian</given-names></name>
+        <name><surname>Berg</surname><given-names>Sebastian</given-names></name>
+        <name><surname>Smith</surname><given-names>Nathaniel J.</given-names></name>
+        <name><surname>Kern</surname><given-names>Robert</given-names></name>
+        <name><surname>Picus</surname><given-names>Matti</given-names></name>
+        <name><surname>Hoyer</surname><given-names>Stephan</given-names></name>
+        <name><surname>Kerkwijk</surname><given-names>Marten H. van</given-names></name>
+        <name><surname>Brett</surname><given-names>Matthew</given-names></name>
+        <name><surname>Haldane</surname><given-names>Allan</given-names></name>
+        <name><surname>Río</surname><given-names>Jaime Fernández del</given-names></name>
+        <name><surname>Wiebe</surname><given-names>Mark</given-names></name>
+        <name><surname>Peterson</surname><given-names>Pearu</given-names></name>
+        <name><surname>Gérard-Marchant</surname><given-names>Pierre</given-names></name>
+        <name><surname>Sheppard</surname><given-names>Kevin</given-names></name>
+        <name><surname>Reddy</surname><given-names>Tyler</given-names></name>
+        <name><surname>Weckesser</surname><given-names>Warren</given-names></name>
+        <name><surname>Abbasi</surname><given-names>Hameer</given-names></name>
+        <name><surname>Gohlke</surname><given-names>Christoph</given-names></name>
+        <name><surname>Oliphant</surname><given-names>Travis E.</given-names></name>
+      </person-group>
+      <article-title>Array programming with NumPy</article-title>
+      <source>Nature</source>
+      <publisher-name>Springer Science; Business Media LLC</publisher-name>
+      <year iso-8601-date="2020">2020</year>
+      <volume>585</volume>
+      <issue>7825</issue>
+      <uri>http://dx.doi.org/10.1038/s41586-020-2649-2</uri>
+      <pub-id pub-id-type="doi">10.1038/s41586-020-2649-2</pub-id>
+      <fpage>357</fpage>
+      <lpage>362</lpage>
     </element-citation>
   </ref>
   <ref id="ref-networkx">
@@ -727,19 +844,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage> 15</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-networkx_tech">
-    <element-citation>
-      <person-group person-group-type="author">
-        <name><surname>Hagberg</surname><given-names>Aric A.</given-names></name>
-        <name><surname>Swart</surname><given-names>Pieter J.</given-names></name>
-        <name><surname>Schult</surname><given-names>Daniel A.</given-names></name>
-      </person-group>
-      <article-title>Exploring network structure, dynamics, and function using NetworkX</article-title>
-      <publisher-name>Los Alamos National Laboratory (LANL)</publisher-name>
-      <year iso-8601-date="2008-01">2008</year><month>01</month>
-      <uri>https://www.osti.gov/biblio/960616</uri>
-    </element-citation>
-  </ref>
   <ref id="ref-prism_pruner">
     <element-citation>
       <article-title>GitHub - ntampellini/prism_pruner: Similarity pruning engine for conformational ensembles — github.com</article-title>
@@ -760,7 +864,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
         <name><surname>Najm</surname><given-names>Habib N.</given-names></name>
         <name><surname>Zádor</surname><given-names>Judit</given-names></name>
       </person-group>
-      <article-title>Accelerated saddle point refinement through full exploitation of partial hessian diagonalization</article-title>
+      <article-title>Accelerated saddle point refinement through full exploitation of partial Hessian diagonalization</article-title>
       <source>Journal of Chemical Theory and Computation</source>
       <year iso-8601-date="2019">2019</year>
       <volume>15</volume>
@@ -970,7 +1074,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   </ref>
   <ref id="ref-racerts">
     <element-citation>
-      <article-title>GitHub - digital-chemistry-laboratory/racerts: A python package for efficient conformer sampling for transition states — github.com</article-title>
+      <article-title>GitHub - digital-chemistry-laboratory/racerts: A Python package for efficient conformer sampling for transition states — github.com</article-title>
       <publisher-name>https://github.com/digital-chemistry-laboratory/racerts</publisher-name>
     </element-citation>
   </ref>
@@ -1105,8 +1209,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
       </person-group>
       <article-title>Rdkit/rdkit: 2026_03_3 (Q1 2026)</article-title>
       <year iso-8601-date="2026">2026</year>
-      <uri>https://doi.org/10.5281/zenodo.20446949</uri>
-      <pub-id pub-id-type="doi">10.5281/zenodo.20446949</pub-id>
+      <uri>https://doi.org/10.5281/zenodo.591637</uri>
+      <pub-id pub-id-type="doi">10.5281/zenodo.591637z</pub-id>
     </element-citation>
   </ref>
   <ref id="ref-autode_paper">
@@ -1333,7 +1437,19 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <ref id="ref-quacc_github">
     <element-citation>
       <article-title>GitHub - Quantum-Accelerators/quacc: Quacc is a flexible platform for computational materials science and quantum chemistry that is built for the big data era. — github.com</article-title>
-      <publisher-name>https://github.com/{Q}uantum-{A}ccelerators/quacc/</publisher-name>
+      <publisher-name>https://github.com/quantum-accelerators/quacc/</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-quacc_zenodo">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Rosen</surname><given-names>Andrew</given-names></name>
+      </person-group>
+      <article-title>Quacc – the quantum accelerator</article-title>
+      <publisher-name>Zenodo</publisher-name>
+      <year iso-8601-date="2026-08">2026</year><month>08</month>
+      <uri>https://zenodo.org/doi/10.5281/zenodo.7720998</uri>
+      <pub-id pub-id-type="doi">10.5281/ZENODO.7720998</pub-id>
     </element-citation>
   </ref>
 </ref-list>
