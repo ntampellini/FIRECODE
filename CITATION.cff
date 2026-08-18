@@ -1,0 +1,32 @@
+cff-version: "1.2.0"
+authors:
+- family-names: Tampellini
+  given-names: Nicolò
+  orcid: "https://orcid.org/0000-0002-6611-556X"
+contact:
+- family-names: Tampellini
+  given-names: Nicolò
+  orcid: "https://orcid.org/0000-0002-6611-556X"
+doi: 10.5281/zenodo.20816805
+message: If you use this software, please cite our article in the
+  Journal of Open Source Software.
+preferred-citation:
+  authors:
+  - family-names: Tampellini
+    given-names: Nicolò
+    orcid: "https://orcid.org/0000-0002-6611-556X"
+  date-published: 2026-08-18
+  doi: 10.21105/joss.10698
+  issn: 2475-9066
+  issue: 124
+  journal: Journal of Open Source Software
+  publisher:
+    name: Open Journals
+  start: 10698
+  title: "FIRECODE: A Computational Chemistry Workflow Driver and
+    Modular Hub"
+  type: article
+  url: "https://joss.theoj.org/papers/10.21105/joss.10698"
+  volume: 11
+title: "FIRECODE: A Computational Chemistry Workflow Driver and Modular
+  Hub"
