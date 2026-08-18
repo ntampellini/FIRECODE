@@ -97,17 +97,13 @@ a Creative Commons Attribution 4.0 International License (CC BY
   series of fast modern calculators (xTB
   (<xref alt="Bannwarth et al., 2019" rid="ref-xtb" ref-type="bibr">Bannwarth
   et al., 2019</xref>), tblite
-  (<xref alt="GitHub - Tblite/Tblite" rid="ref-tblite" ref-type="bibr"><italic>GitHub
-  - Tblite/Tblite</italic></xref>;
-  <xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
+  (<xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
   et al., 2025</xref>), AIMNET2
   (<xref alt="Anstine et al., 2025" rid="ref-aimnet2" ref-type="bibr">Anstine
   et al., 2025</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>), usually via ASE
-  (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
-  / Ase · GitLab — Gitlab.com</italic></xref>;
-  <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
+  (<xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
   &amp; Jacobsen, 2002</xref>;
   <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
   et al., 2017</xref>)) and exposes a series of workflows and utilities
@@ -168,42 +164,28 @@ a Creative Commons Attribution 4.0 International License (CC BY
   Ganose et al., 2025</xref>;
   <xref alt="A. M. Ganose et al., 2025" rid="ref-atomate2_paper" ref-type="bibr">A.
   M. Ganose et al., 2025</xref>), <monospace>AiiDA</monospace>
-  (<xref alt="AiiDA — Computational Science Workflow Manager — Aiida.net" rid="ref-aiida_website" ref-type="bibr"><italic>AiiDA
-  — Computational Science Workflow Manager — Aiida.net</italic></xref>;
-  <xref alt="Huber et al., 2020" rid="ref-aaida_paper1" ref-type="bibr">Huber
+  (<xref alt="Huber et al., 2020" rid="ref-aaida_paper1" ref-type="bibr">Huber
   et al., 2020</xref>;
-  <xref alt="Pizzi et al., 2016" rid="ref-aiida_arxiv" ref-type="bibr">Pizzi
-  et al., 2016</xref>;
   <xref alt="Uhrin et al., 2021" rid="ref-aaida_paper2" ref-type="bibr">Uhrin
   et al., 2021</xref>) and <monospace>QuAcc</monospace>
-  (<xref alt="GitHub - Quantum-Accelerators/Quacc" rid="ref-quacc_github" ref-type="bibr"><italic>GitHub
-  - Quantum-Accelerators/Quacc</italic></xref>;
-  <xref alt="Rosen, 2026" rid="ref-quacc_zenodo" ref-type="bibr">Rosen,
+  (<xref alt="Rosen, 2026" rid="ref-quacc_zenodo" ref-type="bibr">Rosen,
   2026</xref>).</p>
   <p>Reactivity-centered software, primarily for the automated location
   of transition states, is also gaining popularity. Examples include
   autodE
-  (<xref alt="GitHub - Duartegroup/AutodE" rid="ref-autode_github" ref-type="bibr"><italic>GitHub
-  - Duartegroup/AutodE</italic></xref>;
-  <xref alt="Young et al., 2021" rid="ref-autode_paper" ref-type="bibr">Young
+  (<xref alt="Young et al., 2021" rid="ref-autode_paper" ref-type="bibr">Young
   et al., 2021</xref>) and ML-FSM
-  (<xref alt="GitHub - Thegomeslab/ML-FSM" rid="ref-mlfsm" ref-type="bibr"><italic>GitHub
-  - Thegomeslab/ML-FSM</italic></xref>;
-  <xref alt="Marks &amp; Gomes, 2025" rid="ref-mlfsm_paper" ref-type="bibr">Marks
+  (<xref alt="Marks &amp; Gomes, 2025" rid="ref-mlfsm_paper" ref-type="bibr">Marks
   &amp; Gomes, 2025</xref>). The latter is indeed interfaced as a
   utility in FIRECODE, given its light weight and flexibility in working
   with different ASE calculators.</p>
   <p>Other examples of related software, specifically targeting the
   exposure of high-level primitives over structured workflows, include
   <monospace>Cuby</monospace>
-  (<xref alt="GitHub - Berquist/Cuby" rid="ref-cubygithub" ref-type="bibr"><italic>GitHub
-  - Berquist/Cuby</italic></xref>;
-  <xref alt="Řezáč, 2016" rid="ref-cuby" ref-type="bibr">Řezáč,
+  (<xref alt="Řezáč, 2016" rid="ref-cuby" ref-type="bibr">Řezáč,
   2016</xref>) (MD and high-level DFT) written in Ruby, and the popular
   <monospace>ASE</monospace>
-  (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
-  / Ase · GitLab — Gitlab.com</italic></xref>;
-  <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
+  (<xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
   &amp; Jacobsen, 2002</xref>;
   <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
   et al., 2017</xref>), which is extensively used as a lower-level
@@ -230,13 +212,11 @@ a Creative Commons Attribution 4.0 International License (CC BY
   potentials (MLIPs) are often centered around Python libraries like
   <monospace>torch</monospace>
   (<xref alt="Ansel et al., 2024" rid="ref-torch_paper" ref-type="bibr">Ansel
-  et al., 2024</xref>;
-  <xref alt="GitHub - Pytorch/Pytorch" rid="ref-torch" ref-type="bibr"><italic>GitHub
-  - Pytorch/Pytorch</italic></xref>), benefitting greatly from a
-  Python-based workflow manager. Additional features of note of this
-  software also include an implicit delta solvation scheme for gas
-  phase-trained MLIPs <xref ref-type="fn" rid="fn1">1</xref>, and
-  numerical quasi-RRHO thermochemistry
+  et al., 2024</xref>), benefitting greatly from a Python-based workflow
+  manager. Additional features of note of this software also include an
+  implicit delta solvation scheme for gas phase-trained MLIPs
+  <xref ref-type="fn" rid="fn1">1</xref>, and numerical quasi-RRHO
+  thermochemistry
   (<xref alt="Grimme, 2012" rid="ref-qrrho" ref-type="bibr">Grimme,
   2012</xref>).</p>
 </sec>
@@ -254,52 +234,38 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <p>The software implements various calculators (xTB
   (<xref alt="Bannwarth et al., 2019" rid="ref-xtb" ref-type="bibr">Bannwarth
   et al., 2019</xref>), tblite
-  (<xref alt="GitHub - Tblite/Tblite" rid="ref-tblite" ref-type="bibr"><italic>GitHub
-  - Tblite/Tblite</italic></xref>;
-  <xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
+  (<xref alt="Katbashev et al., 2025" rid="ref-tblite_paper" ref-type="bibr">Katbashev
   et al., 2025</xref>), AIMNET2
   (<xref alt="Anstine et al., 2025" rid="ref-aimnet2" ref-type="bibr">Anstine
   et al., 2025</xref>), UMA
   (<xref alt="Wood et al., 2025" rid="ref-uma" ref-type="bibr">Wood et
   al., 2025</xref>)) via ASE
-  (<xref alt="Ase / Ase · GitLab — Gitlab.com" rid="ref-ase" ref-type="bibr"><italic>Ase
-  / Ase · GitLab — Gitlab.com</italic></xref>;
-  <xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
+  (<xref alt="Bahn &amp; Jacobsen, 2002" rid="ref-ase_paper2" ref-type="bibr">Bahn
   &amp; Jacobsen, 2002</xref>;
   <xref alt="Larsen et al., 2017" rid="ref-ase_paper1" ref-type="bibr">Larsen
   et al., 2017</xref>), which can be used interchangeably in various
   ensemble routines. Other core libraries leveraged throughout the
   codebase are <monospace>numpy</monospace>
-  (<xref alt="GitHub - Numpy/Numpy" rid="ref-numpy" ref-type="bibr"><italic>GitHub
-  - Numpy/Numpy</italic></xref>;
-  <xref alt="Harris et al., 2020" rid="ref-numpy_paper" ref-type="bibr">Harris
+  (<xref alt="Harris et al., 2020" rid="ref-numpy_paper" ref-type="bibr">Harris
   et al., 2020</xref>) for algebraic manipulations,
   <monospace>networkx</monospace>
-  (<xref alt="GitHub - Networkx/Networkx" rid="ref-networkx" ref-type="bibr"><italic>GitHub
-  - Networkx/Networkx</italic></xref>;
-  <xref alt="Hagberg et al., 2008" rid="ref-networkx_proc" ref-type="bibr">Hagberg
+  (<xref alt="Hagberg et al., 2008" rid="ref-networkx_proc" ref-type="bibr">Hagberg
   et al., 2008</xref>) for graph utilities and
   <monospace>prism_pruner</monospace>
   (<xref alt="GitHub - Ntampellini/Prism_pruner" rid="ref-prism_pruner" ref-type="bibr"><italic>GitHub
   - Ntampellini/Prism_pruner</italic></xref>) for the removal of
   duplicates. <monospace>Sella</monospace>
-  (<xref alt="GitHub - Zadorlab/Sella" rid="ref-sella" ref-type="bibr"><italic>GitHub
-  - Zadorlab/Sella</italic></xref>;
-  <xref alt="Hermes et al., 2019" rid="ref-sella_paper1" ref-type="bibr">Hermes
+  (<xref alt="Hermes et al., 2019" rid="ref-sella_paper1" ref-type="bibr">Hermes
   et al., 2019</xref>,
   <xref alt="2021" rid="ref-sella_paper2" ref-type="bibr">2021</xref>,
   <xref alt="2022" rid="ref-sella_paper3" ref-type="bibr">2022</xref>)
   provides a saddle-point optimizer, and <monospace>rdkit</monospace>
-  (<xref alt="GitHub - Rdkit/Rdkit" rid="ref-rdkit" ref-type="bibr"><italic>GitHub
-  - Rdkit/Rdkit</italic></xref>;
-  <xref alt="Greg Landrum, 2026" rid="ref-rdkit_zenodo" ref-type="bibr">Greg
+  (<xref alt="Greg Landrum, 2026" rid="ref-rdkit_zenodo" ref-type="bibr">Greg
   Landrum, 2026</xref>) is used for <monospace>ETKDG</monospace>
   (<xref alt="Riniker &amp; Landrum, 2015" rid="ref-etkdg" ref-type="bibr">Riniker
   &amp; Landrum, 2015</xref>) conformational searches and SMARTS
   substructure matching. The <monospace>ML-FSM</monospace> library
-  (<xref alt="GitHub - Thegomeslab/ML-FSM" rid="ref-mlfsm" ref-type="bibr"><italic>GitHub
-  - Thegomeslab/ML-FSM</italic></xref>;
-  <xref alt="Marks &amp; Gomes, 2025" rid="ref-mlfsm_paper" ref-type="bibr">Marks
+  (<xref alt="Marks &amp; Gomes, 2025" rid="ref-mlfsm_paper" ref-type="bibr">Marks
   &amp; Gomes, 2025</xref>) provides a two-ended TS search utility
   complementing ASE’s implementation of the <monospace>NEB</monospace>
   method
@@ -314,9 +280,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <monospace>GOAT</monospace>
   (<xref alt="Souza, 2025" rid="ref-goat" ref-type="bibr">Souza,
   2025</xref>) and <monospace>racerts</monospace>
-  (<xref alt="GitHub - Digital-Chemistry-Laboratory/Racerts" rid="ref-racerts" ref-type="bibr"><italic>GitHub
-  - Digital-Chemistry-Laboratory/Racerts</italic></xref>;
-  <xref alt="Schmid et al., 2026" rid="ref-racerts_paper" ref-type="bibr">Schmid
+  (<xref alt="Schmid et al., 2026" rid="ref-racerts_paper" ref-type="bibr">Schmid
   et al., 2026</xref>).</p>
   <p>The modular nature of the calculators and interfaces allows the
   definition of complex workflows in plain-text files (input.txt):</p>
@@ -451,12 +415,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>1237</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-cubygithub">
-    <element-citation>
-      <article-title>GitHub - berquist/cuby: A copy of cuby, a computational chemistry framework written in Ruby. — github.com</article-title>
-      <publisher-name>https://github.com/berquist/cuby</publisher-name>
-    </element-citation>
-  </ref>
   <ref id="ref-weasel">
     <element-citation>
       <person-group person-group-type="author">
@@ -525,12 +483,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>10244</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-tblite">
-    <element-citation>
-      <article-title>GitHub - tblite/tblite: Light-weight tight-binding framework — github.com</article-title>
-      <publisher-name>https://github.com/tblite/tblite</publisher-name>
-    </element-citation>
-  </ref>
   <ref id="ref-tblite_paper">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
@@ -570,12 +522,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <pub-id pub-id-type="doi">10.1002/chem.201200497</pub-id>
       <fpage>9955</fpage>
       <lpage>9964</lpage>
-    </element-citation>
-  </ref>
-  <ref id="ref-ase">
-    <element-citation>
-      <article-title>Ase / ase · GitLab — gitlab.com</article-title>
-      <publisher-name>https://gitlab.com/ase/ase</publisher-name>
     </element-citation>
   </ref>
   <ref id="ref-ase_paper1">
@@ -704,12 +650,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>4967</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-torch">
-    <element-citation>
-      <article-title>GitHub - pytorch/pytorch: Tensors and Dynamic neural networks in Python with strong GPU acceleration — github.com</article-title>
-      <publisher-name>https://github.com/pytorch/pytorch</publisher-name>
-    </element-citation>
-  </ref>
   <ref id="ref-torch_paper">
     <element-citation>
       <person-group person-group-type="author">
@@ -773,12 +713,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>947</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-numpy">
-    <element-citation>
-      <article-title>GitHub - numpy/numpy: The fundamental package for scientific computing with Python. — github.com</article-title>
-      <publisher-name>https://github.com/numpy/numpy</publisher-name>
-    </element-citation>
-  </ref>
   <ref id="ref-numpy_paper">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
@@ -821,12 +755,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>362</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-networkx">
-    <element-citation>
-      <article-title>GitHub - networkx/networkx: Network Analysis in Python — github.com</article-title>
-      <publisher-name>https://github.com/networkx/networkx</publisher-name>
-    </element-citation>
-  </ref>
   <ref id="ref-networkx_proc">
     <element-citation publication-type="paper-conference">
       <person-group person-group-type="author">
@@ -848,12 +776,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
     <element-citation>
       <article-title>GitHub - ntampellini/prism_pruner: Similarity pruning engine for conformational ensembles — github.com</article-title>
       <publisher-name>https://github.com/ntampellini/prism_pruner</publisher-name>
-    </element-citation>
-  </ref>
-  <ref id="ref-sella">
-    <element-citation>
-      <article-title>GitHub - zadorlab/sella: A Python software package for saddle point optimization and minimization of atomic systems. — github.com</article-title>
-      <publisher-name>https://github.com/zadorlab/sella</publisher-name>
     </element-citation>
   </ref>
   <ref id="ref-sella_paper1">
@@ -914,10 +836,15 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>6988</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-rdkit">
+  <ref id="ref-rdkit_zenodo">
     <element-citation>
-      <article-title>GitHub - rdkit/rdkit: The official sources for the RDKit library — github.com</article-title>
-      <publisher-name>https://github.com/rdkit/rdkit</publisher-name>
+      <person-group person-group-type="author">
+        <name><surname>Greg Landrum</surname><given-names>Brian Kelley</given-names><suffix>Paolo Tosco</suffix></name>
+      </person-group>
+      <article-title>Rdkit/rdkit: 2026_03_3 (Q1 2026)</article-title>
+      <year iso-8601-date="2026">2026</year>
+      <uri>https://doi.org/10.5281/zenodo.591637</uri>
+      <pub-id pub-id-type="doi">10.5281/zenodo.591637z</pub-id>
     </element-citation>
   </ref>
   <ref id="ref-etkdg">
@@ -936,12 +863,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <pub-id pub-id-type="doi">10.1021/acs.jcim.5b00654</pub-id>
       <fpage>2562</fpage>
       <lpage>2574</lpage>
-    </element-citation>
-  </ref>
-  <ref id="ref-mlfsm">
-    <element-citation>
-      <article-title>GitHub - thegomeslab/ML-FSM: Public FSM implementation with support for ML-based potential energy surfaces — github.com</article-title>
-      <publisher-name>https://github.com/thegomeslab/ML-FSM</publisher-name>
     </element-citation>
   </ref>
   <ref id="ref-mlfsm_paper">
@@ -1072,12 +993,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage></lpage>
     </element-citation>
   </ref>
-  <ref id="ref-racerts">
-    <element-citation>
-      <article-title>GitHub - digital-chemistry-laboratory/racerts: A Python package for efficient conformer sampling for transition states — github.com</article-title>
-      <publisher-name>https://github.com/digital-chemistry-laboratory/racerts</publisher-name>
-    </element-citation>
-  </ref>
   <ref id="ref-racerts_paper">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
@@ -1202,17 +1117,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <publisher-name>https://rowansci.com/</publisher-name>
     </element-citation>
   </ref>
-  <ref id="ref-rdkit_zenodo">
-    <element-citation>
-      <person-group person-group-type="author">
-        <name><surname>Greg Landrum</surname><given-names>Brian Kelley</given-names><suffix>Paolo Tosco</suffix></name>
-      </person-group>
-      <article-title>Rdkit/rdkit: 2026_03_3 (Q1 2026)</article-title>
-      <year iso-8601-date="2026">2026</year>
-      <uri>https://doi.org/10.5281/zenodo.591637</uri>
-      <pub-id pub-id-type="doi">10.5281/zenodo.591637z</pub-id>
-    </element-citation>
-  </ref>
   <ref id="ref-autode_paper">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
@@ -1231,12 +1135,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <pub-id pub-id-type="doi">10.1002/anie.202011941</pub-id>
       <fpage>4266</fpage>
       <lpage>4274</lpage>
-    </element-citation>
-  </ref>
-  <ref id="ref-autode_github">
-    <element-citation>
-      <article-title>GitHub - duartegroup/autodE: Automated reaction profile generation — github.com</article-title>
-      <publisher-name>https://github.com/duartegroup/autod{E}</publisher-name>
     </element-citation>
   </ref>
   <ref id="ref-atomate2_zenodo">
@@ -1349,27 +1247,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <lpage>1973</lpage>
     </element-citation>
   </ref>
-  <ref id="ref-aiida_arxiv">
-    <element-citation publication-type="article-journal">
-      <person-group person-group-type="author">
-        <name><surname>Pizzi</surname><given-names>Giovanni</given-names></name>
-        <name><surname>Cepellotti</surname><given-names>Andrea</given-names></name>
-        <name><surname>Sabatini</surname><given-names>Riccardo</given-names></name>
-        <name><surname>Marzari</surname><given-names>Nicola</given-names></name>
-        <name><surname>Kozinsky</surname><given-names>Boris</given-names></name>
-      </person-group>
-      <article-title>AiiDA: Automated interactive infrastructure and database for computational science</article-title>
-      <source>Computational Materials Science</source>
-      <publisher-name>Elsevier BV</publisher-name>
-      <year iso-8601-date="2016-01">2016</year><month>01</month>
-      <volume>111</volume>
-      <issn>0927-0256</issn>
-      <uri>http://dx.doi.org/10.1016/j.commatsci.2015.09.013</uri>
-      <pub-id pub-id-type="doi">10.1016/j.commatsci.2015.09.013</pub-id>
-      <fpage>218</fpage>
-      <lpage>230</lpage>
-    </element-citation>
-  </ref>
   <ref id="ref-aaida_paper1">
     <element-citation publication-type="article-journal">
       <person-group person-group-type="author">
@@ -1426,18 +1303,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <pub-id pub-id-type="doi">10.1016/j.commatsci.2020.110086</pub-id>
       <fpage>110086</fpage>
       <lpage></lpage>
-    </element-citation>
-  </ref>
-  <ref id="ref-aiida_website">
-    <element-citation>
-      <article-title>AiiDA — Computational Science Workflow Manager — aiida.net</article-title>
-      <publisher-name>https://aiida.net/</publisher-name>
-    </element-citation>
-  </ref>
-  <ref id="ref-quacc_github">
-    <element-citation>
-      <article-title>GitHub - Quantum-Accelerators/quacc: Quacc is a flexible platform for computational materials science and quantum chemistry that is built for the big data era. — github.com</article-title>
-      <publisher-name>https://github.com/quantum-accelerators/quacc/</publisher-name>
     </element-citation>
   </ref>
   <ref id="ref-quacc_zenodo">
