@@ -568,6 +568,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <volume>29</volume>
       <issue>27</issue>
       <uri>http://stacks.iop.org/0953-8984/29/i=27/a=273002</uri>
+      <pub-id pub-id-type="doi">10.1088/1361-648X/aa680e</pub-id>
       <fpage>273002</fpage>
       <lpage></lpage>
     </element-citation>
@@ -844,7 +845,7 @@ a Creative Commons Attribution 4.0 International License (CC BY
       <article-title>Rdkit/rdkit: 2026_03_3 (Q1 2026)</article-title>
       <year iso-8601-date="2026">2026</year>
       <uri>https://doi.org/10.5281/zenodo.591637</uri>
-      <pub-id pub-id-type="doi">10.5281/zenodo.591637z</pub-id>
+      <pub-id pub-id-type="doi">10.5281/zenodo.591637</pub-id>
     </element-citation>
   </ref>
   <ref id="ref-etkdg">
