@@ -1210,7 +1210,7 @@ def ase_saddle(
         method=method,
         solvent=solvent,
         constrained_indices=constrained_indices,
-        maxiter=maxiter or 250,
+        maxiter=maxiter or 750,
         conv_thr="vtight",
         assert_convergence=assert_convergence,
         optimizer="SELLA",
@@ -1296,20 +1296,24 @@ def ase_irc(
 
             irc = IRC(ase_atoms, dx=0.1, trajectory=traj)
 
-            # Run forward
-            logfile.write("  [IRC] Running forward ...")
-            irc.run(steps=maxiter, fmax=fmax, direction="forward")  # type: ignore[no-untyped-call]
-            # fwd_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+            try:
+                # Run forward
+                logfile.write("  [IRC] Running forward ...")
+                irc.run(steps=maxiter, fmax=fmax, direction="forward")  # type: ignore[no-untyped-call]
+                # fwd_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
 
-            # convert traj to .xyz and remove ase traj
-            traj_fwd = f"{title}_irc_traj_fwd.xyz"
-            os.system(f"ase convert {traj} {traj_fwd}")
-            os.remove(traj)
+                # convert traj to .xyz and remove ase traj
+                traj_fwd = f"{title}_irc_traj_fwd.xyz"
+                os.system(f"ase convert {traj} {traj_fwd}")
+                os.remove(traj)
 
-            # Run reverse
-            logfile.write("  [IRC] Running reverse ...")
-            irc.run(steps=maxiter, fmax=fmax, direction="reverse")  # type: ignore[no-untyped-call]
-            # rev_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+                # Run reverse
+                logfile.write("  [IRC] Running reverse ...")
+                irc.run(steps=maxiter, fmax=fmax, direction="reverse")  # type: ignore[no-untyped-call]
+                # rev_energy = ase_atoms.get_total_energy() * EV_TO_KCAL  # type: ignore[no-untyped-call]
+
+            except LinAlgError:
+                return coords, coords
 
             # convert traj to .xyz and remove ase traj
             traj_rev = f"{title}_irc_traj_rev.xyz"

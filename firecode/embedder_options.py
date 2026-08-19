@@ -50,6 +50,7 @@ keywords_dict = {
     # clashing. The more forgiving, the more structures will reach
     # the geometry optimization step. Syntax: `CLASHES(num=3,dist=1.2)`
     "NCI": 1,  # applies ellipsoid potential in CREST and GOAT runs.
+    "CRESTNCI": 1,  # alias for the above.
     "CRESTLEVEL": 1,  # level of the CREST run
     "DEEP": 1,  # Performs a deeper search, retaining more starting points
     # for calculations and smaller turning angles.

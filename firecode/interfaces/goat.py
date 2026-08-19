@@ -42,7 +42,7 @@ def orca_goat_xtb_search(  # pragma: no cover
     solvent: str | None = None,
     charge: int = 0,
     multiplicity: int = 1,
-    kcal: float = 10.0,
+    kcal: float = 6.0,
     ncimode: bool = False,
     title: str = "temp",
     logfunction: Callable[[str], None] | None = print,
@@ -173,24 +173,24 @@ def orca_goat_xtb_search(  # pragma: no cover
                     constrained_distances or [None] * len(constrained_indices)
                 )
                 for (c1, c2), cd in zip(constrained_indices, resolved_distances):
-                    val_str = f"{round(cd, 4)}" if cd is not None else "C"
-                    lines.append(f"    {{B {c1} {c2} {val_str}}}")
+                    val_str = f"{round(cd, 4)}" if cd is not None else ""
+                    lines.append(f"    {{ B {c1} {c2} {val_str} C }}")
 
             if constrained_angles_indices is not None:
                 resolved_angles = list(
                     constrained_angles_values or [None] * len(constrained_angles_indices)
                 )
                 for (a, b, c), angle in zip(constrained_angles_indices, resolved_angles):
-                    val_str = f"{round(angle, 4)}" if angle is not None else "C"
-                    lines.append(f"    {{A {a} {b} {c} {val_str}}}")
+                    val_str = f"{round(angle, 4)}" if angle is not None else ""
+                    lines.append(f"    {{ A {a} {b} {c} {val_str} C }}")
 
             if constrained_dihedrals_indices is not None:
                 resolved_dihedrals = list(
                     constrained_dihedrals_values or [None] * len(constrained_dihedrals_indices)
                 )
                 for (a, b, c, d), angle in zip(constrained_dihedrals_indices, resolved_dihedrals):
-                    val_str = f"{round(angle, 4)}" if angle is not None else "C"
-                    lines.append(f"    {{D {a} {b} {c} {d} {val_str}}}")
+                    val_str = f"{round(angle, 4)}" if angle is not None else ""
+                    lines.append(f"    {{ D {a} {b} {c} {d} {val_str} C }}")
 
             lines.append("  end")
             lines.append("end\n")
@@ -334,6 +334,10 @@ def goat_operator(filename: str, embedder: Embedder) -> str:  # pragma: no cover
     mol.graph = graphize(mol.atoms, mol.coords[0])
     embedder.graphs = [m.graph for m in embedder.objects]
     goat_level = "GFN2-XTB"
+
+    if "kcal" not in embedder.kw_line.lower():
+        # set to 6 if user did not specify a value
+        embedder.options.kcal_thresh = 6.0
 
     logfunction(
         f"--> Performing {goat_level}"

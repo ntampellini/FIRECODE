@@ -45,9 +45,8 @@ from firecode.dispatcher import Dispatcher
 from firecode.ensemble import Ensemble
 from firecode.rdkit_tools import convert_constraint_with_smarts
 from firecode.solvents import epsilon_dict, solvent_synonyms
-from firecode.typing_ import Array1D_int
 from firecode.units import EH_TO_KCAL
-from firecode.utils import get_ts_d_estimate, read_xyz, str_to_var, write_xyz
+from firecode.utils import get_ts_d_estimate, multiplicity_check, read_xyz, str_to_var, write_xyz
 
 if TYPE_CHECKING:
     from firecode.ase_manipulations import ASEConstraint
@@ -760,16 +759,6 @@ def standalone_optimize(optimizer: OptimizerOptions) -> None:
             table.add_row([i + 1, nc, energy / EH_TO_KCAL, round(energy - min_e, 2)])
 
         optimizer.logfunction(table.get_string())
-
-
-def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1) -> bool:
-    """Returns True if the multiplicity and the nuber of
-    electrons are one odd and one even, and vice versa.
-
-    """
-    electrons = sum(atomnos) - charge
-
-    return (multiplicity % 2) != (electrons % 2)
 
 
 if __name__ == "__main__":

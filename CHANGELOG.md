@@ -1,3 +1,14 @@
+## FIRECODE - 2.0.4 🔥 - (Aug 18 2026)
+- Stability enhancement for IRC not converging (LinAlgError).
+- Increased ase_saddle maxiter to 750 (was 250).
+- Fine-tuned distance scan for breaking bonds, with larger default window but early exit upon surpassing the maximum.
+- Silenced errors in reactive_atoms_classes (Sp3) errors if no leaving group is present.
+- Added interface to Rowan's [openconf](https://github.com/rowansci/openconf) with the `openconf>` operator.
+- Fixed typo in GOAT input files with geometrical constraints.
+- Updated detection of number of CPUs available when running via SLURM.
+- Set default energy threshold for GOAT at 6 kcal/mol.
+- Improved charge/mult detection with fallback to doublet (~~saturation_check~~ -> multiplicity_check).
+
 ## FIRECODE - 2.0.3 🔥 - JOSS publication version (June 23 2026)
 - Release version accompanying JOSS publication.
 

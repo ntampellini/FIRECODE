@@ -71,9 +71,10 @@ from firecode.utils import (
     cartesian_product,
     clean_directory,
     compenetration_check,
+    get_slurm_cpus,
     get_ts_d_estimate,
     loadbar,
-    saturation_check,
+    multiplicity_check,
     scramble_check,
     str_to_var,
     timing_decorator,
@@ -129,11 +130,7 @@ class Embedder:
         else:
             self.stamp = stamp
 
-        try:
-            self.avail_cpus = len(os.sched_getaffinity(0))
-        except AttributeError:
-            self.avail_cpus = os.cpu_count() or 1  # Fallback for Windows/macOS
-
+        self.avail_cpus = get_slurm_cpus()
         os.environ["FIRECODE_AVAIL_CPUS"] = str(self.avail_cpus)
 
         self.avail_mem_gb = virtual_memory().available / 1e9
@@ -435,20 +432,21 @@ class Embedder:
         """Check each loaded object and make sure it looks nice and correct"""
         self.log()
         for mol in self.objects:
-            if saturation_check(mol.atoms, mol.charge):
+            if multiplicity_check(mol.atomnos, mol.charge, self.options.mult):
                 self.log(
-                    f"--> {mol.filename}: saturation check passed (even saturation index with CHG={mol.charge}, MULT={self.options.mult})"
+                    f"--> {mol.filename}: multiplicity check passed (CHG={mol.charge}, MULT={self.options.mult})"
                 )
 
             # this may be a radical (and we would expect an even multiplicity) or something is wrong
             elif self.options.mult % 2 == 0:
                 self.log(
-                    f"--> {mol.filename}: saturation check passed (odd saturation index with CHG={mol.charge}, MULT={self.options.mult})"
+                    f"--> {mol.filename}: multiplicity check passed (CHG={mol.charge}, MULT={self.options.mult})"
                 )
 
             else:
+                self.options.mult = 2
                 self.warn(
-                    f"--> WARNING! {mol.filename}: saturation check failed (odd saturation index with CHG={mol.charge}, MULT={self.options.mult}). Bad input geometry?"
+                    f"--> WARNING! {mol.filename}: saturation check failed! Impossible charge/mult combination. Auto fallback to doublet. (CHG={mol.charge}, MULT={self.options.mult})"
                 )
 
     def check_objects_compenetration(self) -> None:
@@ -1971,9 +1969,9 @@ class RunEmbedding(Embedder):
                 #     loadbar(s, num, prefix=f'Checking structure {s+1}/{num} ')
                 mask[s] = compenetration_check(
                     structure,
-                    self.ids,
-                    max_clashes=self.options.max_clashes,
+                    ids=self.ids,
                     thresh=self.options.clash_thresh,
+                    max_clashes=self.options.max_clashes,
                 )
 
             # loadbar(1, 1, prefix=f'Checking structure {len(self.structures)}/{len(self.structures)} ')

@@ -491,99 +491,6 @@ def timing_decorator() -> Callable[[Callable[P, R]], Callable[P, tuple[R, float]
     return decorator
 
 
-def saturation_check(atoms: Array1D_str, charge: int = 0) -> bool:
-    """Checks that the molecule saturation looks reasonable given the assigned charge."""
-    transition_metals = [
-        "Sc",
-        "Ti",
-        "V",
-        "Cr",
-        "Mn",
-        "Fe",
-        "Co",
-        "Ni",
-        "Cu",
-        "Zn",
-        "Y",
-        "Zr",
-        "Nb",
-        "Mo",
-        "Tc",
-        "Ru",
-        "Rh",
-        "Pd",
-        "Ag",
-        "Cd",
-        "La",
-        "Ce",
-        "Pr",
-        "Nd",
-        "Pm",
-        "Sm",
-        "Eu",
-        "Gd",
-        "Tb",
-        "Dy",
-        "Ho",
-        "Er",
-        "Tm",
-        "Yb",
-        "Lu",
-        "Hf",
-        "Ta",
-        "W",
-        "Re",
-        "Os",
-        "Ir",
-        "Pt",
-        "Au",
-        "Hg",
-        "Th",
-        "Pa",
-        "U",
-        "Np",
-        "Pu",
-        "Am",
-    ]
-
-    # if we have any transition metal, it's hard to tell
-    # if the structure looks ok: in this case we assume it is.
-    organometallic = any([el in transition_metals for el in atoms])
-
-    if organometallic:
-        return True
-
-    odd_valent = [  # 1 valent
-        "H",
-        "Li",
-        "Na",
-        "K",
-        "Rb",
-        "Cs",
-        "F",
-        "Cl",
-        "Br",
-        "I",
-        "At",
-        # 3/5 valent
-        "N",
-        "P",
-        "As",
-        "Sb",
-        "Bi",
-        "B",
-        "Al",
-        "Ga",
-        "In",
-        "Tl",
-    ]
-
-    n_odd_valent = sum([1 for a in atoms if a in odd_valent])
-    looks_ok = ((n_odd_valent + charge) / 2) % 1 < 0.001
-
-    return looks_ok
-
-
 def rmsd_similarity(ref: Array2D_float, structures: Array3D_float, rmsd_thr: float = 0.5) -> bool:
     """Simple, RMSD similarity eval function."""
     # iterate over target structures
@@ -599,20 +506,40 @@ def rmsd_similarity(ref: Array2D_float, structures: Array3D_float, rmsd_thr: flo
 
 def compenetration_check(
     coords: Array2D_float,
+    graph: Graph | None = None,
     ids: Sequence[int] | Array1D_int | None = None,
-    thresh: float = 1.5,
+    thresh: float = 1.0,
     max_clashes: int = 0,
 ) -> bool:
     """coords: 3D molecule coordinates
     ids: 1D array with the number of atoms for each
-    molecule (contiguous fragments in array)
+    molecule (contiguous fragments in array), or none if not fragment-based
     thresh: threshold value for when two atoms are considered clashing
+    graph and atomnos: reference against clash-free graph
     max_clashes: maximum number of clashes to pass a structure
     returns True if the molecule shows less than max_clashes
 
     """
-    if ids is None:
-        return count_clashes(coords) <= max_clashes
+    if ids is None:  # not fragment-based
+        # simple quick check for < 0.5 A
+        if count_clashes(coords) > max_clashes:
+            return False
+
+        # if we were not given a graph,
+        # we cannot do any better: return
+        if graph is None:
+            return True
+
+        clashes = 0
+        dist_mat = cdist(coords, coords)
+        for i1, i2 in np.argwhere(dist_mat < thresh):
+            if clashes > max_clashes:
+                return False
+
+            if i1 != i2 and (i1, i2) not in graph.edges:
+                clashes += 1
+
+        return True
 
     if len(ids) == 2:
         # Bimolecular
@@ -680,3 +607,33 @@ def get_auto_procs_and_mem(
         logfunction("--> WARNING: OpenMPI not found, running on a single core.")
 
     return 1, int(avail_mem_gb)
+
+
+def get_slurm_cpus(fallback: int = 1) -> int:
+    """Get the number of SLURM cores."""
+    for var in ("SLURM_CPUS_PER_TASK", "SLURM_JOB_CPUS_PER_NODE"):
+        val = os.environ.get(var)
+        if val:
+            try:
+                # Handle cases like "32(x2)" format in multi-node allocations
+                return int(val.split("(")[0])
+            except ValueError:
+                continue
+
+    # Fallback to os if not running under Slurm
+    try:
+        return len(os.sched_getaffinity(0))
+
+    # Fallback for Windows/macOS
+    except AttributeError:
+        return os.cpu_count() or fallback
+
+
+def multiplicity_check(atomnos: Array1D_int, charge: int, multiplicity: int = 1) -> bool:
+    """Returns True if the multiplicity and the nuber of
+    electrons are one odd and one even, and vice versa.
+
+    """
+    electrons = sum(atomnos) - charge
+
+    return (multiplicity % 2) != (electrons % 2)

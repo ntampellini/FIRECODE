@@ -197,77 +197,93 @@ class Sp3(RAtom):
         self.coord = mol.coords[conf][i]
         self.others = mol.coords[conf][neighbors_indices]
 
-        if not mol.sp3_sigmastar:
-            if not hasattr(self, "leaving_group_index"):
-                self.leaving_group_index: int | None = None
+        try:
+            if not mol.sp3_sigmastar:
+                if not hasattr(self, "leaving_group_index"):
+                    self.leaving_group_index: int | None = None
 
-            if (
-                len(
-                    [atom for atom in self.neighbors_symbols if atom in ["O", "N", "Cl", "Br", "I"]]
-                )
-                == 1
-            ):  # if we can tell where is the leaving group
-                self.leaving_group_coords = self.others[
-                    self.neighbors_symbols.index(
-                        [atom for atom in self.neighbors_symbols if atom in ["O", "Cl", "Br", "I"]][
-                            0
+                if (
+                    len(
+                        [
+                            atom
+                            for atom in self.neighbors_symbols
+                            if atom in ["O", "N", "Cl", "Br", "I"]
                         ]
                     )
-                ]
+                    == 1
+                ):  # if we can tell where is the leaving group
+                    self.leaving_group_coords = self.others[
+                        self.neighbors_symbols.index(
+                            [
+                                atom
+                                for atom in self.neighbors_symbols
+                                if atom in ["O", "Cl", "Br", "I"]
+                            ][0]
+                        )
+                    ]
 
-            elif (
-                len([atom for atom in self.neighbors_symbols if atom not in ["H"]]) == 1
-            ):  # if no clear leaving group but we only have one atom != H
-                self.leaving_group_coords = self.others[
-                    self.neighbors_symbols.index(
-                        [atom for atom in self.neighbors_symbols if atom not in ["H"]][0]
-                    )
-                ]
+                elif (
+                    len([atom for atom in self.neighbors_symbols if atom not in ["H"]]) == 1
+                ):  # if no clear leaving group but we only have one atom != H
+                    self.leaving_group_coords = self.others[
+                        self.neighbors_symbols.index(
+                            [atom for atom in self.neighbors_symbols if atom not in ["H"]][0]
+                        )
+                    ]
 
-            else:
-                # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
-                self.leaving_group_coords = self.others[0]
+                else:
+                    # probably a bad embedding, but we still need to go through this for refine> runs, so let's pick one
+                    self.leaving_group_coords = self.others[0]
 
-            self.orb_vecs = np.array([self.coord - self.leaving_group_coords])
-            self.orb_vers = normalize(self.orb_vecs[0])
+                self.orb_vecs = np.array([self.coord - self.leaving_group_coords])
+                self.orb_vers = normalize(self.orb_vecs[0])
 
-        else:  # Sigma bond type
-            other_reactive_indices = list(mol.reactive_indices)
-            other_reactive_indices.remove(i)
-            for index in other_reactive_indices:
-                if index in neighbors_indices:
-                    parnter_index = index
-                    break
-            # obtain the reference partner index
+            else:  # Sigma bond type
+                other_reactive_indices = list(mol.reactive_indices)
+                other_reactive_indices.remove(i)
+                for index in other_reactive_indices:
+                    if index in neighbors_indices:
+                        parnter_index = index
+                        break
+                # obtain the reference partner index
 
-            pivot = normalize(mol.coords[conf][parnter_index] - self.coord)
+                pivot = normalize(mol.coords[conf][parnter_index] - self.coord)
 
-            other_neighbors = deepcopy(neighbors_indices)
-            other_neighbors.remove(parnter_index)
-            orb_vec = normalize(mol.coords[conf][other_neighbors[0]] - self.coord)
-            orb_vec = orb_vec - orb_vec @ pivot * pivot
+                other_neighbors = deepcopy(neighbors_indices)
+                other_neighbors.remove(parnter_index)
+                orb_vec = normalize(mol.coords[conf][other_neighbors[0]] - self.coord)
+                orb_vec = orb_vec - orb_vec @ pivot * pivot
 
-            steps = 3  # number of total orbitals
-            self.orb_vecs = np.array(
-                [
-                    rot_mat_from_pointer(pivot, angle + 60) @ orb_vec
-                    for angle in range(0, 360, int(360 / steps))
-                ]
-            )
-            # orbitals are staggered in relation to sp3 substituents
+                steps = 3  # number of total orbitals
+                self.orb_vecs = np.array(
+                    [
+                        rot_mat_from_pointer(pivot, angle + 60) @ orb_vec
+                        for angle in range(0, 360, int(360 / steps))
+                    ]
+                )
+                # orbitals are staggered in relation to sp3 substituents
 
-            self.orb_vers = normalize(self.orb_vecs[0])
+                self.orb_vers = normalize(self.orb_vecs[0])
+
+        except Exception as err:
+            print(err)
 
         if update:
-            if orb_dim is None:
-                key = self.symbol + " " + str(self).split(" (")[0]
-                orb_dim = orb_dim_dict.get(key)
-
+            try:
                 if orb_dim is None:
-                    orb_dim = orb_dim_dict["Fallback"]
-                    # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+                    key = self.symbol + " " + str(self).split(" (")[0]
+                    orb_dim = orb_dim_dict.get(key)
 
-            self.center = np.array([orb_dim * normalize(vec) + self.coord for vec in self.orb_vecs])
+                    if orb_dim is None:
+                        orb_dim = orb_dim_dict["Fallback"]
+                        # print(f'ATTENTION: COULD NOT SETUP REACTIVE ATOM ORBITAL FROM PARAMETERS. We have no parameters for {key}. Using {orb_dim} A.')
+
+                self.center = np.array(
+                    [orb_dim * normalize(vec) + self.coord for vec in self.orb_vecs]
+                )
+
+            except Exception as err:
+                print(err)
 
 
 class Ether(RAtom):

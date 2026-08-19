@@ -228,8 +228,9 @@ class Hypermolecule:
                             f"DEBUG: Hypermolecule._inspect_reactive_atoms {self.filename} - Reactive atom {index} is a {symbol} atom of {atom_type} type. It is bonded to {len(list(self.graph.neighbors(index)))} neighbor(s): {atom_type.neighbors_symbols}"
                         )
 
-                except KeyError as err:
-                    raise KeyError(err)
+                except KeyError:
+                    pass
+                    # raise KeyError(err)
 
     def _scale_orbs(self, value: float) -> None:
         """Scale each orbital dimension according to value."""

@@ -81,6 +81,9 @@ def optimize(
     """
     dispatcher = dispatcher or Dispatcher(calculator)
     ase_calc = dispatcher.get_ase_calc(method, solvent=solvent)
+    max_newbonds = max_newbonds or (
+        len(constrained_indices) if constrained_indices is not None else 0
+    )
 
     if mols_graphs is not None:
         _l = [len(graph.nodes) for graph in mols_graphs]
@@ -191,6 +194,7 @@ def refine_structures(
     constrained_angles_indices: Sequence[Sequence[int]] | None = None,
     constrained_angles_values: Sequence[float | None] | None = None,
     solvent: str | None = None,
+    energy_thr: float = 10.0,
     loadstring: str = "",
     logfunction: Callable[[str], None] | None = None,
     dispatcher: Dispatcher | None = None,
@@ -318,7 +322,7 @@ def refine_structures(
     ens.sort_by_energy()
 
     # remove high energy structures (>10 kcal/mol)
-    ens.energy_pruning()
+    ens.energy_pruning(kcal_thr=energy_thr)
 
     # remove similar structures
     ens.similarity_pruning()

@@ -38,6 +38,7 @@ from firecode.atropisomer_module import dihedral_scan
 from firecode.errors import FatalError, InputError
 from firecode.interfaces.crest import crest_mtd_search, get_crest_version
 from firecode.interfaces.goat import goat_operator
+from firecode.interfaces.openconf import openconf_operator
 from firecode.md.equilibration import equilibrate_operator
 from firecode.md.packmol import solvate_molecule
 from firecode.optimization_methods import optimize, refine_structures
@@ -124,6 +125,9 @@ def operate(filename: str, operator: str, embedder: Embedder) -> str:
 
         case "equilibrate":
             outname = equilibrate_operator(filename, embedder)
+
+        case "openconf":
+            outname = openconf_operator(filename, embedder)
 
         case _:
             raise Exception(f"Operator {operator} not recognized.")
@@ -243,6 +247,8 @@ def opt_operator(
         constrained_angles_values=constrained_angles_values,
         constrained_dihedrals_indices=list(constrained_dihedrals_indices),
         constrained_dihedrals_values=constrained_dihedrals_values,
+        solvent=embedder.options.solvent,
+        energy_thr=embedder.options.kcal_thresh,
         loadstring="Optimizing conformer",
         logfunction=embedder.log,
         debug=embedder.options.debug,
@@ -475,6 +481,7 @@ def crest_search_operator(filename: str, embedder: Embedder) -> str:
                 solvent=embedder.options.solvent,
                 charge=embedder.options.charge,
                 mult=embedder.options.mult,
+                max_newbonds=n_constraints,
                 dispatcher=embedder.dispatcher,
                 constrained_indices=constrained_indices,
                 constrained_distances=constrained_distances,
@@ -711,7 +718,7 @@ def distance_scan(filename: str, embedder: Embedder) -> str:
         # a proportionally small distance between those two atoms.
 
     else:
-        max_d = 1.6 * (pt.covalent_radius(s1) + pt.covalent_radius(s2))
+        max_d = 5.0 * (pt.covalent_radius(s1) + pt.covalent_radius(s2))
         max_iterations = round((max_d - d) / abs(step))
         # so that atoms are never spaced too far apart
 
@@ -766,8 +773,14 @@ def distance_scan(filename: str, embedder: Embedder) -> str:
                     + f"- d({i1}-{i2}) = {round(d, 3)} A - Rel. E = {round(e - min(energies), 2)} kcal/mol",
                 )
 
-        # modify the target distance and reiterate
+        # modify the target distance and iterate
         d += step
+
+        if step > 0 and i > max_iterations // 2:
+            over_maximum = (max(energies) - (energy - e_0)) > 2
+            if over_maximum:
+                embedder.log(" --> Scan interrupted: we seem to be past the maximum.")
+                break
 
     ### Start the plotting sequence
 
